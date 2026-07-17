@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import PageHeader from '@/components/dashboard/PageHeader'
 import DashboardEntrance from '@/components/dashboard/DashboardEntrance'
 import ProfileForm from '@/components/dashboard/ProfileForm'
+import PasswordChangeForm from '@/components/dashboard/PasswordChangeForm'
 import { ROLE_LABELS } from '@/components/dashboard/navConfig'
 
 export default async function SettingsPage() {
@@ -17,7 +18,10 @@ export default async function SettingsPage() {
   return (
     <DashboardEntrance>
       <PageHeader title="Settings" subtitle={`${ROLE_LABELS[session.user.role]} account`} />
-      <ProfileForm name={user.name} phone={user.phone} email={user.email} />
+      <div className="flex flex-col gap-6">
+        <ProfileForm name={user.name} phone={user.phone} email={user.email} />
+        <PasswordChangeForm />
+      </div>
     </DashboardEntrance>
   )
 }
