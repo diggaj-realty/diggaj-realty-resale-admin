@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { getServerSession } from 'next-auth'
 import { redirect } from 'next/navigation'
 import { authOptions } from '@/lib/auth'
@@ -6,6 +7,7 @@ import { formatINR } from '@/lib/format'
 import PageHeader from '@/components/dashboard/PageHeader'
 import StatusPill from '@/components/dashboard/StatusPill'
 import DashboardEntrance from '@/components/dashboard/DashboardEntrance'
+import AgentAssignSelect from '@/components/dashboard/AgentAssignSelect'
 import { Briefcase } from 'lucide-react'
 
 export default async function DealsPage() {
@@ -13,9 +15,13 @@ export default async function DealsPage() {
   if (!session) redirect('/login')
   const { id, role } = session.user
 
-  if (!['SELLER', 'BUYER', 'AGENT'].includes(role)) redirect('/dashboard')
+  if (!['SELLER', 'BUYER', 'AGENT', 'ADMIN'].includes(role)) redirect('/dashboard')
 
-  const where = role === 'SELLER' ? { sellerId: id } : role === 'BUYER' ? { buyerId: id } : { agentId: id }
+  const where =
+    role === 'SELLER' ? { sellerId: id }
+    : role === 'BUYER' ? { buyerId: id }
+    : role === 'AGENT' ? { agentId: id }
+    : {} // ADMIN sees all deals
 
   const deals = await prisma.deal.findMany({
     where,
@@ -28,7 +34,11 @@ export default async function DealsPage() {
     },
   })
 
-  const title = role === 'BUYER' ? 'My Deals' : role === 'SELLER' ? 'My Deals' : 'Assigned Deals'
+  const agents = role === 'ADMIN'
+    ? await prisma.user.findMany({ where: { role: 'AGENT' }, select: { id: true, name: true }, orderBy: { name: 'asc' } })
+    : []
+
+  const title = role === 'BUYER' ? 'My Deals' : role === 'SELLER' ? 'My Deals' : role === 'ADMIN' ? 'All Deals' : 'Assigned Deals'
 
   return (
     <DashboardEntrance>
@@ -39,7 +49,12 @@ export default async function DealsPage() {
           <p className="card py-12 text-center text-sm" style={{ color: 'var(--text-3)' }}>No deals yet.</p>
         ) : (
           deals.map((d) => (
-            <div key={d.id} className="card flex items-center gap-4 px-5 py-4" style={{ boxShadow: 'var(--elev-1)' }}>
+            <Link
+              key={d.id}
+              href={`/dashboard/deals/${d.id}`}
+              className="card flex items-center gap-4 px-5 py-4 transition-opacity hover:opacity-90"
+              style={{ boxShadow: 'var(--elev-1)' }}
+            >
               <span
                 className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl"
                 style={{ background: d.status === 'CLOSED' ? 'var(--green-50)' : 'var(--amber-50)', color: d.status === 'CLOSED' ? 'var(--green-700)' : 'var(--amber-700)' }}
@@ -55,7 +70,10 @@ export default async function DealsPage() {
               </div>
               <span className="whitespace-nowrap text-sm font-bold" style={{ color: 'var(--accent-700)' }}>{formatINR(d.agreedPrice)}</span>
               <StatusPill status={d.status} />
-            </div>
+              {role === 'ADMIN' && (
+                <AgentAssignSelect dealId={d.id} agentId={d.agentId} agents={agents} />
+              )}
+            </Link>
           ))
         )}
       </div>
