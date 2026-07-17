@@ -47,13 +47,19 @@ export interface DashboardData {
 function statusTone(status: string): string {
   const s = status.toUpperCase()
   if (['LIVE', 'CLOSED', 'ACCEPTED', 'APPROVED'].includes(s)) return 'green'
-  if (['PENDING_VERIFICATION', 'PENDING', 'UNDER_REVIEW'].includes(s)) return 'gold'
+  if (['PENDING_VERIFICATION', 'PENDING', 'PENDING_REVIEW', 'UNDER_REVIEW'].includes(s)) return 'gold'
   if (['IN_PROGRESS', 'COUNTERED'].includes(s)) return 'blue'
   if (['REJECTED'].includes(s)) return 'red'
   return 'purple'
 }
 
-export { statusTone }
+/** Buyer/seller-facing offer status never distinguishes "awaiting backend triage"
+ *  from "forwarded, awaiting seller" — both display as a plain "Pending". */
+function buyerFacingOfferStatus(status: string): string {
+  return status === 'PENDING_REVIEW' ? 'PENDING' : status
+}
+
+export { statusTone, buyerFacingOfferStatus }
 
 export async function getSellerDashboard(userId: string): Promise<DashboardData & { kyc: { pending: boolean; rejected: boolean; approved: boolean; remarks: string | null } }> {
   const [kyc, properties, deals] = await Promise.all([
@@ -112,7 +118,7 @@ export async function getBuyerDashboard(userId: string): Promise<DashboardData> 
     prisma.property.count({ where: { status: 'LIVE' } }),
   ])
 
-  const pendingOffers = offers.filter((o) => o.status === 'PENDING').length
+  const pendingOffers = offers.filter((o) => o.status === 'PENDING' || o.status === 'PENDING_REVIEW').length
   const acceptedOffers = offers.filter((o) => o.status === 'ACCEPTED').length
   const activeDeals = deals.filter((d) => d.status === 'IN_PROGRESS').length
 
@@ -135,7 +141,7 @@ export async function getBuyerDashboard(userId: string): Promise<DashboardData> 
         title: o.property.title,
         subtitle: `${o.property.location} · ${pct}% of asking`,
         amountLabel: formatINR(o.amount),
-        status: o.status,
+        status: buyerFacingOfferStatus(o.status),
       }
     }),
   }

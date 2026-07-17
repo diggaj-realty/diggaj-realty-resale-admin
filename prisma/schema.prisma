@@ -47,6 +47,8 @@ model SellerKyc {
   id        String   @id @default(cuid())
   userId    String   @unique
   idType    String // IdType enum
+  idDocUrl  String?
+  selfieUrl String?
   status    String   @default("PENDING") // KycStatus enum
   remarks   String?
   createdAt DateTime @default(now())
@@ -103,8 +105,10 @@ model Offer {
   buyerId       String
   amount        Float
   message       String?
-  status        String   @default("PENDING") // OfferStatus enum
+  status        String   @default("PENDING_REVIEW") // OfferStatus enum: PENDING_REVIEW | PENDING | ACCEPTED | REJECTED | COUNTERED
   counterAmount Float?
+  counterBy     String? // 'BACKEND' | 'SELLER' — who issued the current counterAmount
+  reviewedBy    String? // backend user id who forwarded/countered/rejected this negotiation
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -115,15 +119,22 @@ model Offer {
 }
 
 model Deal {
-  id          String   @id @default(cuid())
-  propertyId  String   @unique
-  buyerId     String
-  sellerId    String
-  agentId     String?
-  agreedPrice Float
-  status      String   @default("IN_PROGRESS") // DealStatus enum
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id               String    @id @default(cuid())
+  propertyId       String    @unique
+  buyerId          String
+  sellerId         String
+  agentId          String?
+  agreedPrice      Float
+  tokenAmount      Float?
+  tokenDate        DateTime?
+  finalAmount      Float?
+  finalPaymentDate DateTime?
+  paymentMode      String? // BANK_TRANSFER | CHEQUE | OTHER
+  transactionRef   String?
+  notes            String?
+  status           String    @default("IN_PROGRESS") // DealStatus enum
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   property Property @relation(fields: [propertyId], references: [id])
   buyer    User     @relation("BuyerDeals", fields: [buyerId], references: [id])

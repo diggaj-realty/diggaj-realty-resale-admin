@@ -77,10 +77,14 @@ async function main() {
 
   await prisma.offer.createMany({
     data: [
-      { propertyId: indiranagar.id, buyerId: buyer.id, amount: 17800000, message: 'Ready to move fast, ready funds.', status: 'PENDING' },
-      { propertyId: koramangala.id, buyerId: buyer.id, amount: 13000000, message: 'Can we discuss the price?', status: 'COUNTERED', counterAmount: 13250000 },
-      { propertyId: indiranagar.id, buyerId: buyer2.id, amount: 18000000, status: 'PENDING' },
-      { propertyId: koramangala.id, buyerId: buyer3.id, amount: 13500000, status: 'ACCEPTED' },
+      // Already forwarded by backend, awaiting seller action
+      { propertyId: indiranagar.id, buyerId: buyer.id, amount: 17800000, message: 'Ready to move fast, ready funds.', status: 'PENDING', reviewedBy: backend.id },
+      // Countered — one by the seller, one directly by backend (buyer can't tell the difference)
+      { propertyId: koramangala.id, buyerId: buyer.id, amount: 13000000, message: 'Can we discuss the price?', status: 'COUNTERED', counterAmount: 13250000, counterBy: 'SELLER', reviewedBy: backend.id },
+      { propertyId: indiranagar.id, buyerId: buyer3.id, amount: 16500000, status: 'COUNTERED', counterAmount: 17200000, counterBy: 'BACKEND', reviewedBy: backend.id },
+      // Freshly submitted, still sitting in backend's negotiation queue
+      { propertyId: indiranagar.id, buyerId: buyer2.id, amount: 18000000, status: 'PENDING_REVIEW' },
+      { propertyId: koramangala.id, buyerId: buyer3.id, amount: 13500000, status: 'ACCEPTED', reviewedBy: backend.id },
     ],
   })
 

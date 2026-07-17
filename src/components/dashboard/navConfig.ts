@@ -9,6 +9,8 @@ import {
   ShieldCheck,
   ClipboardList,
   Users,
+  HandCoins,
+  Scale,
 } from 'lucide-react'
 import type { UserRole } from '@/types'
 
@@ -29,7 +31,9 @@ export function getNavIcons(role: UserRole): NavIcon[] {
     case 'SELLER':
       return [
         home,
+        { key: 'kyc', label: 'KYC Verification', icon: ShieldCheck, href: '/dashboard/kyc' },
         { key: 'listings', label: 'My Properties', icon: Building2, href: '/dashboard/listings' },
+        { key: 'offers', label: 'Offers Received', icon: HandCoins, href: '/dashboard/offers' },
         { key: 'deals', label: 'My Deals', icon: Briefcase, href: '/dashboard/deals' },
         performance,
         settings,
@@ -38,6 +42,7 @@ export function getNavIcons(role: UserRole): NavIcon[] {
       return [
         home,
         { key: 'browse', label: 'Browse Properties', icon: Search, href: '/dashboard/browse' },
+        { key: 'offers', label: 'My Offers', icon: HandCoins, href: '/dashboard/offers' },
         { key: 'deals', label: 'My Deals', icon: Briefcase, href: '/dashboard/deals' },
         performance,
         settings,
@@ -55,6 +60,7 @@ export function getNavIcons(role: UserRole): NavIcon[] {
         home,
         { key: 'kyc', label: 'KYC Queue', icon: ShieldCheck, href: '/dashboard/kyc' },
         { key: 'queue', label: 'Listings Queue', icon: ClipboardList, href: '/dashboard/queue' },
+        { key: 'negotiations', label: 'Negotiations', icon: Scale, href: '/dashboard/negotiations' },
         performance,
         settings,
       ]
