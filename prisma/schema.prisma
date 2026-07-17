@@ -1,0 +1,147 @@
+// Resale Dashboard — Prisma Schema (SQLite for local dev)
+// Ported from Diggaj Realty (Resale-platform) so business logic/data semantics match 1:1.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// ─────────────────────────────────────────────
+// Enums replaced with String for SQLite (matches source project's convention)
+// ─────────────────────────────────────────────
+// Role: SELLER | BUYER | AGENT | BACKEND | ADMIN
+// KycStatus: PENDING | APPROVED | REJECTED
+// PropertyStatus: DRAFT | PENDING_VERIFICATION | LIVE | CLOSED | REJECTED
+// SellerPlan: BASIC | VERIFIED | VERIFIED_PLUS | ELITE
+// OfferStatus: PENDING | ACCEPTED | REJECTED | COUNTERED
+// DealStatus: IN_PROGRESS | CLOSED
+// PropertyType: RESIDENTIAL | PLOT | COMMERCIAL
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  phone        String?
+  passwordHash String
+  role         String // Role enum
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  sellerKyc          SellerKyc?
+  propertiesAsSeller Property[]     @relation("SellerProperties")
+  propertiesAsAgent  Property[]     @relation("AgentProperties")
+  offersAsBuyer      Offer[]        @relation("BuyerOffers")
+  dealsAsBuyer       Deal[]         @relation("BuyerDeals")
+  dealsAsSeller      Deal[]         @relation("SellerDeals")
+  dealsAsAgent       Deal[]         @relation("AgentDeals")
+  notifications      Notification[]
+
+  @@map("users")
+}
+
+model SellerKyc {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  idType    String // IdType enum
+  status    String   @default("PENDING") // KycStatus enum
+  remarks   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("seller_kyc")
+}
+
+model Property {
+  id          String    @id @default(cuid())
+  sellerId    String
+  agentId     String?
+  type        String // PropertyType enum
+  title       String
+  description String?
+  location    String
+  latitude    Float?
+  longitude   Float?
+  areaSqft    Float
+  bhk         Int?
+  askingPrice Float
+  status      String    @default("DRAFT") // PropertyStatus enum
+  plan        String    @default("BASIC") // SellerPlan enum
+  verifiedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  seller User  @relation("SellerProperties", fields: [sellerId], references: [id])
+  agent  User? @relation("AgentProperties", fields: [agentId], references: [id])
+
+  photos PropertyPhoto[]
+  offers Offer[]
+  deal   Deal?
+
+  @@map("properties")
+}
+
+model PropertyPhoto {
+  id         String @id @default(cuid())
+  propertyId String
+  photoUrl   String
+  order      Int    @default(0)
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@map("property_photos")
+}
+
+model Offer {
+  id            String   @id @default(cuid())
+  propertyId    String
+  buyerId       String
+  amount        Float
+  message       String?
+  status        String   @default("PENDING") // OfferStatus enum
+  counterAmount Float?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  buyer    User     @relation("BuyerOffers", fields: [buyerId], references: [id])
+
+  @@map("offers")
+}
+
+model Deal {
+  id          String   @id @default(cuid())
+  propertyId  String   @unique
+  buyerId     String
+  sellerId    String
+  agentId     String?
+  agreedPrice Float
+  status      String   @default("IN_PROGRESS") // DealStatus enum
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  property Property @relation(fields: [propertyId], references: [id])
+  buyer    User     @relation("BuyerDeals", fields: [buyerId], references: [id])
+  seller   User     @relation("SellerDeals", fields: [sellerId], references: [id])
+  agent    User?    @relation("AgentDeals", fields: [agentId], references: [id])
+
+  @@map("deals")
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  message   String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}

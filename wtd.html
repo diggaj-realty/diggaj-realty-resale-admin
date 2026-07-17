@@ -1,0 +1,426 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>WTD — What To Do — Resale Dashboard Build Spec</title>
+<style>
+  body { font-family: -apple-system, 'Segoe UI', sans-serif; max-width: 980px; margin: 0 auto; padding: 32px 24px 120px; line-height: 1.55; color: #1a1a1a; background: #fff; }
+  h1 { font-size: 28px; margin-bottom: 4px; }
+  h2 { font-size: 20px; margin-top: 48px; border-bottom: 2px solid #7C5CFC; padding-bottom: 6px; }
+  h3 { font-size: 16px; margin-top: 28px; color: #5533D6; }
+  h4 { font-size: 14px; margin-top: 20px; }
+  p.lede { color: #555; font-size: 15px; }
+  table { border-collapse: collapse; width: 100%; margin: 14px 0; font-size: 13.5px; }
+  th, td { border: 1px solid #ddd; padding: 8px 10px; text-align: left; vertical-align: top; }
+  .checklist { list-style: none; padding-left: 0; }
+  .checklist li { margin: 7px 0; padding-left: 26px; position: relative; }
+  .checklist li::before { content: '☐'; position: absolute; left: 0; font-size: 15px; color: #999; }
+  .checklist li.done { color: #8a8f9c; text-decoration: line-through; }
+  .checklist li.done::before { content: '☑'; color: #15803D; }
+  .checklist h4 { margin-top: 26px; margin-bottom: 4px; color: #1a1a1a; }
+  th { background: #F5F6FA; font-weight: 700; }
+  code, pre { font-family: 'SF Mono', Consolas, monospace; font-size: 12.5px; }
+  code { background: #F1EEFE; color: #5533D6; padding: 1px 5px; border-radius: 4px; }
+  pre { background: #12141C; color: #E4DEFD; padding: 14px 16px; border-radius: 10px; overflow-x: auto; }
+  .status { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+  .status.done { background: #E9FAF1; color: #15803D; }
+  .status.missing { background: #FDECEC; color: #B91C1C; }
+  .status.schema { background: #FEF6E7; color: #B45309; }
+  .callout { background: #F1EEFE; border-left: 4px solid #7C5CFC; padding: 12px 16px; margin: 14px 0; border-radius: 6px; }
+  ul { margin-top: 4px; }
+  .toc { background: #F8F9FC; border: 1px solid #eee; border-radius: 10px; padding: 16px 24px; }
+  .toc li { margin: 4px 0; }
+</style>
+</head>
+<body>
+
+<h1>WTD — What To Do</h1>
+<p class="lede">
+  Master spec for finishing the Resale Dashboard's real functionality. Everything below reflects the
+  <strong>current actual state</strong> of <code>C:\Users\user\Desktop\New Resale</code> (not aspirational) —
+  every field, route, and server action needed is listed in the exact order the flow needs it, starting with KYC
+  since it's the gate everything else depends on. Build strictly off this document; update it as pieces land.
+</p>
+
+<div class="toc">
+  <strong>Contents</strong>
+  <ol>
+    <li>Full platform flow (mental model)</li>
+    <li>Schema changes needed (do this first)</li>
+    <li>Seller KYC — submission flow (full detail)</li>
+    <li>File / photo upload mechanism</li>
+    <li>Add Listing (Seller)</li>
+    <li>Offers — Seller accept / reject / counter, Buyer accept counter</li>
+    <li>Deals — creation from accepted offer, lifecycle, agent updates</li>
+    <li>Agent assignment (Admin)</li>
+    <li>Notifications — mark as read</li>
+    <li>Settings — password change</li>
+    <li>Sidebar / route inventory (what exists vs what's missing)</li>
+    <li>Server actions inventory</li>
+    <li>Build order</li>
+  </ol>
+</div>
+
+<h2>1. Full platform flow (mental model)</h2>
+<pre>
+Seller signs up
+   │
+   ▼
+Submit KYC (idType + ID doc + selfie)  ──►  Backend reviews  ──►  APPROVED / REJECTED
+   │ (if approved)                                                    │
+   ▼                                                        (if rejected: show remarks, allow resubmit)
+Add Listing (DRAFT)
+   │
+   ▼
+Backend reviews listing  ──►  LIVE / REJECTED
+   │ (if live)
+   ▼
+Buyer browses LIVE listings ──► makes Offer
+   │  (buyer sees "Pending" — does NOT know backend is triaging it)
+   ▼
+Backend reviews the negotiation (invisible to buyer)
+   │
+   ├─► Forward to seller ──► Seller: Accept / Reject / Counter
+   │                              │                    │
+   │                              │ (Accept)           └─► Buyer: Accept counter / Reject
+   │                              ▼
+   ├─► Backend counters directly (skips seller) ──► Buyer: Accept counter / Reject
+   │
+   └─► Backend rejects directly (skips seller) ──► Buyer sees Rejected
+   ▼
+Deal auto-created on any ACCEPTED offer (IN_PROGRESS) ──► Admin assigns Agent
+   │
+   ▼
+Agent records token payment → final payment → marks CLOSED
+   │
+   ▼
+Property.status = CLOSED, both parties see it in "My Deals"
+</pre>
+
+<h2>2. Schema changes needed (do this first)</h2>
+<p>The current <code>prisma/schema.prisma</code> was trimmed for the dashboard-only build. To support real submission flows, three models need fields restored/added. Do this <strong>before</strong> touching any UI — every downstream feature depends on it.</p>
+
+<h3>SellerKyc — add document fields</h3>
+<table>
+  <tr><th>Field</th><th>Type</th><th>Why</th></tr>
+  <tr><td><code>idDocUrl</code></td><td><code>String</code></td><td>The uploaded ID document (image/PDF). Required to actually submit KYC — currently missing entirely.</td></tr>
+  <tr><td><code>selfieUrl</code></td><td><code>String</code></td><td>Live selfie for identity match. Required alongside the ID doc.</td></tr>
+</table>
+
+<h3>Deal — restore lifecycle fields</h3>
+<table>
+  <tr><th>Field</th><th>Type</th><th>Why</th></tr>
+  <tr><td><code>tokenAmount</code></td><td><code>Float?</code></td><td>Booking/token payment amount agent records after deal starts.</td></tr>
+  <tr><td><code>tokenDate</code></td><td><code>DateTime?</code></td><td>When the token payment was made.</td></tr>
+  <tr><td><code>finalAmount</code></td><td><code>Float?</code></td><td>Final settlement amount (may differ slightly from agreedPrice).</td></tr>
+  <tr><td><code>finalPaymentDate</code></td><td><code>DateTime?</code></td><td>When final payment cleared — deal can only move to CLOSED after this is set.</td></tr>
+  <tr><td><code>paymentMode</code></td><td><code>String?</code></td><td>BANK_TRANSFER | CHEQUE | OTHER — enum-as-string per project convention.</td></tr>
+  <tr><td><code>transactionRef</code></td><td><code>String?</code></td><td>Bank/UTR reference for audit trail.</td></tr>
+  <tr><td><code>notes</code></td><td><code>String?</code></td><td>Agent's free-text notes on the deal.</td></tr>
+</table>
+
+<h3>Offer — add backend-mediation fields</h3>
+<table>
+  <tr><th>Field</th><th>Type</th><th>Why</th></tr>
+  <tr><td><code>status</code> default</td><td><em>change default</em></td><td>New offers are created with <code>status: 'PENDING_REVIEW'</code> instead of <code>'PENDING'</code> — see §6 for the full new status set.</td></tr>
+  <tr><td><code>reviewedBy</code></td><td><code>String?</code></td><td>Backend user id who acted on the negotiation (forwarded / countered / rejected it) — audit trail, not shown to buyer.</td></tr>
+  <tr><td><code>counterBy</code></td><td><code>String?</code></td><td><code>'BACKEND' | 'SELLER'</code> — who issued the current <code>counterAmount</code>. Admin-only visibility; buyer/seller UIs don't surface this.</td></tr>
+</table>
+
+<h3>Property — nothing required, one optional stretch</h3>
+<p><em>Optional:</em> re-add a <code>PropertyDocument</code> model (docType TITLE_DEED / ENCUMBRANCE_CERTIFICATE / KHATA_PATTA / ID_ADDRESS_PROOF / NOC_SOCIETY / FLOOR_PLAN, each with its own upload + review status) for full "document vault" parity with the source platform. <strong>Not required to make KYC or listings work</strong> — treat as a stretch goal after the core loop above is done.</p>
+
+<div class="callout">
+  After editing <code>schema.prisma</code>: run <code>npx prisma generate</code> then <code>npx prisma db push</code> (SQLite, no migration history needed for dev). Re-run <code>npm run db:seed</code> if you want fresh demo rows with the new fields populated.
+</div>
+
+<h2>3. Seller KYC — submission flow (full detail)</h2>
+<p>This is the first real gap: backend can already <em>review</em> KYC (<code>/dashboard/kyc</code> for BACKEND, built), but a seller has <strong>no way to submit one</strong> — there's no seller-facing KYC page or sidebar icon at all yet.</p>
+
+<h4>3.1 Sidebar change</h4>
+<p>In <code>src/components/dashboard/navConfig.ts</code>, add a KYC icon to the SELLER nav array pointing at <code>/dashboard/kyc</code> (same path BACKEND uses — the page itself branches on role).</p>
+
+<h4>3.2 Route: <code>/dashboard/kyc</code> — make it role-aware</h4>
+<table>
+  <tr><th>Role</th><th>What renders</th></tr>
+  <tr><td>BACKEND</td><td>Existing queue table (already built) — no change.</td></tr>
+  <tr><td>SELLER</td><td><strong>New:</strong> their own KYC status/submission UI (see below).</td></tr>
+  <tr><td>anyone else</td><td>redirect to <code>/dashboard</code>.</td></tr>
+</table>
+
+<h4>3.3 Seller KYC states to render</h4>
+<table>
+  <tr><th>State</th><th>Condition</th><th>UI</th></tr>
+  <tr><td>Not submitted</td><td>no <code>SellerKyc</code> row for this user</td><td>Submission form (see 3.4)</td></tr>
+  <tr><td>Pending</td><td><code>status === 'PENDING'</code></td><td>Status card: "Under review", submitted date, no form</td></tr>
+  <tr><td>Rejected</td><td><code>status === 'REJECTED'</code></td><td>Status card showing <code>remarks</code>, then the submission form again (resubmit)</td></tr>
+  <tr><td>Approved</td><td><code>status === 'APPROVED'</code></td><td>Success card: "Verified" badge, link to Add Listing</td></tr>
+</table>
+
+<h4>3.4 Submission form fields</h4>
+<table>
+  <tr><th>Field</th><th>Input type</th><th>Validation</th></tr>
+  <tr><td>ID Type</td><td><code>&lt;select&gt;</code>: AADHAAR / PAN / PASSPORT / DRIVING_LICENCE</td><td>required</td></tr>
+  <tr><td>ID Document</td><td><code>&lt;input type="file" accept="image/*,application/pdf"&gt;</code></td><td>required, max 5MB</td></tr>
+  <tr><td>Selfie</td><td><code>&lt;input type="file" accept="image/*"&gt;</code> (or device camera capture)</td><td>required, max 5MB, image only</td></tr>
+</table>
+
+<h4>3.5 Server action: <code>submitKyc(formData)</code></h4>
+<p>New file <code>src/lib/actions/kyc.ts</code>:</p>
+<pre>'use server'
+// 1. getServerSession, require role === 'SELLER'
+// 2. read idType, idDocFile, selfieFile from formData
+// 3. upload both files (see §4) → get idDocUrl, selfieUrl
+// 4. prisma.sellerKyc.upsert({
+//      where: { userId },
+//      create: { userId, idType, idDocUrl, selfieUrl, status: 'PENDING' },
+//      update: { idType, idDocUrl, selfieUrl, status: 'PENDING', remarks: null },
+//    })
+// 5. notify all BACKEND users: "New KYC submission from {seller.name}"
+// 6. revalidatePath('/dashboard/kyc'); revalidatePath('/dashboard')</pre>
+
+<h2>4. File / photo upload mechanism</h2>
+<p>Nothing exists yet for uploads (no KYC docs, no property photos). Two viable approaches — pick one and use it everywhere (KYC docs, selfies, property photos):</p>
+
+<table>
+  <tr><th>Option</th><th>How</th><th>Trade-off</th></tr>
+  <tr>
+    <td><strong>A. Base64 in DB (recommended for this project)</strong></td>
+    <td>Client reads the file with <code>FileReader</code> (or server reads <code>File.arrayBuffer()</code> from the submitted <code>FormData</code>), converts to a <code>data:image/...;base64,...</code> string, stores it directly in the existing <code>String</code> column (<code>idDocUrl</code>, <code>selfieUrl</code>, <code>PropertyPhoto.photoUrl</code>).</td>
+    <td>Zero infra, works immediately on SQLite/local dev, matches project's "no external services" posture. Not suitable at real scale (DB bloat) — fine for a demo/dev platform.</td>
+  </tr>
+  <tr>
+    <td>B. Filesystem + static serve</td>
+    <td>New route handler <code>POST /api/upload</code> reads <code>request.formData()</code>, writes the file under <code>public/uploads/&lt;kind&gt;/&lt;id&gt;/&lt;filename&gt;</code> via <code>fs/promises.writeFile</code>, returns the public URL path, which gets stored in the DB column instead of base64.</td>
+    <td>Keeps DB small, closer to how the source platform (<code>public/uploads/properties/...</code>) worked. More moving parts, needs disk write permissions, doesn't survive serverless/ephemeral hosting.</td>
+  </tr>
+</table>
+<div class="callout"><strong>Recommendation:</strong> start with Option A (base64) everywhere to unblock KYC + listing photos fast. If it's ever deployed for real, swap to Option B or real object storage (S3/Cloudinary) — the only change needed is inside the upload helper function, not the forms or schema.</div>
+
+<h2>5. Add Listing (Seller)</h2>
+<p>Route: <code>/dashboard/listings/new</code> (currently 404 — the listings page only reads, has no create form).</p>
+<h4>5.1 Guard</h4>
+<p>Only reachable if the seller's <code>SellerKyc.status === 'APPROVED'</code>. Otherwise redirect to <code>/dashboard/kyc</code> with a message.</p>
+<h4>5.2 Fields</h4>
+<table>
+  <tr><th>Field</th><th>Input</th><th>Notes</th></tr>
+  <tr><td>Title</td><td>text</td><td>required</td></tr>
+  <tr><td>Description</td><td>textarea</td><td>optional</td></tr>
+  <tr><td>Location</td><td>text</td><td>required, free-text "Area, City"</td></tr>
+  <tr><td>Type</td><td>select: RESIDENTIAL / PLOT / COMMERCIAL</td><td>required</td></tr>
+  <tr><td>Area (sqft)</td><td>number</td><td>required</td></tr>
+  <tr><td>BHK</td><td>number</td><td>hidden/disabled when Type = PLOT</td></tr>
+  <tr><td>Asking Price (₹)</td><td>number</td><td>required</td></tr>
+  <tr><td>Photos</td><td>multiple file input</td><td>optional but recommended; each creates a <code>PropertyPhoto</code> row via the upload mechanism in §4</td></tr>
+</table>
+<h4>5.3 Server action: <code>createListing(formData)</code></h4>
+<pre>'use server'
+// 1. require SELLER + KYC approved
+// 2. create Property with status: 'DRAFT', sellerId = session.user.id
+// 3. for each uploaded photo → create PropertyPhoto rows (order = index)
+// 4. notify all BACKEND users: "New listing submitted: {title}"
+// 5. redirect to /dashboard/listings</pre>
+
+<h2>6. Offers / Negotiations — Backend-mediated flow</h2>
+<p>Buyers can already make offers (built, <code>/dashboard/browse</code>). Two things are missing: sellers have no way to respond, <strong>and</strong> every negotiation must be triaged by Backend before a seller ever sees it — the buyer is never aware that step happened.</p>
+
+<h4>6.1 Status set</h4>
+<table>
+  <tr><th>Offer.status</th><th>Meaning</th><th>Who sees it as such</th></tr>
+  <tr><td><code>PENDING_REVIEW</code></td><td>Buyer just submitted it; sits in Backend's negotiation queue, untouched by anyone else.</td><td>Backend only. Buyer/Seller UIs display this the same as <code>PENDING</code> ("Pending") — the buyer must never see a distinct "awaiting backend" state.</td></tr>
+  <tr><td><code>PENDING</code></td><td>Backend forwarded it — now genuinely waiting on the seller.</td><td>Seller (actionable), Buyer (shown as "Pending")</td></tr>
+  <tr><td><code>COUNTERED</code></td><td><code>counterAmount</code> set — by either the seller <em>or</em> Backend directly (see <code>counterBy</code>). Buyer cannot tell which.</td><td>Buyer (actionable: accept/reject)</td></tr>
+  <tr><td><code>ACCEPTED</code></td><td>Terminal — triggers Deal creation.</td><td>everyone</td></tr>
+  <tr><td><code>REJECTED</code></td><td>Terminal — may have come from the seller <em>or</em> Backend directly.</td><td>everyone</td></tr>
+</table>
+
+<h4>6.2 New route: <code>/dashboard/negotiations</code> (BACKEND)</h4>
+<p>New sidebar icon for BACKEND, label "Negotiations", alongside the existing KYC Queue / Listings Queue icons. Shows every <code>Offer</code> with <code>status = 'PENDING_REVIEW'</code>, each row offering three actions:</p>
+<table>
+  <tr><th>Action</th><th>Effect</th></tr>
+  <tr><td><strong>Forward to Seller</strong></td><td>status → <code>PENDING</code>, <code>reviewedBy</code> = backend user id. Notify the seller: "New offer to review". Seller now handles it exactly like the original plan (§6.3).</td></tr>
+  <tr><td><strong>Counter</strong> (amount input)</td><td>status → <code>COUNTERED</code>, <code>counterAmount</code> set, <code>counterBy</code> = <code>'BACKEND'</code>, <code>reviewedBy</code> = backend user id. Seller is <strong>never notified</strong> — this bypasses them entirely. Notify only the buyer, with wording identical to a seller-issued counter (no "backend" language in the buyer-facing copy).</td></tr>
+  <tr><td><strong>Reject</strong></td><td>status → <code>REJECTED</code>, <code>reviewedBy</code> = backend user id. Seller never notified. Notify the buyer.</td></tr>
+</table>
+
+<h4>6.3 Route: <code>/dashboard/offers</code> — Seller side</h4>
+<p>Query only offers where <code>status = 'PENDING'</code> (i.e. already forwarded) or later terminal states for history. A seller must never see <code>PENDING_REVIEW</code> rows — those don't exist for them.</p>
+<table>
+  <tr><th>Action</th><th>Effect</th></tr>
+  <tr><td><code>acceptOffer(offerId)</code></td><td>Guard: <code>status === 'PENDING'</code>. → <code>ACCEPTED</code>; auto-creates a <code>Deal</code> (agreedPrice = offer.amount); auto-rejects all other pending offers on that property; notify buyer.</td></tr>
+  <tr><td><code>rejectOffer(offerId)</code></td><td>Guard: <code>status === 'PENDING'</code>. → <code>REJECTED</code>; notify buyer.</td></tr>
+  <tr><td><code>counterOffer(offerId, counterAmount)</code></td><td>Guard: <code>status === 'PENDING'</code>. → <code>COUNTERED</code>, <code>counterBy = 'SELLER'</code>; notify buyer.</td></tr>
+</table>
+
+<h4>6.4 Route: <code>/dashboard/offers</code> — Buyer side</h4>
+<p>Shows all of the buyer's own offers. UI maps <code>PENDING_REVIEW</code> and <code>PENDING</code> to the same "Pending" label/pill — the distinction is a backend implementation detail, never exposed here.</p>
+<table>
+  <tr><th>Action</th><th>Effect</th></tr>
+  <tr><td><code>acceptCounter(offerId)</code></td><td>Guard: <code>status === 'COUNTERED'</code>, offer belongs to this buyer. → <code>ACCEPTED</code> at <code>counterAmount</code>; same Deal-creation as <code>acceptOffer</code>; notify seller (only if the offer was ever forwarded to them — if <code>counterBy === 'BACKEND'</code> and the seller was never involved, still notify the seller now, since the Deal concerns their property).</td></tr>
+  <tr><td><code>rejectCounter(offerId)</code></td><td>→ <code>REJECTED</code>.</td></tr>
+</table>
+
+<h4>6.5 Server actions summary</h4>
+<table>
+  <tr><th>File</th><th>New exports</th></tr>
+  <tr><td><code>src/lib/actions/offers.ts</code></td><td><code>makeOffer</code> (existing — change created status to <code>PENDING_REVIEW</code>), <code>acceptOffer</code>, <code>rejectOffer</code>, <code>counterOffer</code>, <code>acceptCounter</code>, <code>rejectCounter</code></td></tr>
+  <tr><td><code>src/lib/actions/backend.ts</code></td><td><code>forwardOffer(offerId)</code>, <code>counterOfferAsBackend(offerId, counterAmount)</code>, <code>rejectOfferAsBackend(offerId)</code></td></tr>
+</table>
+<div class="callout">Deal-creation logic (agreedPrice, auto-rejecting sibling offers) must live in one shared helper called by both <code>acceptOffer</code> and <code>acceptCounter</code> — don't duplicate it.</div>
+
+<h2>7. Deals — creation, lifecycle, agent updates</h2>
+<p>Deals currently only exist from seed data — there's no code path that creates one. §6.2 fixes creation (auto-created on offer acceptance). What's still missing is the <strong>agent-side update flow</strong> and a deal detail page.</p>
+
+<h4>7.1 New route: <code>/dashboard/deals/[id]</code></h4>
+<table>
+  <tr><th>Role</th><th>Can do</th></tr>
+  <tr><td>AGENT (assigned to this deal)</td><td>Record token payment (amount + date), record final payment (amount + date + mode + transaction ref), add notes, mark deal CLOSED (only allowed once finalPaymentDate is set).</td></tr>
+  <tr><td>SELLER / BUYER</td><td>Read-only view of the same detail (progress, amounts, status) — no edit controls.</td></tr>
+</table>
+<h4>7.2 Server actions — new <code>src/lib/actions/deals.ts</code></h4>
+<pre>'use server'
+// recordTokenPayment(dealId, tokenAmount, tokenDate)   — AGENT only, must be the assigned agent
+// recordFinalPayment(dealId, finalAmount, finalPaymentDate, paymentMode, transactionRef)
+// closeDeal(dealId)  — requires finalPaymentDate already set; sets Deal.status = 'CLOSED'
+//                       AND Property.status = 'CLOSED'; notifies buyer + seller</pre>
+
+<h2>8. Agent assignment (Admin)</h2>
+<p>The <code>agentId</code> field exists on both <code>Property</code> and <code>Deal</code> but nothing in the UI ever sets it except the seed script. Admin needs a way to assign an agent when a deal starts (or earlier, to a listing).</p>
+<h4>8.1 Where to add it</h4>
+<p>Simplest: on the Admin's <code>/dashboard/listings</code> and a new small section on <code>/dashboard/deals</code> (admin sees all deals too — currently that page 403s non-SELLER/BUYER/AGENT; add ADMIN to the allowed roles with a full read + an "Assign Agent" dropdown per row).</p>
+<h4>8.2 Server action: <code>assignAgent(formData)</code></h4>
+<pre>'use server'
+// 1. require ADMIN
+// 2. read dealId (or propertyId) + agentId from formData
+// 3. prisma.deal.update({ where: { id: dealId }, data: { agentId } })
+//    (and/or prisma.property.update for propertyId case)
+// 4. notify the agent: "You've been assigned to {property.title}"</pre>
+
+<h2>9. Notifications — mark as read</h2>
+<p>The bell/feed already reads real <code>Notification</code> rows, but <code>isRead</code> is never flipped, so the unread dot never clears.</p>
+<h4>9.1 Server actions — new <code>src/lib/actions/notifications.ts</code></h4>
+<pre>'use server'
+// markNotificationRead(notificationId) — sets isRead = true for that row (must belong to session user)
+// markAllRead() — updates all of the current user's notifications where isRead = false</pre>
+<h4>9.2 UI hook-up</h4>
+<p>Clicking a row in <code>MessagesFeed.tsx</code> calls <code>markNotificationRead</code>; add a small "Mark all read" link in the card header calling <code>markAllRead</code>. Both should <code>revalidatePath</code> wherever the header's unread count is computed (the dashboard layout).</p>
+
+<h2>10. Settings — password change</h2>
+<p><code>/dashboard/settings</code> currently only edits name/phone. Add a second card:</p>
+<table>
+  <tr><th>Field</th><th>Notes</th></tr>
+  <tr><td>Current password</td><td>required, verified with <code>bcrypt.compare</code> against <code>user.passwordHash</code></td></tr>
+  <tr><td>New password</td><td>required, min 8 chars</td></tr>
+  <tr><td>Confirm new password</td><td>must match new password client-side before submit</td></tr>
+</table>
+<pre>'use server'
+// changePassword(formData) in src/lib/actions/profile.ts
+// 1. verify currentPassword via bcrypt.compare
+// 2. bcrypt.hash(newPassword, 10) → prisma.user.update({ passwordHash })</pre>
+
+<h2>11. Sidebar / route inventory</h2>
+<table>
+  <tr><th>Route</th><th>Role(s)</th><th>Status</th></tr>
+  <tr><td><code>/dashboard</code></td><td>all</td><td><span class="status done">done</span></td></tr>
+  <tr><td><code>/dashboard/listings</code></td><td>SELLER, AGENT, ADMIN</td><td><span class="status done">done (read-only)</span></td></tr>
+  <tr><td><code>/dashboard/listings/new</code></td><td>SELLER</td><td><span class="status missing">missing — §5</span></td></tr>
+  <tr><td><code>/dashboard/browse</code></td><td>BUYER</td><td><span class="status done">done (make-offer works)</span></td></tr>
+  <tr><td><code>/dashboard/deals</code></td><td>SELLER, BUYER, AGENT (+ ADMIN to add)</td><td><span class="status done">done (read-only)</span></td></tr>
+  <tr><td><code>/dashboard/deals/[id]</code></td><td>AGENT (edit), SELLER/BUYER (read)</td><td><span class="status missing">missing — §7</span></td></tr>
+  <tr><td><code>/dashboard/offers</code></td><td>SELLER, BUYER</td><td><span class="status missing">missing — §6.3/§6.4</span></td></tr>
+  <tr><td><code>/dashboard/negotiations</code></td><td>BACKEND</td><td><span class="status missing">missing — §6.2 (new)</span></td></tr>
+  <tr><td><code>/dashboard/kyc</code></td><td>BACKEND (queue, done), SELLER (submission)</td><td><span class="status missing">seller side missing — §3</span></td></tr>
+  <tr><td><code>/dashboard/queue</code></td><td>BACKEND</td><td><span class="status done">done</span></td></tr>
+  <tr><td><code>/dashboard/users</code></td><td>ADMIN</td><td><span class="status done">done</span></td></tr>
+  <tr><td><code>/dashboard/performance</code></td><td>all</td><td><span class="status done">done</span></td></tr>
+  <tr><td><code>/dashboard/settings</code></td><td>all</td><td><span class="status schema">partial — password change missing, §10</span></td></tr>
+</table>
+
+<h2>12. Server actions inventory</h2>
+<table>
+  <tr><th>File</th><th>Existing exports</th><th>To add</th></tr>
+  <tr><td><code>src/lib/actions/offers.ts</code></td><td><code>makeOffer</code></td><td>change <code>makeOffer</code>'s created status to <code>PENDING_REVIEW</code>; add <code>acceptOffer</code>, <code>rejectOffer</code>, <code>counterOffer</code>, <code>acceptCounter</code>, <code>rejectCounter</code> — §6.3/§6.4</td></tr>
+  <tr><td><code>src/lib/actions/backend.ts</code></td><td><code>reviewKyc</code>, <code>reviewListing</code></td><td><code>forwardOffer</code>, <code>counterOfferAsBackend</code>, <code>rejectOfferAsBackend</code> — §6.2</td></tr>
+  <tr><td><code>src/lib/actions/admin.ts</code></td><td><code>toggleUserActive</code></td><td><code>assignAgent</code> — §8.2</td></tr>
+  <tr><td><code>src/lib/actions/profile.ts</code></td><td><code>updateProfile</code></td><td><code>changePassword</code> — §10</td></tr>
+  <tr><td><code>src/lib/actions/kyc.ts</code></td><td><em>doesn't exist yet</em></td><td><code>submitKyc</code> — §3.5</td></tr>
+  <tr><td><code>src/lib/actions/listings.ts</code></td><td><em>doesn't exist yet</em></td><td><code>createListing</code> — §5.3</td></tr>
+  <tr><td><code>src/lib/actions/deals.ts</code></td><td><em>doesn't exist yet</em></td><td><code>recordTokenPayment</code>, <code>recordFinalPayment</code>, <code>closeDeal</code> — §7.2</td></tr>
+  <tr><td><code>src/lib/actions/notifications.ts</code></td><td><em>doesn't exist yet</em></td><td><code>markNotificationRead</code>, <code>markAllRead</code> — §9.1</td></tr>
+  <tr><td><code>src/lib/upload.ts</code></td><td><em>doesn't exist yet</em></td><td>shared helper implementing §4 Option A (or B) — used by KYC, listing photos</td></tr>
+</table>
+
+<h2>13. Build order</h2>
+<p>Follow this order — each step unblocks the next, and it matches the real user journey:</p>
+<ol>
+  <li><strong>Schema changes</strong> (§2) — SellerKyc doc fields, Deal lifecycle fields. Run <code>prisma generate</code> + <code>db push</code>.</li>
+  <li><strong>Upload helper</strong> (§4) — build once, reuse everywhere.</li>
+  <li><strong>Seller KYC submission</strong> (§3) — unblocks listing creation.</li>
+  <li><strong>Add Listing</strong> (§5) — unblocks the offer flow having something new to offer on.</li>
+  <li><strong>Offers/Negotiations: backend triage queue, seller accept/reject/counter, buyer accept-counter</strong> (§6) — this is what actually creates Deals now. Build the backend forward/counter/reject actions and queue <em>first</em>, since <code>makeOffer</code> now lands offers there instead of directly with the seller.</li>
+  <li><strong>Deal detail + agent payment recording + close</strong> (§7).</li>
+  <li><strong>Admin agent assignment</strong> (§8) — needed before an agent can act in step 6.</li>
+  <li><strong>Notifications mark-as-read</strong> (§9) — small, independent, do whenever convenient.</li>
+  <li><strong>Settings password change</strong> (§10) — small, independent.</li>
+</ol>
+
+<div class="callout">
+  Note the dependency: agent assignment (§8) technically needs to exist before a deal can be fully worked (§7), but a deal can be <em>created</em> (§6) with <code>agentId: null</code> and assigned after — so §6 and §7/§8 can be built in parallel if needed, as long as §7's actions tolerate an unassigned deal until §8 lands.
+</div>
+
+<h2>14. Checklist</h2>
+<p class="lede">Crossed out = actually built and verified running. Everything else is what's left, in the order §13 recommends.</p>
+
+<h4>Foundation</h4>
+<ul class="checklist">
+  <li class="done">Next.js + TypeScript + Tailwind v4 scaffold</li>
+  <li class="done">Prisma schema (base models) + SQLite dev DB + seed script (5 demo accounts, properties, offers, deals, notifications)</li>
+  <li class="done">NextAuth credentials + JWT auth, login page</li>
+  <li class="done">Design tokens (ink sidebar scale, violet accent, radius/shadow scale)</li>
+  <li class="done">Shared dashboard shell — icon sidebar + glass header + session gate</li>
+  <li class="done">GSAP entrance stagger + count-up stat animation</li>
+</ul>
+
+<h4>Dashboard home (all 5 roles)</h4>
+<ul class="checklist">
+  <li class="done">Seller home — KYC banner, live/pending/deals/portfolio stats, offers-received trend, My Properties list</li>
+  <li class="done">Buyer home — pending/accepted offers, active deals, properties-available stats, offers list</li>
+  <li class="done">Agent home — listings/active/closed/agreement-value/close-rate/alerts stats, deal pipeline</li>
+  <li class="done">Backend home — KYC pending/approved, listings queue, approval-rate stats, oldest KYC submissions</li>
+  <li class="done">Admin home — users/listings/deals/KYC/portfolio-value stats, recent users + recent listings</li>
+</ul>
+
+<h4>Sidebar sub-pages</h4>
+<ul class="checklist">
+  <li class="done">/dashboard/listings — read-only, scoped per role (Seller/Agent/Admin)</li>
+  <li class="done">/dashboard/browse — Buyer, with working Make Offer (creates real Offer row)</li>
+  <li class="done">/dashboard/deals — read-only, scoped per role (Seller/Buyer/Agent)</li>
+  <li class="done">/dashboard/kyc — Backend queue with real Approve/Reject (SellerKyc.status)</li>
+  <li class="done">/dashboard/queue — Backend listing queue with real Approve→LIVE / Reject</li>
+  <li class="done">/dashboard/users — Admin, real Active/Inactive toggle</li>
+  <li class="done">/dashboard/performance — stat tiles + chart + status breakdown, all roles</li>
+  <li class="done">/dashboard/settings — profile name/phone edit</li>
+</ul>
+
+<h4>Still to build</h4>
+<ul class="checklist">
+  <li>Schema: SellerKyc.idDocUrl / selfieUrl (§2)</li>
+  <li>Schema: Deal lifecycle fields — tokenAmount, tokenDate, finalAmount, finalPaymentDate, paymentMode, transactionRef, notes (§2)</li>
+  <li>Schema: Offer backend-mediation fields — reviewedBy, counterBy, new PENDING_REVIEW default status (§2, §6.1)</li>
+  <li>Schema (optional/stretch): PropertyDocument model for full document-vault parity (§2)</li>
+  <li>Shared upload helper (base64-in-DB recommended) (§4)</li>
+  <li>Seller-side /dashboard/kyc — submission form + 4 states (not-submitted/pending/rejected/approved) (§3)</li>
+  <li>/dashboard/listings/new — Add Listing form, KYC-approved guard, photo upload (§5)</li>
+  <li>/dashboard/negotiations — Backend triage queue: Forward to Seller / Counter / Reject (§6.2)</li>
+  <li>makeOffer — switch created status to PENDING_REVIEW (§6.1, §6.5)</li>
+  <li>/dashboard/offers (Seller side) — accept/reject/counter, only on forwarded (PENDING) offers (§6.3)</li>
+  <li>/dashboard/offers (Buyer side) — accept counter/reject counter, unified "Pending" display (§6.4)</li>
+  <li>Shared Deal-creation helper used by both acceptOffer and acceptCounter (§6.5)</li>
+  <li>/dashboard/deals/[id] — Agent payment recording (token + final) and close; Seller/Buyer read-only view (§7)</li>
+  <li>Admin agent assignment — assignAgent action + UI on listings/deals (§8)</li>
+  <li>Notifications mark-as-read + mark-all-read (§9)</li>
+  <li>Settings — password change (§10)</li>
+</ul>
+
+</body>
+</html>

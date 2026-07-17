@@ -1,26 +1,113 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Page surface */
+  --background: #F5F6FA;
+  --foreground: #14161F;
+
+  /* Ink scale — dark icon sidebar */
+  --ink-900: #12141C;
+  --ink-800: #191C26;
+  --ink-700: #232733;
+  --ink-600: #2E3340;
+
+  /* Text */
+  --text-1: #14161F;
+  --text-2: #5B6072;
+  --text-3: #9297A6;
+
+  /* Surfaces */
+  --surface: #FFFFFF;
+  --surface-2: #F8F9FC;
+  --surface-3: #EFF1F6;
+  --line: rgba(20, 22, 31, 0.07);
+
+  /* Signature accent — violet (matches reference "Upgrade to Pro" swatch) */
+  --accent-50: #F1EEFE;
+  --accent-100: #E4DEFD;
+  --accent-300: #B7A6F9;
+  --accent-500: #7C5CFC;
+  --accent-600: #6944F0;
+  --accent-700: #5533D6;
+
+  /* Functional */
+  --blue-50: #EAF1FE; --blue-500: #3B82F6; --blue-700: #1D4ED8;
+  --green-50: #E9FAF1; --green-500: #22C55E; --green-700: #15803D;
+  --amber-50: #FEF6E7; --amber-500: #F59E0B; --amber-700: #B45309;
+  --red-50: #FDECEC; --red-500: #EF4444; --red-700: #B91C1C;
+  --purple-50: #F4EEFE; --purple-500: #A855F7; --purple-700: #7E22CE;
+
+  /* Elevation */
+  --elev-1: 0 1px 2px rgba(20,22,31,0.04), 0 1px 1px rgba(20,22,31,0.03);
+  --elev-2: 0 4px 12px rgba(20,22,31,0.06), 0 1px 2px rgba(20,22,31,0.04);
+  --elev-3: 0 12px 28px rgba(20,22,31,0.10), 0 2px 6px rgba(20,22,31,0.05);
+  --elev-accent: 0 10px 24px rgba(124,92,252,0.28);
+
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+  --radius-full: 9999px;
+
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --font-sans: var(--font-jakarta);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-jakarta), -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* ── Shared surfaces ───────────────────────────── */
+
+.card {
+  background: var(--surface);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--elev-2);
+  border: 1px solid var(--line);
+}
+
+.card-hover {
+  transition: transform 250ms var(--ease-out), box-shadow 250ms var(--ease-out);
+}
+.card-hover:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--elev-3);
+}
+
+.btn-accent {
+  background: linear-gradient(135deg, var(--accent-500), var(--accent-700));
+  color: #fff;
+  box-shadow: var(--elev-accent);
+  transition: transform 200ms var(--ease-out), box-shadow 200ms var(--ease-out);
+}
+.btn-accent:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 30px rgba(124,92,252,0.36);
+}
+
+.scrollbar-thin::-webkit-scrollbar { width: 6px; height: 6px; }
+.scrollbar-thin::-webkit-scrollbar-thumb { background: var(--line); border-radius: 999px; }
+
+@keyframes dg-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg, var(--surface-3) 25%, var(--surface-2) 37%, var(--surface-3) 63%);
+  background-size: 400% 100%;
+  animation: dg-shimmer 1.4s ease infinite;
 }
