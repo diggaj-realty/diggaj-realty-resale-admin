@@ -58,3 +58,85 @@ export async function reviewListing(formData: FormData) {
   revalidatePath('/dashboard/queue')
   revalidatePath('/dashboard')
 }
+
+async function requirePendingReviewOffer(offerId: string) {
+  const offer = await prisma.offer.findUnique({
+    where: { id: offerId },
+    include: { property: { select: { id: true, title: true, sellerId: true } } },
+  })
+  if (!offer) throw new Error('Offer not found')
+  if (offer.status !== 'PENDING_REVIEW') throw new Error('Offer is not awaiting backend triage')
+  return offer
+}
+
+export async function forwardOffer(formData: FormData) {
+  const session = await requireBackend()
+  const offerId = String(formData.get('offerId'))
+  const offer = await requirePendingReviewOffer(offerId)
+
+  await prisma.offer.update({
+    where: { id: offerId },
+    data: { status: 'PENDING', reviewedBy: session.user.id },
+  })
+
+  await prisma.notification.create({
+    data: {
+      userId: offer.property.sellerId,
+      title: 'New offer to review',
+      message: `You have a new offer to review on ${offer.property.title}.`,
+    },
+  })
+
+  revalidatePath('/dashboard/negotiations')
+  revalidatePath('/dashboard')
+}
+
+export async function counterOfferAsBackend(formData: FormData) {
+  const session = await requireBackend()
+  const offerId = String(formData.get('offerId'))
+  const counterAmount = Number(formData.get('counterAmount'))
+  if (!Number.isFinite(counterAmount) || counterAmount <= 0) throw new Error('Invalid counter amount')
+
+  const offer = await requirePendingReviewOffer(offerId)
+
+  await prisma.offer.update({
+    where: { id: offerId },
+    data: { status: 'COUNTERED', counterAmount, counterBy: 'BACKEND', reviewedBy: session.user.id },
+  })
+
+  // Seller is intentionally never notified here — this bypasses them. Buyer-facing
+  // copy is identical to a seller-issued counter; no mention of backend/review.
+  await prisma.notification.create({
+    data: {
+      userId: offer.buyerId,
+      title: 'Offer countered',
+      message: `Your offer on ${offer.property.title} received a counter of ${counterAmount}.`,
+    },
+  })
+
+  revalidatePath('/dashboard/negotiations')
+  revalidatePath('/dashboard')
+}
+
+export async function rejectOfferAsBackend(formData: FormData) {
+  const session = await requireBackend()
+  const offerId = String(formData.get('offerId'))
+  const offer = await requirePendingReviewOffer(offerId)
+
+  await prisma.offer.update({
+    where: { id: offerId },
+    data: { status: 'REJECTED', reviewedBy: session.user.id },
+  })
+
+  // Seller never notified — bypassed entirely. Buyer copy reads like a normal rejection.
+  await prisma.notification.create({
+    data: {
+      userId: offer.buyerId,
+      title: 'Offer rejected',
+      message: `Your offer on ${offer.property.title} was rejected.`,
+    },
+  })
+
+  revalidatePath('/dashboard/negotiations')
+  revalidatePath('/dashboard')
+}
