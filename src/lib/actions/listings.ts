@@ -4,7 +4,7 @@ import { getServerSession } from 'next-auth'
 import { revalidatePath } from 'next/cache'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { fileToDataUrl } from '@/lib/upload'
+import { uploadFile } from '@/lib/upload'
 
 export async function createListing(formData: FormData) {
   const session = await getServerSession(authOptions)
@@ -45,7 +45,9 @@ export async function createListing(formData: FormData) {
   })
 
   if (photoFiles.length > 0) {
-    const photoUrls = await Promise.all(photoFiles.map((f) => fileToDataUrl(f)))
+    const photoUrls = await Promise.all(
+      photoFiles.map((f) => uploadFile(f, 'property-media', property.id))
+    )
     await prisma.propertyPhoto.createMany({
       data: photoUrls.map((photoUrl, order) => ({ propertyId: property.id, photoUrl, order })),
     })

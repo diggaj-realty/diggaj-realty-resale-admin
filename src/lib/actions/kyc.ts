@@ -4,7 +4,7 @@ import { getServerSession } from 'next-auth'
 import { revalidatePath } from 'next/cache'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { fileToDataUrl } from '@/lib/upload'
+import { uploadFile } from '@/lib/upload'
 
 export async function submitKyc(formData: FormData) {
   const session = await getServerSession(authOptions)
@@ -18,12 +18,12 @@ export async function submitKyc(formData: FormData) {
   if (!idDocFile || idDocFile.size === 0) throw new Error('ID document is required.')
   if (!selfieFile || selfieFile.size === 0) throw new Error('Selfie is required.')
 
-  const [idDocUrl, selfieUrl] = await Promise.all([
-    fileToDataUrl(idDocFile),
-    fileToDataUrl(selfieFile),
-  ])
-
   const userId = session.user.id
+
+  const [idDocUrl, selfieUrl] = await Promise.all([
+    uploadFile(idDocFile, 'kyc-documents', `${userId}`),
+    uploadFile(selfieFile, 'kyc-documents', `${userId}`),
+  ])
 
   await prisma.sellerKyc.upsert({
     where: { userId },
