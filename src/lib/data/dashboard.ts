@@ -147,18 +147,33 @@ export async function getBuyerDashboard(userId: string): Promise<DashboardData> 
   }
 }
 
-export async function getAgentDashboard(agentId: string): Promise<DashboardData> {
-  const [totalListings, totalDeals, closedDeals, unreadNotifs, agreementValueAgg, recentDeals] = await Promise.all([
+export interface NeedsAttentionItem {
+  id: string
+  title: string
+  subtitle: string
+  href: string
+}
+
+export async function getAgentDashboard(agentId: string): Promise<DashboardData & { needsAttention: NeedsAttentionItem[] }> {
+  const [totalListings, totalDeals, closedDeals, unreadNotifs, agreementValueAgg, recentDeals, activeOffers, dealsMissingPayment] = await Promise.all([
     prisma.property.count({ where: { agentId } }),
     prisma.deal.count({ where: { agentId } }),
     prisma.deal.count({ where: { agentId, status: 'CLOSED' } }),
     prisma.notification.count({ where: { userId: agentId, isRead: false } }),
-    prisma.deal.aggregate({ where: { agentId, status: 'CLOSED' }, _sum: { agreedPrice: true } }),
+    prisma.deal.aggregate({ where: { agentId, status: 'CLOSED' }, _sum: { agreedPrice: true, commissionAmount: true } }),
     prisma.deal.findMany({
       where: { agentId },
       orderBy: { createdAt: 'desc' },
       take: 5,
       include: { property: { select: { title: true, location: true } }, buyer: { select: { name: true } } },
+    }),
+    prisma.offer.findMany({
+      where: { property: { agentId }, status: { in: ['PENDING', 'COUNTERED'] } },
+      select: { id: true, amount: true, property: { select: { title: true } } },
+    }),
+    prisma.deal.findMany({
+      where: { agentId, status: 'IN_PROGRESS', OR: [{ tokenAmount: null }, { finalAmount: null }] },
+      select: { id: true, tokenAmount: true, finalAmount: true, property: { select: { title: true } } },
     }),
   ])
 
@@ -168,15 +183,30 @@ export async function getAgentDashboard(agentId: string): Promise<DashboardData>
 
   const allAgentDeals = await prisma.deal.findMany({ where: { agentId }, select: { createdAt: true } })
 
+  const needsAttention: NeedsAttentionItem[] = [
+    ...activeOffers.map((o) => ({
+      id: `offer-${o.id}`,
+      title: o.property.title,
+      subtitle: `Offer awaiting response · ${formatINR(o.amount)}`,
+      href: '/dashboard/offers',
+    })),
+    ...dealsMissingPayment.map((d) => ({
+      id: `deal-${d.id}`,
+      title: d.property.title,
+      subtitle: d.tokenAmount == null ? 'Token payment not recorded' : 'Final payment not recorded',
+      href: '/dashboard/deals',
+    })),
+  ]
+
   return {
     role: 'AGENT',
     stats: [
       { label: 'My Listings', value: String(totalListings), hint: 'Active on platform', tone: 'green' },
       { label: 'Active Deals', value: String(activeDeals), hint: 'In negotiation', tone: 'blue' },
+      { label: 'Needs Attention', value: String(needsAttention.length), hint: `${unreadNotifs} unread alerts`, tone: 'red' },
       { label: 'Deals Closed', value: String(closedDeals), hint: 'Total closings', tone: 'gold' },
-      { label: 'Agreement Value', value: agreementValue > 0 ? formatINR(agreementValue) : '₹0', hint: 'Total closed deals', tone: 'gold' },
+      { label: 'Agreement Value', value: agreementValue > 0 ? formatINR(agreementValue) : '₹0', hint: `Commission: ${formatINR(agreementValueAgg._sum.commissionAmount ?? 0)}`, tone: 'gold' },
       { label: 'Close Rate', value: `${closeRate}%`, hint: 'Conversion ratio', tone: 'purple' },
-      { label: 'Unread Alerts', value: String(unreadNotifs), hint: 'Needs attention', tone: 'red' },
     ],
     performanceTitle: 'Deals — Last 7 Days',
     performanceSeries: dailyCounts(allAgentDeals.map((d) => d.createdAt)),
@@ -190,6 +220,7 @@ export async function getAgentDashboard(agentId: string): Promise<DashboardData>
       status: d.status,
       href: `/dashboard`,
     })),
+    needsAttention,
   }
 }
 
@@ -275,10 +306,3 @@ export async function getAdminDashboard(): Promise<DashboardData> {
   }
 }
 
-export async function getRecentUsers() {
-  return prisma.user.findMany({ orderBy: { createdAt: 'desc' }, take: 5, select: { id: true, name: true, email: true, role: true, isActive: true } })
-}
-
-export async function getNotificationsFeed(userId: string, take = 5) {
-  return prisma.notification.findMany({ where: { userId }, orderBy: { createdAt: 'desc' }, take })
-}

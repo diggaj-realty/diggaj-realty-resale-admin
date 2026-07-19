@@ -1,26 +1,37 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { ArrowRightCircle, Scale, X } from 'lucide-react'
+import Link from 'next/link'
+import { ArrowRightCircle, Scale, X, ChevronDown } from 'lucide-react'
 import { formatINR } from '@/lib/format'
 import { forwardOffer, counterOfferAsBackend, rejectOfferAsBackend } from '@/lib/actions/backend'
+import OfferTimeline, { type OfferTimelineEvent } from '@/components/dashboard/OfferTimeline'
 
 export default function NegotiationRow({
   offerId,
+  propertyId,
   propertyTitle,
   location,
   buyerName,
+  buyerEmail,
+  buyerPhone,
   amount,
   message,
+  events,
 }: {
   offerId: string
+  propertyId: string
   propertyTitle: string
   location: string
   buyerName: string
+  buyerEmail: string
+  buyerPhone: string | null
   amount: number
   message: string | null
+  events: OfferTimelineEvent[]
 }) {
   const [counterOpen, setCounterOpen] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState(false)
   const [counterAmount, setCounterAmount] = useState(String(amount))
   const [done, setDone] = useState<'FORWARDED' | 'COUNTERED' | 'REJECTED' | null>(null)
   const [pending, startTransition] = useTransition()
@@ -46,12 +57,25 @@ export default function NegotiationRow({
     <div className="card px-5 py-4" style={{ boxShadow: 'var(--elev-1)' }}>
       <div className="flex items-center gap-4">
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{propertyTitle}</p>
-          <p className="truncate text-xs" style={{ color: 'var(--text-3)' }}>{location} · Buyer: {buyerName}</p>
+          <Link href={`/dashboard/listings/${propertyId}`} className="truncate text-sm font-semibold hover:underline" style={{ color: 'var(--text-1)' }}>
+            {propertyTitle}
+          </Link>
+          <p className="truncate text-xs" style={{ color: 'var(--text-3)' }}>{location}</p>
+          <p className="truncate text-xs" style={{ color: 'var(--text-3)' }}>
+            Buyer: {buyerName} · {buyerEmail}{buyerPhone ? ` · ${buyerPhone}` : ''}
+          </p>
           {message && <p className="mt-1 truncate text-xs italic" style={{ color: 'var(--text-3)' }}>&ldquo;{message}&rdquo;</p>}
         </div>
         <span className="whitespace-nowrap text-sm font-bold" style={{ color: 'var(--accent-700)' }}>{formatINR(amount)}</span>
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setHistoryOpen((v) => !v)}
+            className="flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold"
+            style={{ background: 'var(--surface-2)', color: 'var(--text-2)' }}
+          >
+            <ChevronDown size={13} style={{ transform: historyOpen ? 'rotate(180deg)' : undefined }} /> History
+          </button>
           <button
             type="button"
             disabled={pending}
@@ -81,6 +105,12 @@ export default function NegotiationRow({
           </button>
         </div>
       </div>
+
+      {historyOpen && (
+        <div className="mt-3 pl-0.5">
+          <OfferTimeline events={events} />
+        </div>
+      )}
 
       {counterOpen && (
         <form

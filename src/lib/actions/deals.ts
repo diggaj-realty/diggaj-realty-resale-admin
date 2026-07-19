@@ -4,6 +4,8 @@ import { getServerSession } from 'next-auth'
 import { revalidatePath } from 'next/cache'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { notifyUsers } from '@/lib/notify'
+import { getAppConfig } from '@/lib/actions/appConfig'
 
 async function requireAssignedAgent(dealId: string, userId: string) {
   const deal = await prisma.deal.findUnique({ where: { id: dealId } })
@@ -92,17 +94,19 @@ export async function closeDeal(formData: FormData) {
   const deal = await requireAssignedAgent(dealId, session.user.id)
   if (!deal.finalPaymentDate) throw new Error('Record the final payment before closing the deal')
 
+  const { commissionPercent } = await getAppConfig()
+  const settlementAmount = deal.finalAmount ?? deal.agreedPrice
+  const commissionAmount = Math.round(settlementAmount * (commissionPercent / 100) * 100) / 100
+
   await prisma.$transaction([
-    prisma.deal.update({ where: { id: dealId }, data: { status: 'CLOSED' } }),
+    prisma.deal.update({ where: { id: dealId }, data: { status: 'CLOSED', commissionAmount } }),
     prisma.property.update({ where: { id: deal.propertyId }, data: { status: 'CLOSED' } }),
   ])
 
-  await prisma.notification.createMany({
-    data: [
-      { userId: deal.buyerId, title: 'Deal closed', message: 'Your deal has been marked closed.' },
-      { userId: deal.sellerId, title: 'Deal closed', message: 'Your deal has been marked closed.' },
-    ],
-  })
+  await notifyUsers([
+    { userId: deal.buyerId, title: 'Deal closed', message: 'Your deal has been marked closed.' },
+    { userId: deal.sellerId, title: 'Deal closed', message: 'Your deal has been marked closed.' },
+  ])
 
   revalidatePath(`/dashboard/deals/${dealId}`)
   revalidatePath('/dashboard/deals')

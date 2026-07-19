@@ -51,6 +51,7 @@ export function getNavIcons(role: UserRole): NavIcon[] {
       return [
         home,
         { key: 'listings', label: 'My Listings', icon: Building2, href: '/dashboard/listings' },
+        { key: 'offers', label: 'Offers Received', icon: HandCoins, href: '/dashboard/offers' },
         { key: 'deals', label: 'Assigned Deals', icon: Briefcase, href: '/dashboard/deals' },
         performance,
         settings,
@@ -83,12 +84,4 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   AGENT: 'Agent',
   BACKEND: 'Backend Ops',
   ADMIN: 'Admin',
-}
-
-export const ROLE_TAGLINES: Record<UserRole, string> = {
-  SELLER: "Track your listings and offers. You're close to your next deal!",
-  BUYER: 'Track your offers and saved properties here.',
-  AGENT: 'Track your assigned deals and close rate here.',
-  BACKEND: 'Track the KYC and listing approval queue here.',
-  ADMIN: 'Track platform growth and activity here.',
 }

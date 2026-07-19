@@ -13,16 +13,20 @@ export default async function OffersPage() {
   if (!session) redirect('/login')
   const { id, role } = session.user
 
-  if (role !== 'SELLER' && role !== 'BUYER') redirect('/dashboard')
+  if (role !== 'SELLER' && role !== 'BUYER' && role !== 'AGENT') redirect('/dashboard')
 
-  if (role === 'SELLER') {
-    // Seller must never see PENDING_REVIEW rows — those don't exist for them.
+  if (role === 'SELLER' || role === 'AGENT') {
+    // Seller/agent must never see PENDING_REVIEW rows — those don't exist for them.
     const offers = await prisma.offer.findMany({
-      where: { property: { sellerId: id }, status: { not: 'PENDING_REVIEW' } },
+      where: {
+        property: role === 'AGENT' ? { agentId: id } : { sellerId: id },
+        status: { not: 'PENDING_REVIEW' },
+      },
       orderBy: { createdAt: 'desc' },
       include: {
         property: { select: { title: true, location: true } },
-        buyer: { select: { name: true } },
+        buyer: { select: { name: true, email: true, phone: true } },
+        events: { orderBy: { createdAt: 'asc' } },
       },
     })
 
@@ -40,9 +44,14 @@ export default async function OffersPage() {
                 propertyTitle={o.property.title}
                 location={o.property.location}
                 buyerName={o.buyer.name}
+                buyerEmail={o.buyer.email}
+                buyerPhone={o.buyer.phone}
+                message={o.message}
                 amount={o.amount}
                 status={o.status}
                 counterAmount={o.counterAmount}
+                createdAt={o.createdAt}
+                events={o.events}
               />
             ))
           )}
@@ -76,6 +85,8 @@ export default async function OffersPage() {
               amount={o.amount}
               displayStatus={buyerFacingOfferStatus(o.status)}
               counterAmount={o.counterAmount}
+              message={o.message}
+              createdAt={o.createdAt}
             />
           ))
         )}

@@ -2,7 +2,7 @@
 
 import { useTransition } from 'react'
 import { Check, X } from 'lucide-react'
-import { formatINR } from '@/lib/format'
+import { formatINR, formatRelativeTime } from '@/lib/format'
 import { acceptCounter, rejectCounter } from '@/lib/actions/offers'
 import OfferStatusPill from '@/components/dashboard/OfferStatusPill'
 
@@ -15,6 +15,8 @@ export default function BuyerOfferRow({
   amount,
   displayStatus,
   counterAmount,
+  message,
+  createdAt,
 }: {
   offerId: string
   propertyTitle: string
@@ -22,6 +24,8 @@ export default function BuyerOfferRow({
   amount: number
   displayStatus: string
   counterAmount: number | null
+  message: string | null
+  createdAt: Date | string
 }) {
   const [pending, startTransition] = useTransition()
   const actionable = displayStatus === 'COUNTERED'
@@ -37,6 +41,8 @@ export default function BuyerOfferRow({
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{propertyTitle}</p>
         <p className="truncate text-xs" style={{ color: 'var(--text-3)' }}>{location}</p>
+        {message && <p className="mt-1 truncate text-xs italic" style={{ color: 'var(--text-3)' }}>&ldquo;{message}&rdquo;</p>}
+        <p className="mt-0.5 text-[11px]" style={{ color: 'var(--text-3)' }}>{formatRelativeTime(new Date(createdAt))}</p>
       </div>
       <div className="text-right">
         <span className="block whitespace-nowrap text-sm font-bold" style={{ color: 'var(--accent-700)' }}>{formatINR(amount)}</span>

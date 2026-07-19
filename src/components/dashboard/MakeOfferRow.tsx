@@ -10,11 +10,13 @@ export default function MakeOfferRow({
   title,
   location,
   askingPrice,
+  detail,
 }: {
   propertyId: string
   title: string
   location: string
   askingPrice: number
+  detail?: string
 }) {
   const [open, setOpen] = useState(false)
   const [amount, setAmount] = useState(String(askingPrice))
@@ -32,7 +34,7 @@ export default function MakeOfferRow({
         </span>
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{title}</p>
-          <p className="truncate text-xs" style={{ color: 'var(--text-3)' }}>{location}</p>
+          <p className="truncate text-xs" style={{ color: 'var(--text-3)' }}>{location}{detail ? ` · ${detail}` : ''}</p>
         </div>
         <span className="whitespace-nowrap text-sm font-bold" style={{ color: 'var(--accent-700)' }}>
           {formatINR(askingPrice)}
@@ -72,6 +74,13 @@ export default function MakeOfferRow({
             onChange={(e) => setAmount(e.target.value)}
             min={1}
             className="w-40 rounded-lg border px-3 py-1.5 text-sm outline-none"
+            style={{ borderColor: 'var(--line)', color: 'var(--text-1)' }}
+          />
+          <input
+            type="text"
+            name="message"
+            placeholder="Message to seller (optional)"
+            className="flex-1 rounded-lg border px-3 py-1.5 text-sm outline-none"
             style={{ borderColor: 'var(--line)', color: 'var(--text-1)' }}
           />
           <button

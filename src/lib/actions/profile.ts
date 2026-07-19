@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache'
 import bcrypt from 'bcryptjs'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { uploadFile } from '@/lib/upload'
 
 export async function updateProfile(formData: FormData) {
   const session = await getServerSession(authOptions)
@@ -14,13 +15,34 @@ export async function updateProfile(formData: FormData) {
   const phone = String(formData.get('phone') || '').trim()
   if (!name) throw new Error('Name is required')
 
+  const avatarFile = formData.get('avatar')
+  let avatarUrl: string | undefined
+  if (avatarFile instanceof File && avatarFile.size > 0) {
+    avatarUrl = await uploadFile(avatarFile, 'avatars', session.user.id)
+  }
+
   await prisma.user.update({
     where: { id: session.user.id },
-    data: { name, phone: phone || null },
+    data: { name, phone: phone || null, ...(avatarUrl ? { avatarUrl } : {}) },
   })
 
   revalidatePath('/dashboard/settings')
   revalidatePath('/dashboard')
+}
+
+export async function updateNotificationPrefs(formData: FormData) {
+  const session = await getServerSession(authOptions)
+  if (!session) throw new Error('Unauthorized')
+
+  await prisma.user.update({
+    where: { id: session.user.id },
+    data: {
+      emailNotifications: formData.get('emailNotifications') === 'on',
+      pushNotifications: formData.get('pushNotifications') === 'on',
+    },
+  })
+
+  revalidatePath('/dashboard/settings')
 }
 
 export async function changePassword(formData: FormData) {

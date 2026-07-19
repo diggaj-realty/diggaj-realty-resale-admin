@@ -64,6 +64,9 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
             <div className="flex justify-between"><dt style={{ color: 'var(--text-3)' }}>Final Payment Date</dt><dd style={{ color: 'var(--text-1)' }}>{formatDate(deal.finalPaymentDate)}</dd></div>
             <div className="flex justify-between"><dt style={{ color: 'var(--text-3)' }}>Payment Mode</dt><dd style={{ color: 'var(--text-1)' }}>{deal.paymentMode ?? '—'}</dd></div>
             <div className="flex justify-between"><dt style={{ color: 'var(--text-3)' }}>Transaction Ref</dt><dd style={{ color: 'var(--text-1)' }}>{deal.transactionRef ?? '—'}</dd></div>
+            {deal.commissionAmount != null && (role === 'ADMIN' || role === 'AGENT' || role === 'BACKEND') && (
+              <div className="flex justify-between"><dt style={{ color: 'var(--text-3)' }}>Commission</dt><dd style={{ color: 'var(--text-1)' }}>{formatINR(deal.commissionAmount)}</dd></div>
+            )}
             <div className="flex justify-between"><dt style={{ color: 'var(--text-3)' }}>Status</dt><dd><StatusPill status={deal.status} /></dd></div>
           </dl>
           {deal.notes && !isAssignedAgent && (

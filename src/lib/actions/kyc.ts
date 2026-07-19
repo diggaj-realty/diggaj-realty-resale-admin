@@ -4,7 +4,9 @@ import { getServerSession } from 'next-auth'
 import { revalidatePath } from 'next/cache'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { notifyUsers } from '@/lib/notify'
 import { uploadFile } from '@/lib/upload'
+import { getAppConfig } from '@/lib/actions/appConfig'
 
 export async function submitKyc(formData: FormData) {
   const session = await getServerSession(authOptions)
@@ -25,21 +27,34 @@ export async function submitKyc(formData: FormData) {
     uploadFile(selfieFile, 'kyc-documents', `${userId}`),
   ])
 
+  const { kycAutoApproveEnabled } = await getAppConfig()
+  const status = kycAutoApproveEnabled ? 'APPROVED' : 'PENDING'
+
   await prisma.sellerKyc.upsert({
     where: { userId },
-    create: { userId, idType, idDocUrl, selfieUrl, status: 'PENDING' },
-    update: { idType, idDocUrl, selfieUrl, status: 'PENDING', remarks: null },
+    create: { userId, idType, idDocUrl, selfieUrl, status },
+    update: { idType, idDocUrl, selfieUrl, status, remarks: null },
   })
 
-  const backendUsers = await prisma.user.findMany({ where: { role: 'BACKEND' }, select: { id: true } })
-  if (backendUsers.length > 0) {
-    await prisma.notification.createMany({
-      data: backendUsers.map((u) => ({
-        userId: u.id,
-        title: 'New KYC submission',
-        message: `New KYC submission from ${session.user.name}.`,
-      })),
-    })
+  if (kycAutoApproveEnabled) {
+    await notifyUsers([
+      {
+        userId,
+        title: 'KYC approved',
+        message: 'Your seller KYC has been verified. You can now publish listings.',
+      },
+    ])
+  } else {
+    const backendUsers = await prisma.user.findMany({ where: { role: 'BACKEND' }, select: { id: true } })
+    if (backendUsers.length > 0) {
+      await notifyUsers(
+        backendUsers.map((u) => ({
+          userId: u.id,
+          title: 'New KYC submission',
+          message: `New KYC submission from ${session.user.name}.`,
+        }))
+      )
+    }
   }
 
   revalidatePath('/dashboard/kyc')

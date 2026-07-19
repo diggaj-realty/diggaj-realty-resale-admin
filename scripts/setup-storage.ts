@@ -8,6 +8,7 @@ async function main() {
     { name: 'property-media', public: true, fileSizeLimit: '50MB' },
     { name: 'kyc-documents', public: false, fileSizeLimit: '20MB' },
     { name: 'deal-documents', public: false, fileSizeLimit: '20MB' },
+    { name: 'avatars', public: true, fileSizeLimit: '5MB' },
   ]
 
   for (const b of buckets) {

@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024 // 50MB — covers photos, short videos, and ID docs
 const SIGNED_URL_TTL_SECONDS = 60 * 60 * 24 * 365 * 10 // 10 years, for private buckets
 
-export type UploadBucket = 'property-media' | 'kyc-documents' | 'deal-documents'
+export type UploadBucket = 'property-media' | 'kyc-documents' | 'deal-documents' | 'avatars'
 
 function supabaseAdmin() {
   return createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
@@ -33,7 +33,7 @@ export async function uploadFile(file: File, bucket: UploadBucket, folder: strin
   })
   if (error) throw new Error(`Upload to "${bucket}" failed: ${error.message}`)
 
-  if (bucket === 'property-media') {
+  if (bucket === 'property-media' || bucket === 'avatars') {
     return supabase.storage.from(bucket).getPublicUrl(key).data.publicUrl
   }
 

@@ -9,10 +9,12 @@ import AddListingForm from '@/components/dashboard/AddListingForm'
 export default async function NewListingPage() {
   const session = await getServerSession(authOptions)
   if (!session) redirect('/login')
-  if (session.user.role !== 'SELLER') redirect('/dashboard')
+  if (session.user.role !== 'SELLER' && session.user.role !== 'AGENT') redirect('/dashboard')
 
-  const kyc = await prisma.sellerKyc.findUnique({ where: { userId: session.user.id } })
-  if (kyc?.status !== 'APPROVED') redirect('/dashboard/kyc')
+  if (session.user.role === 'SELLER') {
+    const kyc = await prisma.sellerKyc.findUnique({ where: { userId: session.user.id } })
+    if (kyc?.status !== 'APPROVED') redirect('/dashboard/kyc')
+  }
 
   return (
     <DashboardEntrance>

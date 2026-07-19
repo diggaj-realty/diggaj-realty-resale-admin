@@ -6,7 +6,10 @@ import PageHeader from '@/components/dashboard/PageHeader'
 import DashboardEntrance from '@/components/dashboard/DashboardEntrance'
 import ProfileForm from '@/components/dashboard/ProfileForm'
 import PasswordChangeForm from '@/components/dashboard/PasswordChangeForm'
+import PlatformSettingsForm from '@/components/dashboard/PlatformSettingsForm'
+import NotificationPrefsForm from '@/components/dashboard/NotificationPrefsForm'
 import { ROLE_LABELS } from '@/components/dashboard/navConfig'
+import { getAppConfig } from '@/lib/actions/appConfig'
 
 export default async function SettingsPage() {
   const session = await getServerSession(authOptions)
@@ -15,12 +18,23 @@ export default async function SettingsPage() {
   const user = await prisma.user.findUnique({ where: { id: session.user.id } })
   if (!user) redirect('/login')
 
+  const appConfig = session.user.role === 'ADMIN' ? await getAppConfig() : null
+
   return (
     <DashboardEntrance>
       <PageHeader title="Settings" subtitle={`${ROLE_LABELS[session.user.role]} account`} />
       <div className="flex flex-col gap-6">
-        <ProfileForm name={user.name} phone={user.phone} email={user.email} />
+        <ProfileForm name={user.name} phone={user.phone} email={user.email} avatarUrl={user.avatarUrl} />
+        <NotificationPrefsForm emailNotifications={user.emailNotifications} pushNotifications={user.pushNotifications} />
         <PasswordChangeForm />
+        {appConfig && (
+          <PlatformSettingsForm
+            commissionPercent={appConfig.commissionPercent}
+            kycAutoApproveEnabled={appConfig.kycAutoApproveEnabled}
+            listingApprovalRequired={appConfig.listingApprovalRequired}
+            supportEmail={appConfig.supportEmail}
+          />
+        )}
       </div>
     </DashboardEntrance>
   )

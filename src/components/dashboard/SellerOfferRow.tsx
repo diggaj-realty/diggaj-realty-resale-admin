@@ -1,29 +1,41 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { Check, Scale, X } from 'lucide-react'
-import { formatINR } from '@/lib/format'
+import { Check, ChevronDown, Scale, X } from 'lucide-react'
+import { formatINR, formatRelativeTime } from '@/lib/format'
 import { acceptOffer, rejectOffer, counterOffer } from '@/lib/actions/offers'
 import OfferStatusPill from '@/components/dashboard/OfferStatusPill'
+import OfferTimeline, { type OfferTimelineEvent } from '@/components/dashboard/OfferTimeline'
 
 export default function SellerOfferRow({
   offerId,
   propertyTitle,
   location,
   buyerName,
+  buyerEmail,
+  buyerPhone,
+  message,
   amount,
   status,
   counterAmount,
+  createdAt,
+  events,
 }: {
   offerId: string
   propertyTitle: string
   location: string
   buyerName: string
+  buyerEmail: string
+  buyerPhone: string | null
+  message: string | null
   amount: number
   status: string
   counterAmount: number | null
+  createdAt: Date | string
+  events: OfferTimelineEvent[]
 }) {
   const [counterOpen, setCounterOpen] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState(false)
   const [amountInput, setAmountInput] = useState(String(amount))
   const [pending, startTransition] = useTransition()
 
@@ -41,7 +53,12 @@ export default function SellerOfferRow({
       <div className="flex items-center gap-4">
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{propertyTitle}</p>
-          <p className="truncate text-xs" style={{ color: 'var(--text-3)' }}>{location} · Buyer: {buyerName}</p>
+          <p className="truncate text-xs" style={{ color: 'var(--text-3)' }}>{location}</p>
+          <p className="truncate text-xs" style={{ color: 'var(--text-3)' }}>
+            Buyer: {buyerName} · {buyerEmail}{buyerPhone ? ` · ${buyerPhone}` : ''}
+          </p>
+          {message && <p className="mt-1 truncate text-xs italic" style={{ color: 'var(--text-3)' }}>&ldquo;{message}&rdquo;</p>}
+          <p className="mt-0.5 text-[11px]" style={{ color: 'var(--text-3)' }}>{formatRelativeTime(new Date(createdAt))}</p>
         </div>
         <div className="text-right">
           <span className="block whitespace-nowrap text-sm font-bold" style={{ color: 'var(--accent-700)' }}>{formatINR(amount)}</span>
@@ -50,6 +67,14 @@ export default function SellerOfferRow({
           )}
         </div>
         <OfferStatusPill status={status} />
+        <button
+          type="button"
+          onClick={() => setHistoryOpen((v) => !v)}
+          className="flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold"
+          style={{ background: 'var(--surface-2)', color: 'var(--text-2)' }}
+        >
+          <ChevronDown size={13} style={{ transform: historyOpen ? 'rotate(180deg)' : undefined }} /> History
+        </button>
         {actionable && (
           <div className="flex items-center gap-2">
             <button
@@ -82,6 +107,12 @@ export default function SellerOfferRow({
           </div>
         )}
       </div>
+
+      {historyOpen && (
+        <div className="mt-3 pl-0.5">
+          <OfferTimeline events={events} />
+        </div>
+      )}
 
       {counterOpen && actionable && (
         <form

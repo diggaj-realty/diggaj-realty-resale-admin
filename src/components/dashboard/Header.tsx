@@ -1,9 +1,10 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { signOut } from 'next-auth/react'
-import { Bell, Search, ChevronDown, LogOut } from 'lucide-react'
-import { ROLE_LABELS, ROLE_TAGLINES } from './navConfig'
+import { Bell, Search, ChevronDown, LogOut, Settings } from 'lucide-react'
+import { ROLE_LABELS } from './navConfig'
 import type { UserRole } from '@/types'
 
 const ROLE_AVATAR_BG: Record<UserRole, string> = {
@@ -28,16 +29,16 @@ export default function Header({
   role,
   userEmail,
   unreadCount,
+  avatarUrl,
 }: {
   userName: string
   role: UserRole
   userEmail: string
   unreadCount: number
+  avatarUrl: string | null
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const firstName = userName.split(' ')[0]
-  const today = new Date()
-  const dateLabel = today.toLocaleDateString('en-US', { day: '2-digit', month: 'long', year: 'numeric' })
 
   return (
     <header
@@ -48,25 +49,24 @@ export default function Header({
         borderBottom: '1px solid var(--line)',
       }}
     >
-      <div>
-        <h1 className="text-xl font-extrabold tracking-tight" style={{ color: 'var(--text-1)' }}>
-          Hello, {firstName}
-        </h1>
-        <p className="mt-0.5 text-xs font-medium" style={{ color: 'var(--text-3)' }}>
-          {dateLabel} &middot; {ROLE_TAGLINES[role]}
-        </p>
-      </div>
-
-      <div className="hidden max-w-md flex-1 items-center gap-2 rounded-xl border px-3 py-2 md:flex" style={{ borderColor: 'var(--line)', background: 'var(--surface-2)' }}>
+      <div className="flex max-w-md flex-1 items-center gap-2 rounded-full border px-4 py-2.5" style={{ borderColor: 'var(--line)', background: 'var(--surface-2)' }}>
         <Search size={16} style={{ color: 'var(--text-3)' }} />
         <input
-          placeholder="Search..."
+          placeholder="Type to search..."
           className="w-full bg-transparent text-sm outline-none"
           style={{ color: 'var(--text-1)' }}
         />
       </div>
 
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-2">
+        <Link
+          href="/dashboard/settings"
+          className="flex h-10 w-10 items-center justify-center rounded-xl transition-colors hover:bg-black/[0.03]"
+          style={{ color: 'var(--text-2)' }}
+        >
+          <Settings size={18} />
+        </Link>
+
         <button
           type="button"
           className="relative flex h-10 w-10 items-center justify-center rounded-xl transition-colors hover:bg-black/[0.03]"
@@ -87,12 +87,17 @@ export default function Header({
             onClick={() => setMenuOpen((v) => !v)}
             className="flex items-center gap-2 rounded-xl py-1 pl-1 pr-2 transition-colors hover:bg-black/[0.03]"
           >
-            <span
-              className="flex h-9 w-9 items-center justify-center rounded-full text-xs font-bold text-white"
-              style={{ background: ROLE_AVATAR_BG[role] }}
-            >
-              {initials(userName)}
-            </span>
+            {avatarUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={avatarUrl} alt={userName} className="h-9 w-9 rounded-full object-cover" />
+            ) : (
+              <span
+                className="flex h-9 w-9 items-center justify-center rounded-full text-xs font-bold text-white"
+                style={{ background: ROLE_AVATAR_BG[role] }}
+              >
+                {initials(userName)}
+              </span>
+            )}
             <span className="hidden text-left sm:block">
               <span className="block text-sm font-semibold leading-tight" style={{ color: 'var(--text-1)' }}>
                 {firstName}

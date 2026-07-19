@@ -10,7 +10,12 @@ import ReviewActions from '@/components/dashboard/ReviewActions'
 import KycSubmissionForm from '@/components/dashboard/KycSubmissionForm'
 import { reviewKyc } from '@/lib/actions/backend'
 
-export default async function KycPage() {
+export default async function KycPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string }>
+}) {
+  const { q } = await searchParams
   const session = await getServerSession(authOptions)
   if (!session) redirect('/login')
 
@@ -21,7 +26,12 @@ export default async function KycPage() {
   if (session.user.role !== 'BACKEND') redirect('/dashboard')
 
   const pending = await prisma.sellerKyc.findMany({
-    where: { status: 'PENDING' },
+    where: {
+      status: 'PENDING',
+      ...(q
+        ? { user: { OR: [{ name: { contains: q, mode: 'insensitive' } }, { email: { contains: q, mode: 'insensitive' } }] } }
+        : {}),
+    },
     orderBy: { createdAt: 'asc' },
     include: { user: { select: { name: true, email: true } } },
   })
@@ -29,6 +39,18 @@ export default async function KycPage() {
   return (
     <DashboardEntrance>
       <PageHeader title="KYC Queue" subtitle={`${pending.length} pending submission${pending.length === 1 ? '' : 's'}`} />
+
+      <form className="mb-4 flex flex-wrap items-center gap-2 text-xs" data-animate="fade-up">
+        <input
+          type="text"
+          name="q"
+          defaultValue={q ?? ''}
+          placeholder="Search seller name or email"
+          className="rounded-lg border px-3 py-2 outline-none"
+          style={{ borderColor: 'var(--line)', color: 'var(--text-1)', background: 'var(--surface)' }}
+        />
+        <button type="submit" className="btn-accent rounded-lg px-3 py-2 font-semibold">Apply</button>
+      </form>
 
       <div className="card overflow-hidden" data-animate="fade-up">
         {pending.length === 0 ? (
@@ -48,7 +70,9 @@ export default async function KycPage() {
                 {pending.map((k) => (
                   <tr key={k.id} className="border-t" style={{ borderColor: 'var(--line)' }}>
                     <td className="px-5 py-3.5">
-                      <p className="font-semibold" style={{ color: 'var(--text-1)' }}>{k.user.name}</p>
+                      <Link href={`/dashboard/kyc/${k.id}`} className="font-semibold hover:underline" style={{ color: 'var(--text-1)' }}>
+                        {k.user.name}
+                      </Link>
                       <p className="text-xs" style={{ color: 'var(--text-3)' }}>{k.user.email}</p>
                     </td>
                     <td className="px-5 py-3.5">

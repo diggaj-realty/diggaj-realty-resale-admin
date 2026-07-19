@@ -21,15 +21,18 @@ datasource db {
 // PropertyType: RESIDENTIAL | PLOT | COMMERCIAL
 
 model User {
-  id           String   @id @default(cuid())
-  name         String
-  email        String   @unique
-  phone        String?
-  passwordHash String
-  role         String // Role enum
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id                 String   @id @default(cuid())
+  name               String
+  email              String   @unique
+  phone              String?
+  passwordHash       String
+  role               String // Role enum
+  isActive           Boolean  @default(true)
+  avatarUrl          String?
+  emailNotifications Boolean  @default(true)
+  pushNotifications  Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
   sellerKyc          SellerKyc?
   propertiesAsSeller Property[]     @relation("SellerProperties")
@@ -112,10 +115,26 @@ model Offer {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-  buyer    User     @relation("BuyerOffers", fields: [buyerId], references: [id])
+  property Property    @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  buyer    User        @relation("BuyerOffers", fields: [buyerId], references: [id])
+  events   OfferEvent[]
 
   @@map("offers")
+}
+
+model OfferEvent {
+  id        String   @id @default(cuid())
+  offerId   String
+  type      String // CREATED | FORWARDED | COUNTERED_BACKEND | COUNTERED_SELLER | ACCEPTED | REJECTED | COUNTER_ACCEPTED | COUNTER_REJECTED
+  amount    Float?
+  actorId   String?
+  actorRole String?
+  note      String?
+  createdAt DateTime @default(now())
+
+  offer Offer @relation(fields: [offerId], references: [id], onDelete: Cascade)
+
+  @@map("offer_events")
 }
 
 model Deal {
@@ -132,6 +151,7 @@ model Deal {
   paymentMode      String? // BANK_TRANSFER | CHEQUE | OTHER
   transactionRef   String?
   notes            String?
+  commissionAmount Float?
   status           String    @default("IN_PROGRESS") // DealStatus enum
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
@@ -155,4 +175,15 @@ model Notification {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("notifications")
+}
+
+model AppConfig {
+  id                      String   @id @default("singleton")
+  commissionPercent       Float    @default(2)
+  kycAutoApproveEnabled   Boolean  @default(false)
+  listingApprovalRequired Boolean  @default(true)
+  supportEmail            String?
+  updatedAt               DateTime @updatedAt
+
+  @@map("app_config")
 }
