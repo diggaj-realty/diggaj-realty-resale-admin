@@ -8,7 +8,19 @@ CORS is open (`Access-Control-Allow-Origin: *`) so this can be called from any o
 
 ## Auth
 
-Token-based, not cookies. Log in once, then send the token on every other request.
+Token-based, not cookies. Register or log in once, then send the token on every other request.
+
+```
+POST /api/v1/auth/register
+Content-Type: application/json
+{ "name": "Aisha Khan", "email": "aisha@example.com", "password": "at-least-8-chars", "phone": "9876543210", "role": "BUYER" }
+
+→ 201 { "data": { "token": "<jwt>", "user": { id, name, email, phone, role, isActive, createdAt, updatedAt } } }
+```
+- `role` must be `"BUYER"` or `"SELLER"` (case-insensitive) — public self-serve signup only creates these two roles. `AGENT`/`BACKEND`/`ADMIN` accounts are provisioned internally, not through this endpoint.
+- `phone` is optional; `name`, `email`, `password` (min 8 chars) are required.
+- `409` if the email is already registered, `400` for validation errors.
+- Response shape matches login — the frontend can log the user straight in with the returned token, no second request needed.
 
 ```
 POST /api/v1/auth/login

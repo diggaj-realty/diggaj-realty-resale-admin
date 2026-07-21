@@ -50,18 +50,18 @@ The public API is **bearer-token JWT**, separate from the internal
 dashboard's NextAuth cookie session. The marketing site is a different origin
 entirely, so:
 
-1. User signs up / logs in through whatever UI you build → `POST /auth/login`
-   `{ email, password }` → returns `{ token, user }`.
+1. New user → `POST /auth/register` `{ name, email, password, phone?, role }`
+   (`role` is `"BUYER"` or `"SELLER"`) → returns `{ token, user }` immediately,
+   no separate login step needed after signup.
+   Existing user → `POST /auth/login` `{ email, password }` → same shape.
 2. Store `token` in `localStorage` (or a cookie you control) on the frontend.
 3. Send `Authorization: Bearer <token>` on every subsequent request.
 4. Token is valid 30 days — no refresh endpoint exists yet; on 401, just send
    the user back to login.
 
-There is currently **no public registration endpoint** — accounts are
-created by the backend today. If the marketing site needs self-serve sign-up
-(buyer accounts especially), flag this back to the backend team; it's a small
-addition (`POST /auth/register`) but isn't built yet. Don't invent a fake one
-client-side.
+Registration only creates `BUYER` or `SELLER` accounts (self-serve, public).
+`AGENT`/`BACKEND`/`ADMIN` are internal roles, not exposed to signup — don't
+show those as options in any public sign-up form.
 
 Demo accounts for testing (password `password123` for all):
 `seller@demo.test`, `buyer@demo.test`, `agent@demo.test`.
@@ -94,6 +94,21 @@ export async function api<T>(
   const json = await res.json();
   if (!res.ok) throw new Error(json?.error?.message ?? `Request failed (${res.status})`);
   return json.data as T;
+}
+
+export async function register(input: {
+  name: string;
+  email: string;
+  password: string;
+  phone?: string;
+  role: "BUYER" | "SELLER";
+}) {
+  const data = await api<{ token: string; user: unknown }>("/auth/register", {
+    method: "POST",
+    body: input,
+  });
+  localStorage.setItem("diggaj_token", data.token);
+  return data; // already logged in — no separate login() call needed
 }
 
 export async function login(email: string, password: string) {
@@ -132,12 +147,25 @@ Every list endpoint returns `{ items, page, pageSize, total, totalPages }` —
 | `Listings` | `components/Listings.tsx` | **wire to real data** | Replace the `LISTINGS` constant with `GET /properties?pageSize=6` on mount (or as a server component with `fetch`). Map each `Property` → `{ img: photos[0]?.url, title, price: askingPrice, address: location, beds: bhk, baths: … , badge }`. Note: the API has no separate "baths" field — either drop that stat or derive a placeholder; don't invent fake data silently, ask the backend team if baths should be added to the schema. |
 | `ExploreMap` | `components/ExploreMap.tsx` | **static, leave as-is** | Decorative animated map with hardcoded pins — this is art direction, not a real map. Leave unless the user explicitly asks for a real interactive map (bigger task, would need `latitude`/`longitude` from `Property`). |
 | `HowItWorks`, `SaveMore`, `ValueProp`, `BuySell` | — | **static, leave as-is** | Marketing copy, no data dependency. |
-| `Footer` "Get started" | `components/Footer.tsx` | **link to auth** | Point at whatever login/signup page you build. |
+| `Footer` "Get started" | `components/Footer.tsx` | **link to auth** | Point at the sign-up page (below). |
+| New: sign-up / login pages | (doesn't exist yet) | **build new** | `POST /auth/register` (Buyer/Seller toggle) and `POST /auth/login`. See flows below. |
 | New: property detail page | (doesn't exist yet) | **build new** | `GET /properties/:id` → full `Property` with `photos[]`. |
 | New: buyer offer flow | (doesn't exist yet) | **build new** | `POST /offers { propertyId, amount, message? }` once a buyer is logged in. |
 | New: seller listing flow | (doesn't exist yet) | **build new** | Multi-step: KYC (if not approved) → photo upload → `POST /listings`. See flows below. |
 
 ## 5. Key flows to implement
+
+**Sign up:**
+1. Build a form asking for name, email, password, phone (optional), and
+   "I am a…" Buyer/Seller toggle.
+2. `register({ name, email, password, phone, role })` — on success the user
+   already has a valid token (no separate login step). Redirect them straight
+   into their buyer/seller experience.
+3. `409` → "an account with this email already exists" — offer a link to log
+   in instead. `400` → show the validation message inline (e.g. password too
+   short).
+4. Sellers aren't required to complete KYC at signup — prompt for it the
+   first time they try to list a property (see below), not during registration.
 
 **Property browse/search (public-facing "Featured Listings" grid and any
 future search page):**
