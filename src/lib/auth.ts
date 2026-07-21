@@ -24,6 +24,10 @@ export const authOptions: AuthOptions = {
         const isValid = await bcrypt.compare(credentials.password, user.passwordHash)
         if (!isValid) return null
 
+        if (user.role === 'BUYER' || user.role === 'SELLER') {
+          throw new Error('This dashboard is for internal staff only. Please use the Diggaj Realty app to sign in.')
+        }
+
         return {
           id: user.id,
           name: user.name,

@@ -63,8 +63,14 @@ Registration only creates `BUYER` or `SELLER` accounts (self-serve, public).
 `AGENT`/`BACKEND`/`ADMIN` are internal roles, not exposed to signup — don't
 show those as options in any public sign-up form.
 
-Demo accounts for testing (password `password123` for all):
-`seller@demo.test`, `buyer@demo.test`, `agent@demo.test`.
+**Important — this API only authenticates `BUYER`/`SELLER` accounts.** Agent,
+backend-ops, and admin are internal staff roles that sign in through a
+separate internal dashboard, not through this public API — `/auth/login` and
+`/auth/register` will `403`/reject anything else. You'll never need those
+roles on the marketing site.
+
+Demo accounts for testing (password `password123` for both):
+`seller@demo.test`, `buyer@demo.test`.
 
 ## 3. A minimal API client to drop into the frontend
 

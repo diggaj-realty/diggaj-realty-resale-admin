@@ -6,8 +6,6 @@ import { useRouter } from 'next/navigation'
 import { Building2, Loader2 } from 'lucide-react'
 
 const DEMO_ACCOUNTS = [
-  { role: 'Seller', email: 'seller@demo.test' },
-  { role: 'Buyer', email: 'buyer@demo.test' },
   { role: 'Agent', email: 'agent@demo.test' },
   { role: 'Backend', email: 'backend@demo.test' },
   { role: 'Admin', email: 'admin@demo.test' },
@@ -27,7 +25,7 @@ export default function LoginPage() {
     const res = await signIn('credentials', { email, password, redirect: false })
     setLoading(false)
     if (res?.error) {
-      setError('Invalid email or password.')
+      setError(res.error === 'CredentialsSignin' ? 'Invalid email or password.' : res.error)
       return
     }
     router.push('/dashboard')

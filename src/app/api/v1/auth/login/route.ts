@@ -18,6 +18,10 @@ export const POST = withApi(async (req) => {
   const valid = await bcrypt.compare(password, user.passwordHash)
   if (!valid) throw new ApiError('Invalid credentials', 401)
 
+  if (user.role !== 'BUYER' && user.role !== 'SELLER') {
+    throw new ApiError('This account type must sign in through the internal dashboard, not the public API', 403)
+  }
+
   const token = signApiToken({ id: user.id, role: user.role as UserRole })
 
   return ok({ token, user: userDTO(user) })

@@ -30,13 +30,19 @@ Content-Type: application/json
 → 200 { "data": { "token": "<jwt>", "user": { id, name, email, phone, role, isActive, createdAt, updatedAt } } }
 ```
 
+**This public API only issues tokens to `BUYER`/`SELLER` accounts.** `AGENT`,
+`BACKEND`, and `ADMIN` credentials get a `403` here — those roles sign in
+exclusively through the internal dashboard's own `/login` page (a separate,
+cookie-based session, not part of this API). This is intentional: internal
+staff credentials are never usable from the public-facing surface.
+
 Send the token on every subsequent request:
 ```
 Authorization: Bearer <jwt>
 ```
 Tokens are valid 30 days. `GET /api/v1/auth/me` returns the current user (validates the token and that the account is still active).
 
-Demo accounts (password `password123` for all): `seller@demo.test`, `buyer@demo.test`, `agent@demo.test`, `backend@demo.test`, `admin@demo.test`.
+Demo accounts (password `password123` for all, public-API-usable): `seller@demo.test`, `buyer@demo.test`.
 
 ## Response envelope
 

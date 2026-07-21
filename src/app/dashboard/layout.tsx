@@ -11,6 +11,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   const { id, name, email, role } = session.user
 
+  // This dashboard is internal-only (Admin/Backend-ops/Agent). Buyers and
+  // sellers use the public marketing site + API, never this UI — this guard
+  // catches any session cookie issued before that restriction existed.
+  if (role === 'BUYER' || role === 'SELLER') redirect('/login')
+
   const [unreadCount, user] = await Promise.all([
     prisma.notification.count({ where: { userId: id, isRead: false } }),
     prisma.user.findUnique({ where: { id }, select: { avatarUrl: true } }),
