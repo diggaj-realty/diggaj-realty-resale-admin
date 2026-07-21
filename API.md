@@ -97,12 +97,44 @@ Content-Type: multipart/form-data
 ### Listings & browsing
 | Method | Path | Role | Body | Notes |
 |---|---|---|---|---|
-| GET | `/properties` | any | — paginated, `?q=` search, `?type=` filter | LIVE properties only (buyer browse) |
-| GET | `/properties/:id` | any | — | single property + photos |
+| GET | `/properties` | any | — paginated, `?q=` search, `?type=` filter | LIVE properties only (buyer browse); recording a view (see below) happens automatically on `GET /properties/:id` |
+| GET | `/properties/:id` | any | — | single property + photos; auto-records a `PropertyView` for the requesting user unless they're the listing's own seller/agent |
+| GET | `/properties/:id/views` | seller/agent (own listing) or ADMIN/BACKEND | — | `{ propertyId, viewCount, total, last7Days, uniqueViewers }` — view analytics, not for buyers |
 | GET | `/listings` | SELLER/AGENT/ADMIN/BACKEND | — paginated | role-scoped: seller sees own, agent sees assigned, admin/backend see all |
-| POST | `/listings` | SELLER | `{ title, description, location, type, areaSqft, bhk, askingPrice, photoUrls[] }` | requires approved KYC; `type` one of `RESIDENTIAL/PLOT/COMMERCIAL`; starts as `DRAFT` |
+| POST | `/listings` | SELLER | `{ title, description, location, type, areaSqft, bhk, askingPrice, photoUrls[], ...richFields? }` | requires approved KYC; `type` one of `RESIDENTIAL/PLOT/COMMERCIAL`; starts as `DRAFT`; `richFields` are all optional — see "Rich listing fields" below |
 | GET | `/queue` | BACKEND | — paginated | listings awaiting verification (`DRAFT`/`PENDING_VERIFICATION`) |
 | POST | `/queue/:id/review` | BACKEND | `{ decision: "LIVE" \| "REJECTED" }` | |
+
+### Amenities master list
+| Method | Path | Role | Body | Notes |
+|---|---|---|---|---|
+| GET | `/amenities` | any | — `?all=1` (ADMIN only) includes inactive | active amenity list, use to populate a listing form's amenities checklist |
+| POST | `/amenities` | ADMIN | `{ name, category? }` | `409` if name already exists |
+| PATCH | `/amenities/:id` | ADMIN | `{ name?, category?, active? }` | |
+| DELETE | `/amenities/:id` | ADMIN | — | idempotent; existing properties keep their recorded `amenities` strings even after one is deleted from the master list |
+
+### Shortlists (buyer favorites)
+| Method | Path | Role | Body | Notes |
+|---|---|---|---|---|
+| GET | `/shortlists` | BUYER | — paginated | full `Property` objects (each with a `shortlistedAt` timestamp), newest first |
+| POST | `/shortlists` | BUYER | `{ propertyId }` | idempotent — re-adding an already-shortlisted property is a no-op, `201` either way |
+| DELETE | `/shortlists/:propertyId` | BUYER | — | idempotent — `200` even if it wasn't shortlisted |
+
+### Saved searches & alerts
+| Method | Path | Role | Body | Notes |
+|---|---|---|---|---|
+| GET | `/saved-searches` | BUYER | — | own saved searches, newest first |
+| POST | `/saved-searches` | BUYER | `{ name?, filters, alertsEnabled? }` | `filters` shape: `{ q?, type?, minPrice?, maxPrice?, minBhk?, city? }` (same params as `GET /properties`); `alertsEnabled` defaults `true` |
+| PATCH | `/saved-searches/:id` | BUYER (owner) | `{ name?, alertsEnabled? }` | |
+| DELETE | `/saved-searches/:id` | BUYER (owner) | — | idempotent |
+| POST | `/saved-searches/run-alerts` | BUYER/ADMIN/BACKEND | — | BUYER: scans only their own searches ("check now"); ADMIN/BACKEND: platform-wide scan (intended for a scheduled cron); returns `{ scanned, notified }`; new matches arrive as in-app `Notification`s |
+
+### Site visits
+| Method | Path | Role | Body | Notes |
+|---|---|---|---|---|
+| GET | `/site-visits` | BUYER/AGENT | — paginated, `?status=` filter | BUYER sees own requests, AGENT sees visits assigned to them |
+| POST | `/site-visits` | BUYER | `{ propertyId, requestedDate, buyerNote? }` | auto-assigns the property's existing agent if one is set; `403` if site visits are platform-disabled |
+| PATCH | `/site-visits/:id` | BUYER/AGENT | `{ action: "schedule" \| "complete" \| "cancel", scheduledDate?, feedback? }` | `schedule`/`complete` are agent-only (and claim the visit as theirs); `cancel` works for either owning party; each transition notifies the counterparty |
 
 ### Offers & negotiations
 | Method | Path | Role | Body | Notes |
@@ -156,7 +188,23 @@ Exact objects as returned inside `data` / `data.items`. All timestamps are ISO-8
   "description": "Spacious villa with…", "location": "Whitefield, Bengaluru",
   "latitude": 12.9698, "longitude": 77.7499,
   "areaSqft": 2400, "bhk": 4, "askingPrice": 55000000,
-  "status": "LIVE", "plan": "BASIC",
+  "status": "LIVE", "plan": "BASIC", "viewCount": 214,
+
+  "city": "Bengaluru", "locality": "Whitefield", "pincode": "560066",
+  "carpetAreaSqft": 2100, "builtUpAreaSqft": 2300, "superBuiltUpAreaSqft": 2400,
+
+  "bathrooms": 4, "balconies": 2, "furnishing": "SEMI_FURNISHED", "facing": "NE",
+  "floorNumber": 3, "totalFloors": 4, "ageYears": 2, "parkingCovered": 2, "parkingOpen": 1,
+
+  "possessionStatus": "READY_TO_MOVE", "possessionDate": null,
+  "ownershipType": "FREEHOLD", "reraId": "PRM/KA/RERA/…",
+  "priceNegotiable": true, "maintenanceMonthly": 4500,
+
+  "floorPlanUrl": null, "videoUrl": null,
+  "amenities": ["Lift", "24x7 Security", "Clubhouse"],
+
+  "builderName": "Prestige Group", "projectName": "Prestige Lakeside Habitat",
+
   "verifiedAt": "2026-07-10T08:30:00.000Z",
   "createdAt": "2026-07-05T08:30:00.000Z", "updatedAt": "2026-07-10T08:30:00.000Z",
   "sellerName": "Rohan Mehta", "agentName": null,
@@ -166,6 +214,11 @@ Exact objects as returned inside `data` / `data.items`. All timestamps are ISO-8
 - `type`: `RESIDENTIAL | PLOT | COMMERCIAL` · `status`: `DRAFT | PENDING_VERIFICATION | LIVE | REJECTED | CLOSED` · `plan`: `BASIC | VERIFIED | ELITE`.
 - `bhk`, `latitude`, `longitude`, `verifiedAt`, `agentId` may be `null` (`bhk` is `null` for plots/commercial).
 - `photos[].url` is a public URL, directly usable in `<img src>`. Ordered by `order` ascending — treat `photos[0]` as the cover image.
+- **All of the fields between `viewCount` and `builderName`/`projectName` above are optional/nullable** — they were added for richer listing detail pages and may be `null` on older or minimally-filled-out listings. Don't assume they're always present.
+- `furnishing`: `UNFURNISHED | SEMI_FURNISHED | FULLY_FURNISHED` · `facing`: `N | S | E | W | NE | NW | SE | SW` · `possessionStatus`: `READY_TO_MOVE | UNDER_CONSTRUCTION` · `ownershipType`: `FREEHOLD | LEASEHOLD | POWER_OF_ATTORNEY | CO_OPERATIVE`.
+- `amenities` is a plain string array (free-form names, sourced from `GET /amenities` at listing-creation time — not a foreign key relation).
+- `builderName`/`projectName` are plain strings too, not a relation — the create/edit form drives them from a static curated list of Bangalore builders/projects, but any string is accepted (a builder not on the list is fine).
+- `viewCount` increments automatically whenever someone other than the listing's own seller/agent calls `GET /properties/:id` (deduped per-user per 30 minutes) — don't call it yourself to "mark as viewed."
 
 ### Offer
 ```json
@@ -215,18 +268,47 @@ Exact objects as returned inside `data` / `data.items`. All timestamps are ISO-8
 ```json
 { "id": "cmk…", "title": "Offer forwarded", "message": "Your offer on … was forwarded to the seller.", "isRead": false, "createdAt": "…" }
 ```
-`GET /notifications` additionally returns `unreadCount` alongside the pagination fields.
+`GET /notifications` additionally returns `unreadCount` alongside the pagination fields. Saved-search matches and site-visit status changes arrive here too — no separate feed to poll.
+
+### Saved search
+```json
+{
+  "id": "cmk…", "name": "3BHK Whitefield under 1.5Cr",
+  "filters": { "q": "whitefield", "type": "RESIDENTIAL", "minBhk": 3, "maxPrice": 15000000 },
+  "alertsEnabled": true, "lastAlertedAt": "2026-07-15T09:00:00.000Z",
+  "createdAt": "…"
+}
+```
+`filters` keys mirror `GET /properties` query params (`q, type, minPrice, maxPrice, minBhk, city`) — reuse the exact same object for both the saved search and the live search request.
+
+### Site visit
+```json
+{
+  "id": "cmk…", "propertyId": "cmk…", "buyerId": "cmk…", "agentId": "cmk…",
+  "status": "SCHEDULED", "requestedDate": "2026-07-20T10:00:00.000Z",
+  "scheduledDate": "2026-07-21T15:30:00.000Z", "buyerNote": "Prefer evening",
+  "feedback": null, "createdAt": "…", "updatedAt": "…",
+  "propertyTitle": "Whitefield 4BHK Villa", "propertyLocation": "Whitefield, Bengaluru"
+}
+```
+`status`: `REQUESTED | SCHEDULED | COMPLETED | CANCELLED`. `agentId` is `null` until the property has (or gets) an assigned agent.
 
 ## End-to-end flows the frontend will implement
 
 **Seller lists a property (with photos):**
 1. `POST /uploads` once per photo (`bucket: "property-media"`) → collect `url`s.
-2. `POST /listings` with `{ title, description, location, type, areaSqft, bhk, askingPrice, photoUrls: [url1, url2, …] }` (requires the seller's KYC to be `APPROVED`, else 403).
+2. `POST /listings` with `{ title, description, location, type, areaSqft, bhk, askingPrice, photoUrls: [url1, url2, …] }`, optionally adding any of the rich fields (`city`, `bathrooms`, `furnishing`, `amenities`, `builderName`, `projectName`, etc. — see the Property shape above) — requires the seller's KYC to be `APPROVED`, else 403.
 3. Listing starts `DRAFT` → backend-ops review it via `/queue` → `LIVE` (appears in `/properties`) or `REJECTED`.
 
 **Seller KYC:** `POST /uploads` (`bucket: "kyc-documents"`) for ID doc + selfie → `POST /kyc` with `{ idType, idDocUrl, selfieUrl }` → poll `GET /kyc` for `APPROVED`.
 
 **Buyer makes an offer:** browse `GET /properties` → `POST /offers { propertyId, amount, message? }` → track in `GET /offers` (watch `displayStatus`) → on `COUNTERED`, respond with `PATCH /offers/:id { action: "acceptCounter" | "rejectCounter" }` → acceptance creates a Deal visible in `GET /deals`.
+
+**Buyer shortlists a property:** `POST /shortlists { propertyId }` (heart icon on a card) → `GET /shortlists` for the "Saved properties" page → `DELETE /shortlists/:propertyId` to unsave. Safe to call POST repeatedly (idempotent).
+
+**Buyer saves a search + gets alerted:** after filtering `GET /properties`, `POST /saved-searches { name, filters }` with the same filter object used in the query → new matching `LIVE` listings show up as `Notification`s automatically (platform-scheduled scan); a buyer can also force a check with `POST /saved-searches/run-alerts`.
+
+**Buyer requests a site visit:** from a property detail page, `POST /site-visits { propertyId, requestedDate, buyerNote? }` → poll `GET /site-visits` for status changes (`REQUESTED → SCHEDULED → COMPLETED`, or `CANCELLED`) → `PATCH /site-visits/:id { action: "cancel" }` if the buyer needs to back out.
 
 ## The one platform rule that matters
 

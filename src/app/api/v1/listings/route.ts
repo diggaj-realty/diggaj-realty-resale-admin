@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { authenticate } from '@/lib/api/auth'
 import { ok, withApi, readJson, ApiError, parsePagination, paginatedEnvelope } from '@/lib/api/http'
 import { propertyDTO } from '@/lib/api/dto'
+import { buildRichPropertyData, type RichPropertyInput } from '@/lib/data/propertyFields'
 import type { Prisma } from '@prisma/client'
 
 /** Role-scoped listings — mirrors /dashboard/listings.
@@ -48,6 +49,7 @@ export const POST = withApi(async (req) => {
     bhk?: number | null
     askingPrice?: number
     photoUrls?: string[]
+    [key: string]: unknown
   }>(req)
 
   const title = String(body.title || '').trim()
@@ -65,8 +67,11 @@ export const POST = withApi(async (req) => {
   if (!areaSqft || areaSqft <= 0) throw new ApiError('areaSqft is required', 400)
   if (!askingPrice || askingPrice <= 0) throw new ApiError('askingPrice is required', 400)
 
+  const rich = buildRichPropertyData(body as unknown as RichPropertyInput)
+
   const property = await prisma.property.create({
     data: {
+      ...rich,
       sellerId: user.id,
       type,
       title,
@@ -76,7 +81,7 @@ export const POST = withApi(async (req) => {
       bhk,
       askingPrice,
       status: 'DRAFT',
-    },
+    } as Prisma.PropertyUncheckedCreateInput,
   })
 
   if (photoUrls.length > 0) {

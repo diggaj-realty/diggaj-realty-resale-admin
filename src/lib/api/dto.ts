@@ -54,6 +54,40 @@ export function propertyDTO(p: PropertyWithRelations) {
     askingPrice: p.askingPrice,
     status: p.status,
     plan: p.plan,
+    viewCount: p.viewCount,
+    // ── Structured location ──
+    city: p.city,
+    locality: p.locality,
+    pincode: p.pincode,
+    // ── Area breakdown ──
+    carpetAreaSqft: p.carpetAreaSqft,
+    builtUpAreaSqft: p.builtUpAreaSqft,
+    superBuiltUpAreaSqft: p.superBuiltUpAreaSqft,
+    // ── Configuration ──
+    bathrooms: p.bathrooms,
+    balconies: p.balconies,
+    furnishing: p.furnishing,
+    facing: p.facing,
+    floorNumber: p.floorNumber,
+    totalFloors: p.totalFloors,
+    ageYears: p.ageYears,
+    parkingCovered: p.parkingCovered,
+    parkingOpen: p.parkingOpen,
+    // ── Legal / commercial ──
+    possessionStatus: p.possessionStatus,
+    possessionDate: p.possessionDate ? p.possessionDate.toISOString() : null,
+    ownershipType: p.ownershipType,
+    reraId: p.reraId,
+    priceNegotiable: p.priceNegotiable,
+    maintenanceMonthly: p.maintenanceMonthly,
+    // ── Media & amenities ──
+    floorPlanUrl: p.floorPlanUrl,
+    videoUrl: p.videoUrl,
+    amenities: p.amenities,
+
+    // ── Builder / project ──
+    builderName: p.builderName,
+    projectName: p.projectName,
     verifiedAt: p.verifiedAt ? p.verifiedAt.toISOString() : null,
     createdAt: p.createdAt.toISOString(),
     updatedAt: p.updatedAt.toISOString(),

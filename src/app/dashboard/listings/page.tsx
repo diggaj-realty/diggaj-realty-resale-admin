@@ -109,6 +109,7 @@ export default async function ListingsPage({
                   <th className="px-5 py-3">Location</th>
                   <th className="px-5 py-3">Price</th>
                   <th className="px-5 py-3">Type</th>
+                  <th className="px-5 py-3">Views</th>
                   <th className="px-5 py-3">Status</th>
                 </tr>
               </thead>
@@ -123,6 +124,7 @@ export default async function ListingsPage({
                     <td className="px-5 py-3.5" style={{ color: 'var(--text-2)' }}>{p.location}</td>
                     <td className="px-5 py-3.5 font-semibold" style={{ color: 'var(--accent-700)' }}>{formatINR(p.askingPrice)}</td>
                     <td className="px-5 py-3.5" style={{ color: 'var(--text-2)' }}>{p.type}</td>
+                    <td className="px-5 py-3.5" style={{ color: 'var(--text-2)' }}>{p.viewCount}</td>
                     <td className="px-5 py-3.5"><StatusPill status={p.status} /></td>
                   </tr>
                 ))}

@@ -7,6 +7,8 @@ import { prisma } from '@/lib/prisma'
 import { notifyUsers } from '@/lib/notify'
 import { uploadFile } from '@/lib/upload'
 import { getAppConfig } from '@/lib/actions/appConfig'
+import { buildRichPropertyData, richInputFromFormData } from '@/lib/data/propertyFields'
+import type { Prisma } from '@prisma/client'
 
 export async function createListing(formData: FormData) {
   const session = await getServerSession(authOptions)
@@ -40,8 +42,11 @@ export async function createListing(formData: FormData) {
 
   const { listingApprovalRequired } = await getAppConfig()
 
+  const rich = buildRichPropertyData(richInputFromFormData(formData))
+
   const property = await prisma.property.create({
     data: {
+      ...rich,
       sellerId: session.user.id,
       agentId: isAgent ? session.user.id : null,
       type,
@@ -53,7 +58,7 @@ export async function createListing(formData: FormData) {
       askingPrice,
       status: listingApprovalRequired ? 'DRAFT' : 'LIVE',
       verifiedAt: listingApprovalRequired ? null : new Date(),
-    },
+    } as Prisma.PropertyUncheckedCreateInput,
   })
 
   if (photoFiles.length > 0) {
@@ -108,9 +113,20 @@ export async function updateListing(formData: FormData) {
   if (!areaSqft || areaSqft <= 0) throw new Error('Area (sqft) is required.')
   if (!askingPrice || askingPrice <= 0) throw new Error('Asking price is required.')
 
+  const rich = buildRichPropertyData(richInputFromFormData(formData))
+
   await prisma.property.update({
     where: { id: propertyId },
-    data: { title, description: description || null, location, type, areaSqft, bhk, askingPrice },
+    data: {
+      ...rich,
+      title,
+      description: description || null,
+      location,
+      type,
+      areaSqft,
+      bhk,
+      askingPrice,
+    } as Prisma.PropertyUncheckedUpdateInput,
   })
 
   const photoFiles = formData.getAll('photos').filter((f): f is File => f instanceof File && f.size > 0)

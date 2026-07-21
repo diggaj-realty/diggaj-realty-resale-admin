@@ -4,6 +4,7 @@ import { useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Building2 } from 'lucide-react'
 import { createListing } from '@/lib/actions/listings'
+import PropertyRichFields from './PropertyRichFields'
 
 const PROPERTY_TYPES = [
   { value: 'RESIDENTIAL', label: 'Residential' },
@@ -13,7 +14,7 @@ const PROPERTY_TYPES = [
 
 const inputStyle = { borderColor: 'var(--line)', color: 'var(--text-1)', background: 'var(--surface)' }
 
-export default function AddListingForm() {
+export default function AddListingForm({ amenityOptions }: { amenityOptions: string[] }) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
@@ -100,6 +101,8 @@ export default function AddListingForm() {
         <input type="file" name="photos" accept="image/*" multiple className="w-full rounded-lg border px-3 py-2 text-sm outline-none" style={{ borderColor: 'var(--line)', color: 'var(--text-2)' }} />
         <p className="mt-1 text-xs" style={{ color: 'var(--text-3)' }}>Optional, multiple images allowed, max 5MB each.</p>
       </div>
+
+      <PropertyRichFields amenityOptions={amenityOptions} />
 
       {error && (
         <p className="rounded-lg px-3 py-2 text-xs font-semibold" style={{ background: 'var(--red-50)', color: 'var(--red-700)' }}>

@@ -5,6 +5,8 @@ import { prisma } from '@/lib/prisma'
 import PageHeader from '@/components/dashboard/PageHeader'
 import DashboardEntrance from '@/components/dashboard/DashboardEntrance'
 import MakeOfferRow from '@/components/dashboard/MakeOfferRow'
+import SaveSearchButton from '@/components/dashboard/SaveSearchButton'
+import { normalizeFilters } from '@/lib/data/propertySearch'
 
 const SORTS = {
   newest: { createdAt: 'desc' as const },
@@ -31,6 +33,13 @@ export default async function BrowsePage({
     orderBy: SORTS[sort as keyof typeof SORTS] ?? SORTS.newest,
   })
 
+  const shortlistedIds = new Set(
+    (await prisma.shortlist.findMany({ where: { userId: session.user.id }, select: { propertyId: true } })).map((s) => s.propertyId),
+  )
+
+  const config = await prisma.appConfig.findFirst({ select: { siteVisitsEnabled: true } })
+  const siteVisitsEnabled = config?.siteVisitsEnabled ?? true
+
   return (
     <DashboardEntrance>
       <PageHeader title="Browse Properties" subtitle={`${properties.length} verified & live`} />
@@ -56,6 +65,7 @@ export default async function BrowsePage({
           <option value="price_low">Price: low to high</option>
         </select>
         <button type="submit" className="btn-accent rounded-lg px-3 py-2 font-semibold">Apply</button>
+        <SaveSearchButton filters={normalizeFilters({ q, type })} />
       </form>
 
       <div className="flex flex-col gap-2.5" data-animate="fade-up">
@@ -70,6 +80,8 @@ export default async function BrowsePage({
               location={p.location}
               askingPrice={p.askingPrice}
               detail={`${p.type}${p.bhk ? ` · ${p.bhk} BHK` : ''} · ${p.areaSqft} sqft`}
+              shortlisted={shortlistedIds.has(p.id)}
+              canRequestVisit={siteVisitsEnabled}
             />
           ))
         )}

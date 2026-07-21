@@ -10,6 +10,9 @@ import DashboardEntrance from '@/components/dashboard/DashboardEntrance'
 import StatusPill from '@/components/dashboard/StatusPill'
 import EditListingForm from '@/components/dashboard/EditListingForm'
 import AssignAgentForm from '@/components/dashboard/AssignAgentForm'
+import { getPropertyViewStats } from '@/lib/data/propertyViews'
+import { getActiveAmenityNames } from '@/lib/data/amenities'
+import { Eye } from 'lucide-react'
 
 export default async function ListingDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -40,6 +43,9 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
   const agents = canAssignAgent
     ? await prisma.user.findMany({ where: { role: 'AGENT', isActive: true }, select: { id: true, name: true }, orderBy: { name: 'asc' } })
     : []
+
+  const viewStats = await getPropertyViewStats(id)
+  const amenityOptions = canEdit ? await getActiveAmenityNames() : []
 
   return (
     <DashboardEntrance>
@@ -105,6 +111,7 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
           {canEdit && (
             <EditListingForm
               propertyId={property.id}
+              amenityOptions={amenityOptions}
               initial={{
                 title: property.title,
                 description: property.description,
@@ -113,12 +120,56 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
                 areaSqft: property.areaSqft,
                 bhk: property.bhk,
                 askingPrice: property.askingPrice,
+                city: property.city,
+                locality: property.locality,
+                pincode: property.pincode,
+                carpetAreaSqft: property.carpetAreaSqft,
+                builtUpAreaSqft: property.builtUpAreaSqft,
+                superBuiltUpAreaSqft: property.superBuiltUpAreaSqft,
+                bathrooms: property.bathrooms,
+                balconies: property.balconies,
+                furnishing: property.furnishing,
+                facing: property.facing,
+                floorNumber: property.floorNumber,
+                totalFloors: property.totalFloors,
+                ageYears: property.ageYears,
+                parkingCovered: property.parkingCovered,
+                parkingOpen: property.parkingOpen,
+                possessionStatus: property.possessionStatus,
+                possessionDate: property.possessionDate,
+                ownershipType: property.ownershipType,
+                reraId: property.reraId,
+                priceNegotiable: property.priceNegotiable,
+                maintenanceMonthly: property.maintenanceMonthly,
+                amenities: property.amenities,
+                builderName: property.builderName,
+                projectName: property.projectName,
               }}
             />
           )}
         </div>
 
         <div className="flex flex-col gap-6" data-animate="fade-up">
+          <div className="card p-6">
+            <h2 className="mb-4 flex items-center gap-1.5 text-sm font-semibold" style={{ color: 'var(--text-1)' }}>
+              <Eye size={15} /> Engagement
+            </h2>
+            <dl className="grid grid-cols-3 gap-3 text-center">
+              <div>
+                <dd className="text-lg font-bold" style={{ color: 'var(--text-1)' }}>{viewStats.total}</dd>
+                <dt className="text-xs" style={{ color: 'var(--text-3)' }}>Total views</dt>
+              </div>
+              <div>
+                <dd className="text-lg font-bold" style={{ color: 'var(--text-1)' }}>{viewStats.uniqueViewers}</dd>
+                <dt className="text-xs" style={{ color: 'var(--text-3)' }}>Unique</dt>
+              </div>
+              <div>
+                <dd className="text-lg font-bold" style={{ color: 'var(--text-1)' }}>{viewStats.last7Days}</dd>
+                <dt className="text-xs" style={{ color: 'var(--text-3)' }}>Last 7d</dt>
+              </div>
+            </dl>
+          </div>
+
           <div className="card p-6">
             <h2 className="mb-4 text-sm font-semibold" style={{ color: 'var(--text-1)' }}>Seller</h2>
             <dl className="flex flex-col gap-3 text-sm">

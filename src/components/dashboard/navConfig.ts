@@ -11,6 +11,10 @@ import {
   Users,
   HandCoins,
   Scale,
+  Heart,
+  BookmarkPlus,
+  CalendarCheck,
+  ListChecks,
 } from 'lucide-react'
 import type { UserRole } from '@/types'
 
@@ -42,6 +46,9 @@ export function getNavIcons(role: UserRole): NavIcon[] {
       return [
         home,
         { key: 'browse', label: 'Browse Properties', icon: Search, href: '/dashboard/browse' },
+        { key: 'shortlist', label: 'Shortlist', icon: Heart, href: '/dashboard/shortlist' },
+        { key: 'saved-searches', label: 'Saved Searches', icon: BookmarkPlus, href: '/dashboard/saved-searches' },
+        { key: 'site-visits', label: 'Site Visits', icon: CalendarCheck, href: '/dashboard/site-visits' },
         { key: 'offers', label: 'My Offers', icon: HandCoins, href: '/dashboard/offers' },
         { key: 'deals', label: 'My Deals', icon: Briefcase, href: '/dashboard/deals' },
         performance,
@@ -51,6 +58,7 @@ export function getNavIcons(role: UserRole): NavIcon[] {
       return [
         home,
         { key: 'listings', label: 'My Listings', icon: Building2, href: '/dashboard/listings' },
+        { key: 'site-visits', label: 'Site Visits', icon: CalendarCheck, href: '/dashboard/site-visits' },
         { key: 'offers', label: 'Offers Received', icon: HandCoins, href: '/dashboard/offers' },
         { key: 'deals', label: 'Assigned Deals', icon: Briefcase, href: '/dashboard/deals' },
         performance,
@@ -70,6 +78,7 @@ export function getNavIcons(role: UserRole): NavIcon[] {
         home,
         { key: 'users', label: 'All Users', icon: Users, href: '/dashboard/users' },
         { key: 'listings', label: 'All Listings', icon: Building2, href: '/dashboard/listings' },
+        { key: 'amenities', label: 'Amenities', icon: ListChecks, href: '/dashboard/amenities' },
         performance,
         settings,
       ]

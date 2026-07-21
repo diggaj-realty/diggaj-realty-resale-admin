@@ -42,6 +42,11 @@ model User {
   dealsAsSeller      Deal[]         @relation("SellerDeals")
   dealsAsAgent       Deal[]         @relation("AgentDeals")
   notifications      Notification[]
+  shortlists         Shortlist[]
+  savedSearches      SavedSearch[]
+  propertyViews      PropertyView[]
+  visitsAsBuyer      SiteVisit[]    @relation("BuyerVisits")
+  visitsAsAgent      SiteVisit[]    @relation("AgentVisits")
 
   @@map("users")
 }
@@ -81,13 +86,59 @@ model Property {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
+  // ── Structured location (for search/filtering) ──
+  city     String?
+  locality String?
+  pincode  String?
+
+  // ── Area breakdown (RERA mandates carpet area) ──
+  carpetAreaSqft       Float?
+  builtUpAreaSqft      Float?
+  superBuiltUpAreaSqft Float?
+
+  // ── Configuration ──
+  bathrooms       Int?
+  balconies       Int?
+  furnishing      String? // UNFURNISHED | SEMI_FURNISHED | FULLY_FURNISHED
+  facing          String? // N | S | E | W | NE | NW | SE | SW
+  floorNumber     Int?
+  totalFloors     Int?
+  ageYears        Int? // age of property in years
+  parkingCovered  Int?    @default(0)
+  parkingOpen     Int?    @default(0)
+
+  // ── Legal / commercial ──
+  possessionStatus   String? // READY_TO_MOVE | UNDER_CONSTRUCTION
+  possessionDate     DateTime?
+  ownershipType      String? // FREEHOLD | LEASEHOLD | POWER_OF_ATTORNEY | CO_OPERATIVE
+  reraId             String?
+  priceNegotiable    Boolean   @default(false)
+  maintenanceMonthly Float?
+
+  // ── Media & amenities ──
+  floorPlanUrl String?
+  videoUrl     String?
+  amenities    String[]  @default([])
+
+  // ── Builder / project (Bangalore master list) ──
+  builderName String?
+  projectName String?
+
+  // ── Engagement analytics ──
+  viewCount Int @default(0)
+
   seller User  @relation("SellerProperties", fields: [sellerId], references: [id])
   agent  User? @relation("AgentProperties", fields: [agentId], references: [id])
 
-  photos PropertyPhoto[]
-  offers Offer[]
-  deal   Deal?
+  photos      PropertyPhoto[]
+  offers      Offer[]
+  deal        Deal?
+  shortlists  Shortlist[]
+  views       PropertyView[]
+  siteVisits  SiteVisit[]
 
+  @@index([city])
+  @@index([status])
   @@map("properties")
 }
 
@@ -185,5 +236,108 @@ model AppConfig {
   supportEmail            String?
   updatedAt               DateTime @updatedAt
 
+  // ── Listing / plan config ──
+  maxPhotosPerListing Int   @default(15)
+  verifiedPlanPrice   Float @default(0)
+  elitePlanPrice      Float @default(0)
+
+  // ── Feature toggles ──
+  siteVisitsEnabled   Boolean @default(true)
+  savedSearchAlerts   Boolean @default(true)
+
   @@map("app_config")
+}
+
+// ── Buyer engagement ──
+
+model Shortlist {
+  id         String   @id @default(cuid())
+  userId     String
+  propertyId String
+  createdAt  DateTime @default(now())
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, propertyId])
+  @@index([userId])
+  @@map("shortlists")
+}
+
+model SavedSearch {
+  id            String   @id @default(cuid())
+  userId        String
+  name          String?
+  filters       Json // { q?, type?, city?, minPrice?, maxPrice?, minBhk?, ... }
+  alertsEnabled Boolean  @default(true)
+  lastAlertedAt DateTime?
+  createdAt     DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("saved_searches")
+}
+
+model PropertyView {
+  id         String   @id @default(cuid())
+  userId     String?
+  propertyId String
+  createdAt  DateTime @default(now())
+
+  user     User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([propertyId])
+  @@map("property_views")
+}
+
+// ── Site visits / agent CRM ──
+
+model SiteVisit {
+  id            String    @id @default(cuid())
+  propertyId    String
+  buyerId       String
+  agentId       String?
+  status        String    @default("REQUESTED") // REQUESTED | SCHEDULED | COMPLETED | CANCELLED
+  requestedDate DateTime
+  scheduledDate DateTime?
+  buyerNote     String?
+  feedback      String? // post-visit notes by agent
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  buyer    User     @relation("BuyerVisits", fields: [buyerId], references: [id], onDelete: Cascade)
+  agent    User?    @relation("AgentVisits", fields: [agentId], references: [id])
+
+  @@index([buyerId])
+  @@index([agentId])
+  @@index([status])
+  @@map("site_visits")
+}
+
+// ── Admin masters ──
+
+model Amenity {
+  id       String  @id @default(cuid())
+  name     String  @unique
+  category String? // e.g. "Building", "Security", "Recreation"
+  active   Boolean @default(true)
+
+  @@map("amenities")
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorId   String?
+  action    String
+  entity    String?
+  entityId  String?
+  meta      Json?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@map("audit_logs")
 }

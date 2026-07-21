@@ -4,6 +4,8 @@ import { useState, useTransition } from 'react'
 import { Building2, HandCoins } from 'lucide-react'
 import { makeOffer } from '@/lib/actions/offers'
 import { formatINR } from '@/lib/format'
+import ShortlistButton from './ShortlistButton'
+import RequestVisitButton from './RequestVisitButton'
 
 export default function MakeOfferRow({
   propertyId,
@@ -11,12 +13,16 @@ export default function MakeOfferRow({
   location,
   askingPrice,
   detail,
+  shortlisted,
+  canRequestVisit,
 }: {
   propertyId: string
   title: string
   location: string
   askingPrice: number
   detail?: string
+  shortlisted?: boolean
+  canRequestVisit?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const [amount, setAmount] = useState(String(askingPrice))
@@ -39,6 +45,7 @@ export default function MakeOfferRow({
         <span className="whitespace-nowrap text-sm font-bold" style={{ color: 'var(--accent-700)' }}>
           {formatINR(askingPrice)}
         </span>
+        <ShortlistButton propertyId={propertyId} initialShortlisted={!!shortlisted} />
         {sent ? (
           <span className="whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-semibold" style={{ background: 'var(--green-50)', color: 'var(--green-700)' }}>
             Offer sent
@@ -91,6 +98,12 @@ export default function MakeOfferRow({
             {pending ? 'Sending...' : 'Submit Offer'}
           </button>
         </form>
+      )}
+
+      {canRequestVisit && (
+        <div className="mt-3 border-t pt-3" style={{ borderColor: 'var(--line)' }}>
+          <RequestVisitButton propertyId={propertyId} />
+        </div>
       )}
     </div>
   )

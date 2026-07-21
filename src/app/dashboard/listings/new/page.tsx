@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import PageHeader from '@/components/dashboard/PageHeader'
 import DashboardEntrance from '@/components/dashboard/DashboardEntrance'
 import AddListingForm from '@/components/dashboard/AddListingForm'
+import { getActiveAmenityNames } from '@/lib/data/amenities'
 
 export default async function NewListingPage() {
   const session = await getServerSession(authOptions)
@@ -16,10 +17,12 @@ export default async function NewListingPage() {
     if (kyc?.status !== 'APPROVED') redirect('/dashboard/kyc')
   }
 
+  const amenityOptions = await getActiveAmenityNames()
+
   return (
     <DashboardEntrance>
       <PageHeader title="Add Listing" subtitle="Publish a new property for backend verification." />
-      <AddListingForm />
+      <AddListingForm amenityOptions={amenityOptions} />
     </DashboardEntrance>
   )
 }

@@ -4,6 +4,7 @@ import { useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Building2 } from 'lucide-react'
 import { updateListing } from '@/lib/actions/listings'
+import PropertyRichFields, { type PropertyRichDefaults } from './PropertyRichFields'
 
 const PROPERTY_TYPES = [
   { value: 'RESIDENTIAL', label: 'Residential' },
@@ -16,6 +17,7 @@ const inputStyle = { borderColor: 'var(--line)', color: 'var(--text-1)', backgro
 export default function EditListingForm({
   propertyId,
   initial,
+  amenityOptions,
 }: {
   propertyId: string
   initial: {
@@ -26,7 +28,8 @@ export default function EditListingForm({
     areaSqft: number
     bhk: number | null
     askingPrice: number
-  }
+  } & PropertyRichDefaults
+  amenityOptions: string[]
 }) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
@@ -118,6 +121,8 @@ export default function EditListingForm({
         <input type="file" name="photos" accept="image/*" multiple className="w-full rounded-lg border px-3 py-2 text-sm outline-none" style={{ borderColor: 'var(--line)', color: 'var(--text-2)' }} />
         <p className="mt-1 text-xs" style={{ color: 'var(--text-3)' }}>Optional, appended to existing photos, max 5MB each.</p>
       </div>
+
+      <PropertyRichFields amenityOptions={amenityOptions} defaults={initial} />
 
       {error && (
         <p className="rounded-lg px-3 py-2 text-xs font-semibold" style={{ background: 'var(--red-50)', color: 'var(--red-700)' }}>
