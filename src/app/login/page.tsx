@@ -35,24 +35,26 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center px-4">
+    <main className="flex min-h-screen items-center justify-center px-4" style={{ background: 'var(--cream)' }}>
       <div className="w-full max-w-sm">
         <div className="mb-8 flex flex-col items-center gap-3">
           <div
-            className="flex h-12 w-12 items-center justify-center rounded-2xl text-white"
-            style={{ background: 'linear-gradient(135deg, var(--accent-500), var(--accent-700))' }}
+            className="flex h-12 w-12 items-center justify-center rounded-full text-white"
+            style={{ background: 'var(--ink-800)' }}
           >
-            <Building2 size={22} />
+            <Building2 size={20} />
           </div>
           <div className="text-center">
-            <h1 className="text-lg font-bold" style={{ color: 'var(--text-1)' }}>Resale Dashboard</h1>
-            <p className="text-sm" style={{ color: 'var(--text-3)' }}>Sign in to your portal</p>
+            <h1 className="text-2xl font-medium tracking-[-0.02em]" style={{ color: 'var(--text-1)' }}>
+              Diggaj Realty
+            </h1>
+            <p className="mt-1 text-sm" style={{ color: 'var(--text-2)' }}>Sign in to your portal</p>
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="card p-6">
+        <form onSubmit={handleSubmit} className="card p-7" style={{ borderRadius: 28 }}>
           <div className="mb-4">
-            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-3)' }}>
+            <label className="mb-1.5 block text-xs font-medium" style={{ color: 'var(--text-2)' }}>
               Email
             </label>
             <input
@@ -61,12 +63,12 @@ export default function LoginPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@demo.test"
-              className="w-full rounded-lg border px-3 py-2.5 text-sm outline-none transition"
-              style={{ borderColor: 'var(--line)', color: 'var(--text-1)' }}
+              className="w-full rounded-full border px-4 py-2.5 text-sm outline-none transition-colors focus:border-black/30"
+              style={{ borderColor: 'var(--line)', color: 'var(--text-1)', background: 'var(--surface-2)' }}
             />
           </div>
           <div className="mb-5">
-            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-3)' }}>
+            <label className="mb-1.5 block text-xs font-medium" style={{ color: 'var(--text-2)' }}>
               Password
             </label>
             <input
@@ -74,13 +76,13 @@ export default function LoginPage() {
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-lg border px-3 py-2.5 text-sm outline-none transition"
-              style={{ borderColor: 'var(--line)', color: 'var(--text-1)' }}
+              className="w-full rounded-full border px-4 py-2.5 text-sm outline-none transition-colors focus:border-black/30"
+              style={{ borderColor: 'var(--line)', color: 'var(--text-1)', background: 'var(--surface-2)' }}
             />
           </div>
 
           {error && (
-            <p className="mb-4 rounded-lg px-3 py-2 text-sm" style={{ background: 'var(--red-50)', color: 'var(--red-700)' }}>
+            <p className="mb-4 rounded-2xl px-4 py-2.5 text-sm" style={{ background: 'var(--red-50)', color: 'var(--red-700)' }}>
               {error}
             </p>
           )}
@@ -88,16 +90,16 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="btn-accent flex w-full items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold disabled:opacity-70"
+            className="btn-accent flex w-full items-center justify-center gap-2 py-3 text-sm font-medium disabled:opacity-70"
           >
             {loading && <Loader2 size={16} className="animate-spin" />}
             Sign in
           </button>
         </form>
 
-        <div className="mt-6 rounded-xl border px-4 py-3 text-xs" style={{ borderColor: 'var(--line)', color: 'var(--text-3)' }}>
-          <p className="mb-2 font-semibold" style={{ color: 'var(--text-2)' }}>Demo accounts (password: password123)</p>
-          <ul className="space-y-1">
+        <div className="mt-6 rounded-[20px] border px-5 py-4 text-xs" style={{ borderColor: 'rgba(28,26,22,0.12)', color: 'var(--text-2)' }}>
+          <p className="mb-2 font-semibold" style={{ color: 'var(--text-1)' }}>Demo accounts (password: password123)</p>
+          <ul className="space-y-1.5">
             {DEMO_ACCOUNTS.map((a) => (
               <li key={a.email} className="flex justify-between">
                 <span>{a.role}</span>

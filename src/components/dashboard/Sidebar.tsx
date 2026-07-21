@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { signOut } from 'next-auth/react'
-import { Building2, LogOut, PanelLeftClose, PanelLeftOpen, Sparkles } from 'lucide-react'
+import { Building2, LogOut, PanelLeftClose, PanelLeftOpen, ArrowUpRight } from 'lucide-react'
 import { getNavIcons } from './navConfig'
 import type { UserRole } from '@/types'
 
@@ -30,99 +30,104 @@ export default function Sidebar({
 
   return (
     <aside
-      className="fixed inset-y-0 left-0 z-30 flex flex-col overflow-hidden py-5 transition-[width] duration-200"
-      style={{
-        width: collapsed ? 84 : 232,
-        background: 'linear-gradient(180deg, var(--ink-800), var(--ink-900))',
-      }}
+      className="fixed inset-y-0 left-0 z-30 p-3 transition-[width] duration-300"
+      style={{ width: collapsed ? 88 : 240 }}
     >
-      <div className="mb-6 flex items-center justify-between px-4">
-        <Link href="/dashboard" className="flex min-w-0 items-center gap-2.5">
-          <span
-            className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl text-white"
-            style={{ background: 'linear-gradient(135deg, var(--accent-500), var(--accent-700))' }}
-          >
-            <Building2 size={17} />
-          </span>
-          {!collapsed && <span className="truncate text-sm font-extrabold text-white">Diggaj Realty</span>}
-        </Link>
-        {!collapsed && (
+      <div
+        className="flex h-full flex-col overflow-hidden rounded-[28px] py-5"
+        style={{ background: 'var(--ink-800)' }}
+      >
+        <div className="mb-6 flex items-center justify-between px-4">
+          <Link href="/dashboard" className="flex min-w-0 items-center gap-2.5">
+            <span
+              className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full"
+              style={{ background: 'var(--cream)', color: 'var(--ink-800)' }}
+            >
+              <Building2 size={16} />
+            </span>
+            {!collapsed && (
+              <span className="truncate text-sm font-semibold tracking-tight text-white">
+                Diggaj Realty
+              </span>
+            )}
+          </Link>
+          {!collapsed && (
+            <button
+              type="button"
+              onClick={onToggle}
+              className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-white/50 transition-colors hover:bg-white/10 hover:text-white"
+            >
+              <PanelLeftClose size={15} />
+            </button>
+          )}
+        </div>
+
+        {collapsed && (
           <button
             type="button"
             onClick={onToggle}
-            className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg text-white/50 transition-colors hover:bg-white/10 hover:text-white"
+            className="mx-auto mb-4 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-white/50 transition-colors hover:bg-white/10 hover:text-white"
           >
-            <PanelLeftClose size={15} />
+            <PanelLeftOpen size={15} />
           </button>
         )}
-      </div>
 
-      {collapsed && (
-        <button
-          type="button"
-          onClick={onToggle}
-          className="mx-auto mb-4 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-white/50 transition-colors hover:bg-white/10 hover:text-white"
-        >
-          <PanelLeftOpen size={15} />
-        </button>
-      )}
+        <nav className="flex flex-1 flex-col gap-1.5 overflow-y-auto px-3">
+          {navIcons.map((item) => {
+            const isActive = item.href === '/dashboard' ? pathname === '/dashboard' : pathname.startsWith(item.href)
+            const Icon = item.icon
+            return (
+              <Link
+                key={item.key}
+                href={item.href}
+                aria-current={isActive ? 'page' : undefined}
+                title={collapsed ? item.label : undefined}
+                className="flex h-11 items-center gap-3 rounded-full px-4 text-sm font-medium transition-all duration-300"
+                style={{
+                  background: isActive ? 'var(--cream)' : 'transparent',
+                  color: isActive ? 'var(--ink-800)' : 'rgba(255,255,255,0.55)',
+                  justifyContent: collapsed ? 'center' : 'flex-start',
+                }}
+              >
+                <Icon size={17} className="flex-shrink-0" />
+                {!collapsed && <span className="truncate">{item.label}</span>}
+              </Link>
+            )
+          })}
+        </nav>
 
-      <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-3">
-        {navIcons.map((item) => {
-          const isActive = item.href === '/dashboard' ? pathname === '/dashboard' : pathname.startsWith(item.href)
-          const Icon = item.icon
-          return (
-            <Link
-              key={item.key}
-              href={item.href}
-              aria-current={isActive ? 'page' : undefined}
-              title={collapsed ? item.label : undefined}
-              className="flex h-11 items-center gap-3 rounded-xl px-3 text-sm font-semibold transition-colors"
-              style={{
-                background: isActive ? 'var(--accent-500)' : 'transparent',
-                color: isActive ? '#fff' : 'rgba(255,255,255,0.6)',
-                justifyContent: collapsed ? 'center' : 'flex-start',
-              }}
+        <div className="flex flex-col gap-2 px-3 pt-3">
+          {!collapsed && (
+            <div
+              className="relative overflow-hidden rounded-[20px] p-4"
+              style={{ background: 'var(--cream)', color: 'var(--ink-800)' }}
             >
-              <Icon size={18} className="flex-shrink-0" />
-              {!collapsed && <span className="truncate">{item.label}</span>}
-            </Link>
-          )
-        })}
-      </nav>
+              <p className="text-xs font-semibold">{promo.title}</p>
+              <p className="mt-1 text-[11px] leading-relaxed" style={{ color: 'var(--text-2)' }}>
+                {promo.body}
+              </p>
+              <Link
+                href={promo.href}
+                className="mt-3 inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 text-[11px] font-semibold text-white transition-transform duration-200 hover:-translate-y-0.5"
+                style={{ background: 'var(--ink-800)' }}
+              >
+                {promo.cta}
+                <ArrowUpRight size={12} />
+              </Link>
+            </div>
+          )}
 
-      <div className="flex flex-col gap-2 px-3 pt-3">
-        {!collapsed && (
-          <div
-            className="relative overflow-hidden rounded-2xl p-4 text-white"
-            style={{ background: 'linear-gradient(145deg, var(--accent-500), var(--accent-700))' }}
+          <button
+            type="button"
+            onClick={() => signOut({ callbackUrl: '/login' })}
+            className="flex h-11 items-center gap-3 rounded-full px-4 text-sm font-medium transition-colors hover:bg-white/10"
+            style={{ color: 'rgba(255,255,255,0.55)', justifyContent: collapsed ? 'center' : 'flex-start' }}
+            title={collapsed ? 'Log out' : undefined}
           >
-            <div className="absolute -right-5 -top-5 h-16 w-16 rounded-full bg-white/10" />
-            <span className="relative mb-2 inline-flex h-8 w-8 items-center justify-center rounded-lg bg-white/15">
-              <Sparkles size={15} />
-            </span>
-            <p className="relative text-xs font-bold">{promo.title}</p>
-            <p className="relative mt-1 text-[11px] leading-relaxed text-white/80">{promo.body}</p>
-            <Link
-              href={promo.href}
-              className="relative mt-3 block rounded-lg bg-white px-3 py-1.5 text-center text-[11px] font-bold"
-              style={{ color: 'var(--accent-700)' }}
-            >
-              {promo.cta}
-            </Link>
-          </div>
-        )}
-
-        <button
-          type="button"
-          onClick={() => signOut({ callbackUrl: '/login' })}
-          className="flex h-11 items-center gap-3 rounded-xl px-3 text-sm font-semibold transition-colors hover:bg-white/10"
-          style={{ color: 'rgba(255,255,255,0.55)', justifyContent: collapsed ? 'center' : 'flex-start' }}
-          title={collapsed ? 'Log out' : undefined}
-        >
-          <LogOut size={18} className="flex-shrink-0" />
-          {!collapsed && <span>Log out</span>}
-        </button>
+            <LogOut size={17} className="flex-shrink-0" />
+            {!collapsed && <span>Log out</span>}
+          </button>
+        </div>
       </div>
     </aside>
   )

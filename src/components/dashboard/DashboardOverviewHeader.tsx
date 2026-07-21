@@ -16,7 +16,7 @@ export default function DashboardOverviewHeader({
 
   return (
     <div className="mb-6 flex flex-wrap items-center justify-between gap-4" data-animate="fade-up">
-      <h1 className="text-xl font-extrabold tracking-tight" style={{ color: 'var(--text-1)' }}>Dashboard Overview</h1>
+      <h1 className="text-2xl font-medium tracking-[-0.02em]" style={{ color: 'var(--text-1)' }}>Dashboard Overview</h1>
 
       <div className="flex flex-wrap items-center gap-3">
         <span

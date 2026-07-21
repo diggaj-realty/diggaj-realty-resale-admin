@@ -1,102 +1,122 @@
 @import "tailwindcss";
 
 :root {
-  /* Page surface */
-  --background: #F5F6FA;
-  --foreground: #14161F;
+  /* Page surface — warm cream, matching the marketing site */
+  --background: #f0ebe1;
+  --foreground: #1c1a16;
 
-  /* Ink scale — dark icon sidebar */
-  --ink-900: #12141C;
-  --ink-800: #191C26;
-  --ink-700: #232733;
-  --ink-600: #2E3340;
+  /* Ink scale — warm near-black panels (frontend "panel" #171717) */
+  --ink-900: #141311;
+  --ink-800: #171717;
+  --ink-700: #232220;
+  --ink-600: #2e2c29;
 
   /* Text */
-  --text-1: #14161F;
-  --text-2: #5B6072;
-  --text-3: #9297A6;
+  --text-1: #1c1a16;
+  --text-2: #6f6f6f;
+  --text-3: #98938a;
 
   /* Surfaces */
-  --surface: #FFFFFF;
-  --surface-2: #F8F9FC;
-  --surface-3: #EFF1F6;
-  --line: rgba(20, 22, 31, 0.07);
+  --surface: #ffffff;
+  --surface-2: #faf8f3;
+  --surface-3: #f1ede4;
+  --cream: #f4efe5;
+  --line: rgba(28, 26, 22, 0.08);
 
-  /* Signature accent — violet (matches reference "Upgrade to Pro" swatch) */
-  --accent-50: #F1EEFE;
-  --accent-100: #E4DEFD;
-  --accent-300: #B7A6F9;
-  --accent-500: #7C5CFC;
-  --accent-600: #6944F0;
-  --accent-700: #5533D6;
+  /* Signature accent — warm brass (no lime) */
+  --accent-50: #f8f1e2;
+  --accent-100: #f0e2c4;
+  --accent-300: #dcba7c;
+  --accent-500: #b98a44;
+  --accent-600: #a1742f;
+  --accent-700: #855d22;
 
-  /* Functional */
-  --blue-50: #EAF1FE; --blue-500: #3B82F6; --blue-700: #1D4ED8;
-  --green-50: #E9FAF1; --green-500: #22C55E; --green-700: #15803D;
-  --amber-50: #FEF6E7; --amber-500: #F59E0B; --amber-700: #B45309;
-  --red-50: #FDECEC; --red-500: #EF4444; --red-700: #B91C1C;
-  --purple-50: #F4EEFE; --purple-500: #A855F7; --purple-700: #7E22CE;
+  /* Functional — slightly warmed */
+  --blue-50: #eaf1fe; --blue-500: #3b82f6; --blue-700: #1d4ed8;
+  --green-50: #eaf6ec; --green-500: #3f9d5c; --green-700: #2c7345;
+  --amber-50: #fdf4e3; --amber-500: #e0a03c; --amber-700: #a3671a;
+  --red-50: #fbeeea; --red-500: #d96c50; --red-700: #a4432c;
+  --purple-50: #f2eff9; --purple-500: #8b7ec8; --purple-700: #5f519e;
 
-  /* Elevation */
-  --elev-1: 0 1px 2px rgba(20,22,31,0.04), 0 1px 1px rgba(20,22,31,0.03);
-  --elev-2: 0 4px 12px rgba(20,22,31,0.06), 0 1px 2px rgba(20,22,31,0.04);
-  --elev-3: 0 12px 28px rgba(20,22,31,0.10), 0 2px 6px rgba(20,22,31,0.05);
-  --elev-accent: 0 10px 24px rgba(124,92,252,0.28);
+  /* Elevation — soft, warm-tinted */
+  --elev-1: 0 1px 2px rgba(28, 26, 22, 0.04), 0 1px 3px rgba(28, 26, 22, 0.03);
+  --elev-2: 0 2px 6px rgba(28, 26, 22, 0.05), 0 8px 24px rgba(28, 26, 22, 0.04);
+  --elev-3: 0 4px 12px rgba(28, 26, 22, 0.08), 0 16px 40px rgba(28, 26, 22, 0.08);
+  --elev-accent: 0 10px 24px rgba(23, 23, 23, 0.22);
 
-  --radius-md: 10px;
-  --radius-lg: 14px;
-  --radius-xl: 20px;
-  --radius-full: 9999px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-xl: 24px;
+  --radius-full: 999px;
 
-  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-out: cubic-bezier(0.25, 0.1, 0.25, 1);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-jakarta);
+  --font-sans: var(--font-inter);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-jakarta), -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: var(--font-inter), Helvetica, Arial, sans-serif;
+  letter-spacing: -0.01em;
+  text-rendering: optimizeLegibility;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    animation-duration: 0.001ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.001ms !important;
-  }
+::selection {
+  background: var(--accent-300);
+  color: var(--foreground);
 }
 
-/* ── Shared surfaces ───────────────────────────── */
+/* Button physics — subtle lift on hover, settle on press */
+button {
+  cursor: pointer;
+  transition: transform 0.2s ease, opacity 0.2s ease, background-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+button:hover {
+  transform: translateY(-1px);
+}
+button:active {
+  transform: translateY(0) scale(0.98);
+}
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--accent-500);
+  outline-offset: 2px;
+}
 
+/* Cards */
 .card {
   background: var(--surface);
   border-radius: var(--radius-xl);
-  box-shadow: var(--elev-2);
+  box-shadow: var(--elev-1);
   border: 1px solid var(--line);
 }
-
 .card-hover {
-  transition: transform 250ms var(--ease-out), box-shadow 250ms var(--ease-out);
+  transition: transform 0.35s var(--ease-out), box-shadow 0.35s var(--ease-out);
 }
 .card-hover:hover {
   transform: translateY(-3px);
   box-shadow: var(--elev-3);
 }
 
+/* Primary action — ink pill, like the marketing site's dark buttons */
 .btn-accent {
-  background: linear-gradient(135deg, var(--accent-500), var(--accent-700));
+  background: var(--ink-800);
   color: #fff;
+  border-radius: var(--radius-full);
   box-shadow: var(--elev-accent);
-  transition: transform 200ms var(--ease-out), box-shadow 200ms var(--ease-out);
+  transition: transform 0.2s var(--ease-out), box-shadow 0.2s var(--ease-out),
+    background-color 0.2s ease;
 }
 .btn-accent:hover {
   transform: translateY(-2px);
-  box-shadow: 0 14px 30px rgba(124,92,252,0.36);
+  background: var(--ink-700);
+  box-shadow: 0 14px 30px rgba(23, 23, 23, 0.3);
 }
 
 .scrollbar-thin::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -110,4 +130,30 @@ body {
   background: linear-gradient(90deg, var(--surface-3) 25%, var(--surface-2) 37%, var(--surface-3) 63%);
   background-size: 400% 100%;
   animation: dg-shimmer 1.4s ease infinite;
+}
+
+/* Ambient idle motion, borrowed from the marketing site */
+@keyframes bob {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-6px); }
+}
+.bob { animation: bob 5s ease-in-out infinite; }
+
+@keyframes drift {
+  0%, 100% { transform: translateY(0) rotate(var(--drift-rot, 0deg)); }
+  50%      { transform: translateY(-8px) rotate(var(--drift-rot, 0deg)); }
+}
+.drift { animation: drift 7s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .bob,
+  .drift,
+  .skeleton {
+    animation: none;
+  }
+  button,
+  .card-hover,
+  .btn-accent {
+    transition: none;
+  }
 }

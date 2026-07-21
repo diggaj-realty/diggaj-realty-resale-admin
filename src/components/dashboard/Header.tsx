@@ -8,11 +8,11 @@ import { ROLE_LABELS } from './navConfig'
 import type { UserRole } from '@/types'
 
 const ROLE_AVATAR_BG: Record<UserRole, string> = {
-  SELLER: 'linear-gradient(135deg, #7C5CFC, #5533D6)',
-  BUYER: 'linear-gradient(135deg, #3B82F6, #1D4ED8)',
-  AGENT: 'linear-gradient(135deg, #22C55E, #15803D)',
-  BACKEND: 'linear-gradient(135deg, #A855F7, #7E22CE)',
-  ADMIN: 'linear-gradient(135deg, #F59E0B, #B45309)',
+  SELLER: 'linear-gradient(135deg, #b98a44, #855d22)',
+  BUYER: 'linear-gradient(135deg, #2e2c29, #171717)',
+  AGENT: 'linear-gradient(135deg, #3f9d5c, #2c7345)',
+  BACKEND: 'linear-gradient(135deg, #8b7ec8, #5f519e)',
+  ADMIN: 'linear-gradient(135deg, #d96c50, #a4432c)',
 }
 
 function initials(name: string) {
@@ -44,12 +44,12 @@ export default function Header({
     <header
       className="sticky top-0 z-20 flex h-[76px] items-center justify-between gap-6 px-8"
       style={{
-        background: 'rgba(255,255,255,0.82)',
-        backdropFilter: 'blur(14px) saturate(180%)',
+        background: 'rgba(240,235,225,0.85)',
+        backdropFilter: 'blur(14px) saturate(160%)',
         borderBottom: '1px solid var(--line)',
       }}
     >
-      <div className="flex max-w-md flex-1 items-center gap-2 rounded-full border px-4 py-2.5" style={{ borderColor: 'var(--line)', background: 'var(--surface-2)' }}>
+      <div className="flex max-w-md flex-1 items-center gap-2 rounded-full border px-4 py-2.5 shadow-sm" style={{ borderColor: 'var(--line)', background: 'var(--surface)' }}>
         <Search size={16} style={{ color: 'var(--text-3)' }} />
         <input
           placeholder="Type to search..."
@@ -61,7 +61,7 @@ export default function Header({
       <div className="flex items-center gap-2">
         <Link
           href="/dashboard/settings"
-          className="flex h-10 w-10 items-center justify-center rounded-xl transition-colors hover:bg-black/[0.03]"
+          className="flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-black/[0.05]"
           style={{ color: 'var(--text-2)' }}
         >
           <Settings size={18} />
@@ -69,14 +69,14 @@ export default function Header({
 
         <button
           type="button"
-          className="relative flex h-10 w-10 items-center justify-center rounded-xl transition-colors hover:bg-black/[0.03]"
+          className="relative flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-black/[0.05]"
           style={{ color: 'var(--text-2)' }}
         >
           <Bell size={18} />
           {unreadCount > 0 && (
             <span
               className="absolute right-2 top-2 h-2 w-2 rounded-full"
-              style={{ background: 'var(--red-500)', boxShadow: '0 0 0 2px #fff' }}
+              style={{ background: 'var(--red-500)', boxShadow: '0 0 0 2px var(--background)' }}
             />
           )}
         </button>
@@ -85,7 +85,7 @@ export default function Header({
           <button
             type="button"
             onClick={() => setMenuOpen((v) => !v)}
-            className="flex items-center gap-2 rounded-xl py-1 pl-1 pr-2 transition-colors hover:bg-black/[0.03]"
+            className="flex items-center gap-2 rounded-full py-1 pl-1 pr-2.5 transition-colors hover:bg-black/[0.05]"
           >
             {avatarUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
@@ -111,7 +111,7 @@ export default function Header({
 
           {menuOpen && (
             <div
-              className="absolute right-0 top-[calc(100%+8px)] w-56 rounded-xl border p-2 shadow-lg"
+              className="absolute right-0 top-[calc(100%+8px)] w-56 rounded-[20px] border p-2 shadow-lg"
               style={{ background: 'var(--surface)', borderColor: 'var(--line)' }}
             >
               <div className="border-b px-2 pb-2" style={{ borderColor: 'var(--line)' }}>

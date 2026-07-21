@@ -2,7 +2,7 @@
 
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts'
 
-const COLORS = ['#7C5CFC', '#3B82F6', '#22C55E', '#F59E0B', '#EF4444', '#A855F7']
+const COLORS = ['#171717', '#b98a44', '#3f9d5c', '#d96c50', '#8b7ec8', '#98938a']
 
 export default function StatusBreakdownChart({ items }: { items: { status: string }[] }) {
   const counts = new Map<string, number>()
@@ -31,7 +31,7 @@ export default function StatusBreakdownChart({ items }: { items: { status: strin
           </PieChart>
         </ResponsiveContainer>
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-xl font-extrabold" style={{ color: 'var(--text-1)' }}>{total}</span>
+          <span className="text-xl font-semibold tracking-[-0.02em]" style={{ color: 'var(--text-1)' }}>{total}</span>
           <span className="text-[10px] font-medium" style={{ color: 'var(--text-3)' }}>Total</span>
         </div>
       </div>

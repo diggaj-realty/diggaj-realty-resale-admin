@@ -11,8 +11,8 @@ export default function DashboardChrome({ role, children }: { role: UserRole; ch
     <div className="min-h-screen" style={{ background: 'var(--background)' }}>
       <Sidebar role={role} collapsed={collapsed} onToggle={() => setCollapsed((v) => !v)} />
       <div
-        className="transition-[padding] duration-200"
-        style={{ paddingLeft: collapsed ? 84 : 232 }}
+        className="transition-[padding] duration-300"
+        style={{ paddingLeft: collapsed ? 88 : 240 }}
       >
         {children}
       </div>

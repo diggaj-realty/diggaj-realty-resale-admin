@@ -36,16 +36,16 @@ export default function PerformanceChartCard({
     <div className="card card-hover p-6" data-animate="fade-up">
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-sm font-bold" style={{ color: 'var(--text-1)' }}>{title}</h2>
-        <div className="flex gap-1 rounded-lg p-1" style={{ background: 'var(--surface-3)' }}>
+        <div className="flex gap-1 rounded-full p-1" style={{ background: 'var(--surface-3)' }}>
           {(['week', 'month'] as const).map((r) => (
             <button
               key={r}
               type="button"
               onClick={() => setRange(r)}
-              className="rounded-md px-2.5 py-1 text-xs font-semibold capitalize transition-colors"
+              className="rounded-full px-3 py-1 text-xs font-semibold capitalize transition-colors"
               style={{
                 background: range === r ? 'var(--surface)' : 'transparent',
-                color: range === r ? 'var(--accent-700)' : 'var(--text-3)',
+                color: range === r ? 'var(--text-1)' : 'var(--text-3)',
                 boxShadow: range === r ? 'var(--elev-1)' : 'none',
               }}
             >
@@ -59,8 +59,8 @@ export default function PerformanceChartCard({
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--line)" />
           <XAxis dataKey="label" tick={{ fontSize: 11, fill: 'var(--text-3)' }} axisLine={false} tickLine={false} />
           <YAxis tick={{ fontSize: 11, fill: 'var(--text-3)' }} axisLine={false} tickLine={false} allowDecimals={false} />
-          <Tooltip contentStyle={tooltipStyle} cursor={{ fill: 'rgba(124,92,252,0.06)' }} />
-          <Bar dataKey="value" fill="var(--accent-500)" radius={[8, 8, 8, 8]} maxBarSize={36} />
+          <Tooltip contentStyle={tooltipStyle} cursor={{ fill: 'rgba(185,138,68,0.08)' }} />
+          <Bar dataKey="value" fill="var(--ink-800)" radius={[10, 10, 10, 10]} maxBarSize={36} />
         </BarChart>
       </ResponsiveContainer>
     </div>

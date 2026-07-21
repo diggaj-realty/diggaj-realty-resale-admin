@@ -29,7 +29,7 @@ export default function StatTile({ stat, spark }: { stat: StatMetric; spark?: nu
     <div className="card card-hover p-5" data-animate="fade-up">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="text-2xl font-extrabold tracking-tight" style={{ color: 'var(--text-1)' }}>{stat.value}</p>
+          <p className="text-2xl font-semibold tracking-[-0.02em]" style={{ color: 'var(--text-1)' }}>{stat.value}</p>
           <p className="mt-1 truncate text-xs font-medium" style={{ color: 'var(--text-3)' }}>{stat.label}</p>
         </div>
         <span

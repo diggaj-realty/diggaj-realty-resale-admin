@@ -30,8 +30,9 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# env files (secrets stay local; the template is committed)
 .env*
+!.env.example
 
 # vercel
 .vercel
@@ -43,5 +44,6 @@ next-env.d.ts
 prisma/dev.db
 .tokensave/
 
-.vercel
-.env*
+# local dev artifacts
+dev.log
+.claude/
