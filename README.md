@@ -47,6 +47,11 @@ All keys are documented in [`.env.example`](.env.example):
 4. Point the frontend's API base URL at `https://<app>.vercel.app/api/v1`.
    CORS is open (`*`) on all `/api/v1` routes, so any frontend origin works.
 
+**This project is already deployed.** Live production API:
+`https://diggaj-realty-resale-admin.vercel.app/api/v1` — see
+[`FRONTEND_INTEGRATION.md`](FRONTEND_INTEGRATION.md) for the frontend
+connection guide.
+
 ## API for the frontend
 
 Full reference with request/response JSON shapes: [`API.md`](API.md).

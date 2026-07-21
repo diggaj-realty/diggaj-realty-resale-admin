@@ -2,7 +2,7 @@
 
 Base URL:
 - Local: `http://localhost:3000/api/v1`
-- Production: `https://<your-vercel-domain>/api/v1`
+- **Production: `https://diggaj-realty-resale-admin.vercel.app/api/v1`** (live, backed by the real Supabase DB)
 
 CORS is open (`Access-Control-Allow-Origin: *`) so this can be called from any origin/port.
 
