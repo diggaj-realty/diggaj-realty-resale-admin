@@ -7,7 +7,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 
 const MAX_PHOTO_SIZE_BYTES = 15 * 1024 * 1024 // 15MB
-const MAX_VIDEO_SIZE_BYTES = 20 * 1024 * 1024 // 20MB
+const MAX_VIDEO_SIZE_BYTES = 45 * 1024 * 1024 // 45MB (Supabase bucket cap is 50MB)
 const BUCKET = 'property-media'
 
 function supabaseAdmin() {

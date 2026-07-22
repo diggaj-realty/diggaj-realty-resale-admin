@@ -140,7 +140,7 @@ export default function EditListingForm({
       <div>
         <label className="mb-1.5 block text-xs font-semibold" style={{ color: 'var(--text-2)' }}>Add More Videos</label>
         <input type="file" name="videos" accept="video/*" multiple className="w-full rounded-lg border px-3 py-2 text-sm outline-none" style={{ borderColor: 'var(--line)', color: 'var(--text-2)' }} />
-        <p className="mt-1 text-xs" style={{ color: 'var(--text-3)' }}>Optional, appended to existing media, max 20MB each.</p>
+        <p className="mt-1 text-xs" style={{ color: 'var(--text-3)' }}>Optional, appended to existing media, max 45MB each.</p>
       </div>
 
       <PropertyRichFields amenityOptions={amenityOptions} defaults={initial} />

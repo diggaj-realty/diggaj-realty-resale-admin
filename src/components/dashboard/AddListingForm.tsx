@@ -120,7 +120,7 @@ export default function AddListingForm({ amenityOptions }: { amenityOptions: str
       <div>
         <label className="mb-1.5 block text-xs font-semibold" style={{ color: 'var(--text-2)' }}>Videos</label>
         <input type="file" name="videos" accept="video/*" multiple className="w-full rounded-lg border px-3 py-2 text-sm outline-none" style={{ borderColor: 'var(--line)', color: 'var(--text-2)' }} />
-        <p className="mt-1 text-xs" style={{ color: 'var(--text-3)' }}>Optional, multiple videos allowed, max 20MB each.</p>
+        <p className="mt-1 text-xs" style={{ color: 'var(--text-3)' }}>Optional, multiple videos allowed, max 45MB each.</p>
       </div>
 
       <PropertyRichFields amenityOptions={amenityOptions} />
