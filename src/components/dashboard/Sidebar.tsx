@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { signOut } from 'next-auth/react'
-import { Building2, LogOut, PanelLeftClose, PanelLeftOpen, ArrowUpRight } from 'lucide-react'
+import { Building2, LogOut, PanelLeftClose, PanelLeftOpen, ArrowUpRight, X } from 'lucide-react'
 import { getNavIcons } from './navConfig'
 import type { UserRole } from '@/types'
 
@@ -19,82 +19,103 @@ export default function Sidebar({
   role,
   collapsed,
   onToggle,
+  mobileOpen,
+  onCloseMobile,
 }: {
   role: UserRole
   collapsed: boolean
   onToggle: () => void
+  mobileOpen: boolean
+  onCloseMobile: () => void
 }) {
   const pathname = usePathname()
   const navIcons = getNavIcons(role)
   const promo = PROMO_COPY[role]
 
   return (
-    <aside
-      className="fixed inset-y-0 left-0 z-30 p-3 transition-[width] duration-300"
-      style={{ width: collapsed ? 88 : 240 }}
-    >
-      <div
-        className="flex h-full flex-col overflow-hidden rounded-[28px] py-5"
-        style={{ background: 'var(--ink-800)' }}
+    <>
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 z-30 bg-black/40 md:hidden"
+          onClick={onCloseMobile}
+          aria-hidden="true"
+        />
+      )}
+      <aside
+        className={`fixed inset-y-0 left-0 z-40 w-64 p-3 transition-[transform,width] duration-300 md:translate-x-0 ${
+          mobileOpen ? 'translate-x-0' : '-translate-x-full'
+        } ${collapsed ? 'md:w-[88px]' : 'md:w-[240px]'}`}
       >
-        <div className="mb-6 flex items-center justify-between px-4">
-          <Link href="/dashboard" className="flex min-w-0 items-center gap-2.5">
-            <span
-              className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full"
-              style={{ background: 'var(--cream)', color: 'var(--ink-800)' }}
-            >
-              <Building2 size={16} />
-            </span>
-            {!collapsed && (
-              <span className="truncate text-sm font-semibold tracking-tight text-white">
-                Diggaj Realty
+        <div
+          className="flex h-full flex-col overflow-hidden rounded-[28px] py-5"
+          style={{ background: 'var(--ink-800)' }}
+        >
+          <div className="mb-6 flex items-center justify-between px-4">
+            <Link href="/dashboard" className="flex min-w-0 items-center gap-2.5" onClick={onCloseMobile}>
+              <span
+                className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full"
+                style={{ background: 'var(--cream)', color: 'var(--ink-800)' }}
+              >
+                <Building2 size={16} />
               </span>
+              {!collapsed && (
+                <span className="truncate text-sm font-semibold tracking-tight text-white md:inline">
+                  Diggaj Realty
+                </span>
+              )}
+            </Link>
+            <button
+              type="button"
+              onClick={onCloseMobile}
+              className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-white/50 transition-colors hover:bg-white/10 hover:text-white md:hidden"
+            >
+              <X size={16} />
+            </button>
+            {!collapsed && (
+              <button
+                type="button"
+                onClick={onToggle}
+                className="hidden h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-white/50 transition-colors hover:bg-white/10 hover:text-white md:flex"
+              >
+                <PanelLeftClose size={15} />
+              </button>
             )}
-          </Link>
-          {!collapsed && (
+          </div>
+
+          {collapsed && (
             <button
               type="button"
               onClick={onToggle}
-              className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-white/50 transition-colors hover:bg-white/10 hover:text-white"
+              className="mx-auto mb-4 hidden h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-white/50 transition-colors hover:bg-white/10 hover:text-white md:flex"
             >
-              <PanelLeftClose size={15} />
+              <PanelLeftOpen size={15} />
             </button>
           )}
-        </div>
 
-        {collapsed && (
-          <button
-            type="button"
-            onClick={onToggle}
-            className="mx-auto mb-4 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-white/50 transition-colors hover:bg-white/10 hover:text-white"
-          >
-            <PanelLeftOpen size={15} />
-          </button>
-        )}
-
-        <nav className="flex flex-1 flex-col gap-1.5 overflow-y-auto px-3">
-          {navIcons.map((item) => {
-            const isActive = item.href === '/dashboard' ? pathname === '/dashboard' : pathname.startsWith(item.href)
-            const Icon = item.icon
-            return (
-              <Link
-                key={item.key}
-                href={item.href}
-                aria-current={isActive ? 'page' : undefined}
-                title={collapsed ? item.label : undefined}
-                className="flex h-11 items-center gap-3 rounded-full px-4 text-sm font-medium transition-all duration-300"
-                style={{
-                  background: isActive ? 'var(--cream)' : 'transparent',
-                  color: isActive ? 'var(--ink-800)' : 'rgba(255,255,255,0.55)',
-                  justifyContent: collapsed ? 'center' : 'flex-start',
-                }}
-              >
-                <Icon size={17} className="flex-shrink-0" />
-                {!collapsed && <span className="truncate">{item.label}</span>}
-              </Link>
-            )
-          })}
-        </nav>
+          <nav className="flex flex-1 flex-col gap-1.5 overflow-y-auto px-3">
+            {navIcons.map((item) => {
+              const isActive = item.href === '/dashboard' ? pathname === '/dashboard' : pathname.startsWith(item.href)
+              const Icon = item.icon
+              return (
+                <Link
+                  key={item.key}
+                  href={item.href}
+                  aria-current={isActive ? 'page' : undefined}
+                  title={collapsed ? item.label : undefined}
+                  onClick={onCloseMobile}
+                  className="flex h-11 items-center gap-3 rounded-full px-4 text-sm font-medium transition-all duration-300"
+                  style={{
+                    background: isActive ? 'var(--cream)' : 'transparent',
+                    color: isActive ? 'var(--ink-800)' : 'rgba(255,255,255,0.55)',
+                    justifyContent: collapsed ? 'center' : 'flex-start',
+                  }}
+                >
+                  <Icon size={17} className="flex-shrink-0" />
+                  {!collapsed && <span className="truncate">{item.label}</span>}
+                </Link>
+              )
+            })}
+          </nav>
 
         <div className="flex flex-col gap-2 px-3 pt-3">
           {!collapsed && (
@@ -129,6 +150,7 @@ export default function Sidebar({
           </button>
         </div>
       </div>
-    </aside>
+      </aside>
+    </>
   )
 }

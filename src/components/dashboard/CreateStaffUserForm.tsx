@@ -37,12 +37,14 @@ export default function CreateStaffUserForm() {
       </button>
 
       {open && (
-        <form
-          ref={formRef}
-          action={handleSubmit}
-          className="card absolute right-0 top-full z-20 mt-2 grid w-[min(90vw,640px)] grid-cols-1 gap-3 p-5 sm:grid-cols-2"
-          data-animate="fade-up"
-        >
+        <>
+          <div className="fixed inset-0 z-20 bg-black/40 sm:hidden" onClick={() => setOpen(false)} aria-hidden="true" />
+          <form
+            ref={formRef}
+            action={handleSubmit}
+            className="card fixed inset-x-4 top-20 z-30 grid grid-cols-1 gap-3 p-5 sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:z-20 sm:mt-2 sm:w-[min(90vw,640px)] sm:grid-cols-2"
+            data-animate="fade-up"
+          >
           <div className="sm:col-span-2">
             <h2 className="text-sm font-bold" style={{ color: 'var(--text-1)' }}>New Staff Account</h2>
             <p className="mt-0.5 text-xs" style={{ color: 'var(--text-3)' }}>
@@ -97,7 +99,8 @@ export default function CreateStaffUserForm() {
               Cancel
             </button>
           </div>
-        </form>
+          </form>
+        </>
       )}
     </div>
   )

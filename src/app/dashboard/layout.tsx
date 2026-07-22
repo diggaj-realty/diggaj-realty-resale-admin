@@ -24,7 +24,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   return (
     <DashboardChrome role={role}>
       <Header userName={name ?? 'User'} role={role} userEmail={email ?? ''} unreadCount={unreadCount} avatarUrl={user?.avatarUrl ?? null} />
-      <main className="px-8 py-8">{children}</main>
+      <main className="px-4 py-6 sm:px-8 sm:py-8">{children}</main>
     </DashboardChrome>
   )
 }

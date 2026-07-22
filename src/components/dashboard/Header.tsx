@@ -3,8 +3,9 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { signOut } from 'next-auth/react'
-import { Bell, Search, ChevronDown, LogOut, Settings } from 'lucide-react'
+import { Bell, Search, ChevronDown, LogOut, Settings, Menu } from 'lucide-react'
 import { ROLE_LABELS } from './navConfig'
+import { useSidebarMobileToggle } from './DashboardChrome'
 import type { UserRole } from '@/types'
 
 const ROLE_AVATAR_BG: Record<UserRole, string> = {
@@ -39,17 +40,27 @@ export default function Header({
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const firstName = userName.split(' ')[0]
+  const openMobileSidebar = useSidebarMobileToggle()
 
   return (
     <header
-      className="sticky top-0 z-20 flex h-[76px] items-center justify-between gap-6 px-8"
+      className="sticky top-0 z-20 flex h-[76px] items-center justify-between gap-3 px-4 sm:gap-6 sm:px-8"
       style={{
         background: 'rgba(240,235,225,0.85)',
         backdropFilter: 'blur(14px) saturate(160%)',
         borderBottom: '1px solid var(--line)',
       }}
     >
-      <div className="flex max-w-md flex-1 items-center gap-2 rounded-full border px-4 py-2.5 shadow-sm" style={{ borderColor: 'var(--line)', background: 'var(--surface)' }}>
+      <button
+        type="button"
+        onClick={openMobileSidebar}
+        className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full transition-colors hover:bg-black/[0.05] md:hidden"
+        style={{ color: 'var(--text-2)' }}
+      >
+        <Menu size={20} />
+      </button>
+
+      <div className="hidden max-w-md flex-1 items-center gap-2 rounded-full border px-4 py-2.5 shadow-sm sm:flex" style={{ borderColor: 'var(--line)', background: 'var(--surface)' }}>
         <Search size={16} style={{ color: 'var(--text-3)' }} />
         <input
           placeholder="Type to search..."
@@ -58,10 +69,18 @@ export default function Header({
         />
       </div>
 
-      <div className="flex items-center gap-2">
+      <button
+        type="button"
+        className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full transition-colors hover:bg-black/[0.05] sm:hidden"
+        style={{ color: 'var(--text-2)' }}
+      >
+        <Search size={18} />
+      </button>
+
+      <div className="flex flex-1 items-center justify-end gap-1 sm:flex-none sm:gap-2">
         <Link
           href="/dashboard/settings"
-          className="flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-black/[0.05]"
+          className="hidden h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-black/[0.05] sm:flex"
           style={{ color: 'var(--text-2)' }}
         >
           <Settings size={18} />
