@@ -34,6 +34,7 @@ export function photoDTO(p: PropertyPhoto) {
 
 type PropertyWithRelations = Property & {
   photos?: PropertyPhoto[]
+  videos?: PropertyPhoto[]
   seller?: { name: string; email?: string } | null
   agent?: { name: string } | null
 }
@@ -83,7 +84,10 @@ export function propertyDTO(p: PropertyWithRelations) {
     maintenanceMonthly: p.maintenanceMonthly,
     // ── Media & amenities ──
     floorPlanUrl: p.floorPlanUrl,
-    videoUrl: p.videoUrl,
+    // Legacy single-video field; kept populated (falling back to the first
+    // uploaded video) for older clients, but new integrations should use
+    // `videos` / `photos[].mediaType === "VIDEO"` below instead.
+    videoUrl: p.photos?.find((ph) => ph.mediaType === 'VIDEO')?.photoUrl ?? p.videoUrl,
     amenities: p.amenities,
 
     // ── Builder / project ──
@@ -95,7 +99,10 @@ export function propertyDTO(p: PropertyWithRelations) {
     sellerName: p.seller?.name,
     sellerEmail: p.seller?.email,
     agentName: p.agent?.name,
+    // All media (images + videos); check `mediaType` to tell them apart.
     photos: p.photos ? p.photos.map(photoDTO) : undefined,
+    // Convenience subset: videos only, same shape as `photos`.
+    videos: p.photos ? p.photos.filter((ph) => ph.mediaType === 'VIDEO').map(photoDTO) : undefined,
   }
 }
 
