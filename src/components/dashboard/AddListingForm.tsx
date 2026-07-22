@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Building2 } from 'lucide-react'
 import { createListing } from '@/lib/actions/listings'
 import { uploadPropertyMediaFiles } from '@/lib/clientMediaUpload'
+import { formatMoneyHint } from '@/lib/format'
 import PropertyRichFields from './PropertyRichFields'
 
 const PROPERTY_TYPES = [
@@ -20,6 +21,7 @@ export default function AddListingForm({ amenityOptions }: { amenityOptions: str
   const [pending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
   const [type, setType] = useState('RESIDENTIAL')
+  const [askingPrice, setAskingPrice] = useState('')
   const [uploading, setUploading] = useState(false)
   const formRef = useRef<HTMLFormElement>(null)
 
@@ -109,7 +111,21 @@ export default function AddListingForm({ amenityOptions }: { amenityOptions: str
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div>
           <label className="mb-1.5 block text-xs font-semibold" style={{ color: 'var(--text-2)' }}>Asking Price (₹)</label>
-          <input type="number" name="askingPrice" min={1} required className="w-full rounded-lg border px-3 py-2 text-sm outline-none" style={inputStyle} />
+          <input
+            type="number"
+            name="askingPrice"
+            min={1}
+            required
+            value={askingPrice}
+            onChange={(e) => setAskingPrice(e.target.value)}
+            className="w-full rounded-lg border px-3 py-2 text-sm outline-none"
+            style={inputStyle}
+          />
+          {askingPrice && Number(askingPrice) > 0 && (
+            <p className="mt-1 text-xs font-medium" style={{ color: 'var(--accent-700)' }}>
+              ≈ ₹{formatMoneyHint(Number(askingPrice))}
+            </p>
+          )}
         </div>
 
         <div>

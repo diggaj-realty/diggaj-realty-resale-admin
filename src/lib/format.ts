@@ -3,6 +3,19 @@ export function formatINR(amount: number): string {
   return `₹${(amount / 100000).toFixed(1)}L`
 }
 
+/** Short Indian-numbering hint for a raw amount as the user types it, e.g. 10000000 -> "1 Cr". */
+export function formatMoneyHint(amount: number): string {
+  if (!amount || amount <= 0) return ''
+  if (amount >= 10000000) return `${trimZeros(amount / 10000000)} Cr`
+  if (amount >= 100000) return `${trimZeros(amount / 100000)} Lakh`
+  if (amount >= 1000) return `${trimZeros(amount / 1000)} K`
+  return String(amount)
+}
+
+function trimZeros(value: number): string {
+  return value.toFixed(2).replace(/\.?0+$/, '')
+}
+
 export function formatRelativeTime(date: Date): string {
   const diffMs = Date.now() - date.getTime()
   const diffMin = Math.round(diffMs / 60000)

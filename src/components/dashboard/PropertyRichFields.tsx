@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import { FURNISHING, FACING, POSSESSION_STATUS, OWNERSHIP_TYPE } from '@/lib/data/propertyFields'
 import { BUILDER_NAMES, projectsForBuilder } from '@/lib/data/builders'
+import { formatMoneyHint } from '@/lib/format'
 
 const OTHER_BUILDER = 'Other / not listed'
 
@@ -59,6 +60,7 @@ export default function PropertyRichFields({
   const builderKnown = !!d.builderName && BUILDER_NAMES.includes(d.builderName)
   const [builder, setBuilder] = useState(builderKnown ? d.builderName! : d.builderName ? OTHER_BUILDER : '')
   const projectOptions = projectsForBuilder(builder === OTHER_BUILDER ? undefined : builder)
+  const [maintenanceMonthly, setMaintenanceMonthly] = useState(d.maintenanceMonthly != null ? String(d.maintenanceMonthly) : '')
 
   return (
     <div className="border-t pt-5" style={{ borderColor: 'var(--line)' }}>
@@ -246,7 +248,20 @@ export default function PropertyRichFields({
             </div>
             <div>
               <label className={labelClass} style={{ color: 'var(--text-2)' }}>Monthly maintenance (₹)</label>
-              <input type="number" name="maintenanceMonthly" min={0} defaultValue={d.maintenanceMonthly ?? ''} className="w-full rounded-lg border px-3 py-2 text-sm outline-none" style={inputStyle} />
+              <input
+                type="number"
+                name="maintenanceMonthly"
+                min={0}
+                value={maintenanceMonthly}
+                onChange={(e) => setMaintenanceMonthly(e.target.value)}
+                className="w-full rounded-lg border px-3 py-2 text-sm outline-none"
+                style={inputStyle}
+              />
+              {maintenanceMonthly && Number(maintenanceMonthly) > 0 && (
+                <p className="mt-1 text-xs font-medium" style={{ color: 'var(--accent-700)' }}>
+                  ≈ ₹{formatMoneyHint(Number(maintenanceMonthly))}
+                </p>
+              )}
             </div>
             <div className="flex items-end pb-2.5">
               <label className="flex items-center gap-2 text-xs font-semibold" style={{ color: 'var(--text-2)' }}>
