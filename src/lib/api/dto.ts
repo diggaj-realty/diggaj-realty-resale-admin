@@ -29,7 +29,7 @@ export function kycDTO(k: SellerKyc) {
 }
 
 export function photoDTO(p: PropertyPhoto) {
-  return { id: p.id, url: p.photoUrl, order: p.order }
+  return { id: p.id, url: p.photoUrl, mediaType: p.mediaType, order: p.order }
 }
 
 type PropertyWithRelations = Property & {

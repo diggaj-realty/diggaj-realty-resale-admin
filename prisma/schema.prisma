@@ -146,6 +146,7 @@ model PropertyPhoto {
   id         String @id @default(cuid())
   propertyId String
   photoUrl   String
+  mediaType  String @default("IMAGE") // IMAGE | VIDEO
   order      Int    @default(0)
 
   property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)

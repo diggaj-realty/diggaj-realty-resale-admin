@@ -44,7 +44,7 @@ async function getExploreProperties(role: UserRole, userId: string): Promise<Exp
     where,
     orderBy,
     take: 4,
-    include: { photos: { orderBy: { order: 'asc' }, take: 1 } },
+    include: { photos: { where: { mediaType: 'IMAGE' }, orderBy: { order: 'asc' }, take: 1 } },
   })
 
   return properties.map((p) => ({

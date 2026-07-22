@@ -96,17 +96,34 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
             )}
           </div>
 
-          {property.photos.length > 0 && (
-            <div className="card p-6">
-              <h2 className="mb-4 text-sm font-semibold" style={{ color: 'var(--text-1)' }}>Photos ({property.photos.length})</h2>
+          <div className="card p-6">
+            <h2 className="mb-4 text-sm font-semibold" style={{ color: 'var(--text-1)' }}>Media ({property.photos.length})</h2>
+            {property.photos.length > 0 ? (
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                {property.photos.map((photo) => (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img key={photo.id} src={photo.photoUrl} alt={property.title} className="aspect-square w-full rounded-lg border object-cover" style={{ borderColor: 'var(--line)' }} />
-                ))}
+                {property.photos.map((photo) =>
+                  photo.mediaType === 'VIDEO' ? (
+                    <video
+                      key={photo.id}
+                      src={photo.photoUrl}
+                      controls
+                      className="aspect-square w-full rounded-lg border object-cover"
+                      style={{ borderColor: 'var(--line)' }}
+                    />
+                  ) : (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img key={photo.id} src={photo.photoUrl} alt={property.title} className="aspect-square w-full rounded-lg border object-cover" style={{ borderColor: 'var(--line)' }} />
+                  )
+                )}
               </div>
-            </div>
-          )}
+            ) : (
+              <div
+                className="flex aspect-[3/1] w-full items-center justify-center rounded-lg border border-dashed text-sm"
+                style={{ borderColor: 'var(--line)', color: 'var(--text-3)', background: 'var(--surface-2)' }}
+              >
+                No photos or videos uploaded yet
+              </div>
+            )}
+          </div>
 
           {canEdit && (
             <EditListingForm

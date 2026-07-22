@@ -11,6 +11,23 @@ import { buildRichPropertyData, richInputFromFormData } from '@/lib/data/propert
 import type { Prisma } from '@prisma/client'
 
 const STAFF_ROLES = ['AGENT', 'ADMIN', 'BACKEND']
+const MAX_PHOTO_SIZE_BYTES = 15 * 1024 * 1024 // 15MB
+const MAX_VIDEO_SIZE_BYTES = 20 * 1024 * 1024 // 20MB
+
+async function uploadPropertyMedia(formData: FormData, propertyId: string) {
+  const photoFiles = formData.getAll('photos').filter((f): f is File => f instanceof File && f.size > 0)
+  const videoFiles = formData.getAll('videos').filter((f): f is File => f instanceof File && f.size > 0)
+
+  const [photoUrls, videoUrls] = await Promise.all([
+    Promise.all(photoFiles.map((f) => uploadFile(f, 'property-media', propertyId, MAX_PHOTO_SIZE_BYTES))),
+    Promise.all(videoFiles.map((f) => uploadFile(f, 'property-media', propertyId, MAX_VIDEO_SIZE_BYTES))),
+  ])
+
+  return [
+    ...photoUrls.map((photoUrl) => ({ photoUrl, mediaType: 'IMAGE' as const })),
+    ...videoUrls.map((photoUrl) => ({ photoUrl, mediaType: 'VIDEO' as const })),
+  ]
+}
 
 export async function createListing(formData: FormData) {
   const session = await getServerSession(authOptions)
@@ -41,8 +58,6 @@ export async function createListing(formData: FormData) {
   if (!areaSqft || areaSqft <= 0) throw new Error('Area (sqft) is required.')
   if (!askingPrice || askingPrice <= 0) throw new Error('Asking price is required.')
 
-  const photoFiles = formData.getAll('photos').filter((f): f is File => f instanceof File && f.size > 0)
-
   const { listingApprovalRequired } = await getAppConfig()
 
   const rich = buildRichPropertyData(richInputFromFormData(formData))
@@ -64,12 +79,10 @@ export async function createListing(formData: FormData) {
     } as Prisma.PropertyUncheckedCreateInput,
   })
 
-  if (photoFiles.length > 0) {
-    const photoUrls = await Promise.all(
-      photoFiles.map((f) => uploadFile(f, 'property-media', property.id))
-    )
+  const media = await uploadPropertyMedia(formData, property.id)
+  if (media.length > 0) {
     await prisma.propertyPhoto.createMany({
-      data: photoUrls.map((photoUrl, order) => ({ propertyId: property.id, photoUrl, order })),
+      data: media.map((m, order) => ({ propertyId: property.id, photoUrl: m.photoUrl, mediaType: m.mediaType, order })),
     })
   }
 
@@ -132,14 +145,11 @@ export async function updateListing(formData: FormData) {
     } as Prisma.PropertyUncheckedUpdateInput,
   })
 
-  const photoFiles = formData.getAll('photos').filter((f): f is File => f instanceof File && f.size > 0)
-  if (photoFiles.length > 0) {
+  const media = await uploadPropertyMedia(formData, propertyId)
+  if (media.length > 0) {
     const existingCount = await prisma.propertyPhoto.count({ where: { propertyId } })
-    const photoUrls = await Promise.all(
-      photoFiles.map((f) => uploadFile(f, 'property-media', propertyId))
-    )
     await prisma.propertyPhoto.createMany({
-      data: photoUrls.map((photoUrl, i) => ({ propertyId, photoUrl, order: existingCount + i })),
+      data: media.map((m, i) => ({ propertyId, photoUrl: m.photoUrl, mediaType: m.mediaType, order: existingCount + i })),
     })
   }
 

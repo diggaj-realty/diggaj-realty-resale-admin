@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 
-const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024 // 50MB — covers photos, short videos, and ID docs
+const DEFAULT_MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024 // 50MB fallback — covers ID docs, etc.
 const SIGNED_URL_TTL_SECONDS = 60 * 60 * 24 * 365 * 10 // 10 years, for private buckets
 
 export type UploadBucket = 'property-media' | 'kyc-documents' | 'deal-documents' | 'avatars'
@@ -17,9 +17,14 @@ function supabaseAdmin() {
  * `property-media` is a public bucket (buyers browse photos/videos freely);
  * `kyc-documents` and `deal-documents` are private — a long-lived signed URL is returned instead.
  */
-export async function uploadFile(file: File, bucket: UploadBucket, folder: string): Promise<string> {
-  if (file.size > MAX_FILE_SIZE_BYTES) {
-    throw new Error(`File "${file.name}" exceeds the ${MAX_FILE_SIZE_BYTES / (1024 * 1024)}MB size limit.`)
+export async function uploadFile(
+  file: File,
+  bucket: UploadBucket,
+  folder: string,
+  maxSizeBytes: number = DEFAULT_MAX_FILE_SIZE_BYTES
+): Promise<string> {
+  if (file.size > maxSizeBytes) {
+    throw new Error(`File "${file.name}" exceeds the ${Math.round(maxSizeBytes / (1024 * 1024))}MB size limit.`)
   }
 
   const supabase = supabaseAdmin()
