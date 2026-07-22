@@ -1,14 +1,12 @@
 import { prisma } from '@/lib/prisma'
-import { authenticate } from '@/lib/api/auth'
 import { ok, withApi, parsePagination, paginatedEnvelope } from '@/lib/api/http'
 import { propertyDTO } from '@/lib/api/dto'
 import type { Prisma } from '@prisma/client'
 
-/** Live, verified properties any authenticated user can browse — mirrors
- *  /dashboard/browse. Supports search (?q=) and type filter (?type=). */
+/** Live, verified properties — fully public, no auth required, so an
+ *  anonymous visitor can browse before signing up. Mirrors /dashboard/browse.
+ *  Supports search (?q=) and type filter (?type=). */
 export const GET = withApi(async (req) => {
-  await authenticate(req)
-
   const url = new URL(req.url)
   const { page, pageSize, skip, take } = parsePagination(url)
   const q = url.searchParams.get('q')?.trim()

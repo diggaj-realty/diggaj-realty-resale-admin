@@ -1,11 +1,14 @@
 import { prisma } from '@/lib/prisma'
-import { authenticate } from '@/lib/api/auth'
+import { authenticateOptional } from '@/lib/api/auth'
 import { ok, withApi, ApiError } from '@/lib/api/http'
 import { propertyDTO } from '@/lib/api/dto'
 import { recordPropertyView } from '@/lib/data/propertyViews'
 
+/** Public — no auth required, so an anonymous visitor can view a listing.
+ *  A token is read if present only to skip view-counting the owner's/agent's
+ *  own views; anonymous views are always recorded. */
 export const GET = withApi(async (req, ctx) => {
-  const user = await authenticate(req)
+  const user = await authenticateOptional(req)
   const { id } = await ctx.params
 
   const property = await prisma.property.findUnique({
@@ -15,8 +18,8 @@ export const GET = withApi(async (req, ctx) => {
   if (!property) throw new ApiError('Property not found', 404)
 
   // Count genuine buyer interest only — don't inflate on the owner's/agent's own views.
-  const isOwnSide = user.id === property.sellerId || user.id === property.agentId
-  if (!isOwnSide) await recordPropertyView({ propertyId: id, userId: user.id })
+  const isOwnSide = user != null && (user.id === property.sellerId || user.id === property.agentId)
+  if (!isOwnSide) await recordPropertyView({ propertyId: id, userId: user?.id ?? null })
 
   return ok(propertyDTO(property))
 })

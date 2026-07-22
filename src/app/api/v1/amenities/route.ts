@@ -1,13 +1,14 @@
 import { prisma } from '@/lib/prisma'
-import { authenticate } from '@/lib/api/auth'
+import { authenticate, authenticateOptional } from '@/lib/api/auth'
 import { ok, withApi, readJson, ApiError } from '@/lib/api/http'
 
-/** List amenities. Any authenticated user (listing forms consume this). By default
- *  only active ones; ADMIN may pass ?all=1 to include inactive. */
+/** List amenities — public, no auth required (listing forms and public
+ *  filter UIs both consume this). By default only active ones; an ADMIN
+ *  caller may pass ?all=1 to include inactive. */
 export const GET = withApi(async (req) => {
-  const user = await authenticate(req)
+  const user = await authenticateOptional(req)
   const url = new URL(req.url)
-  const includeInactive = url.searchParams.get('all') === '1' && user.role === 'ADMIN'
+  const includeInactive = url.searchParams.get('all') === '1' && user?.role === 'ADMIN'
 
   const items = await prisma.amenity.findMany({
     where: includeInactive ? {} : { active: true },
