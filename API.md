@@ -95,7 +95,7 @@ Content-Type: multipart/form-data
 ### Listings & browsing
 | Method | Path | Role | Body | Notes |
 |---|---|---|---|---|
-| GET | `/properties` | any | — paginated, `?q=` search, `?type=` filter | LIVE properties only (buyer browse); recording a view (see below) happens automatically on `GET /properties/:id` |
+| GET | `/properties` | any | — paginated, `?q=` search, `?type=`, `?city=`, `?minPrice=`, `?maxPrice=`, `?minBhk=` filters | LIVE properties only (buyer browse); `city` is normalized server-side (`"Bengaluru"`/`"bangalore"`/etc. all match listings stored as `"Bangalore"` — see canonical city list below); recording a view (see below) happens automatically on `GET /properties/:id` |
 | GET | `/properties/:id` | any | — | single property + photos; auto-records a `PropertyView` for the requesting user unless they're the listing's own seller/agent |
 | GET | `/properties/:id/views` | seller/agent (own listing) or ADMIN/BACKEND | — | `{ propertyId, viewCount, total, last7Days, uniqueViewers }` — view analytics, not for buyers |
 | GET | `/listings` | SELLER/AGENT/ADMIN/BACKEND | — paginated | role-scoped: seller sees own, agent sees assigned, admin/backend see all |
@@ -183,12 +183,12 @@ Exact objects as returned inside `data` / `data.items`. All timestamps are ISO-8
 {
   "id": "cmk…", "sellerId": "cmk…", "agentId": null,
   "type": "RESIDENTIAL", "title": "Whitefield 4BHK Villa",
-  "description": "Spacious villa with…", "location": "Whitefield, Bengaluru",
+  "description": "Spacious villa with…", "location": "Whitefield, Bangalore",
   "latitude": 12.9698, "longitude": 77.7499,
   "areaSqft": 2400, "bhk": 4, "askingPrice": 55000000,
   "status": "LIVE", "plan": "BASIC", "viewCount": 214,
 
-  "city": "Bengaluru", "locality": "Whitefield", "pincode": "560066",
+  "city": "Bangalore", "locality": "Whitefield", "pincode": "560066",
   "carpetAreaSqft": 2100, "builtUpAreaSqft": 2300, "superBuiltUpAreaSqft": 2400,
 
   "bathrooms": 4, "balconies": 2, "furnishing": "SEMI_FURNISHED", "facing": "NE",
@@ -209,7 +209,10 @@ Exact objects as returned inside `data` / `data.items`. All timestamps are ISO-8
   "photos": [ { "id": "cmk…", "url": "https://…supabase.co/storage/v1/object/public/property-media/…", "order": 0 } ]
 }
 ```
-- `type`: `RESIDENTIAL | PLOT | COMMERCIAL` · `status`: `DRAFT | PENDING_VERIFICATION | LIVE | REJECTED | CLOSED` · `plan`: `BASIC | VERIFIED | ELITE`.
+- `type`: `RESIDENTIAL | PLOT | COMMERCIAL` · `status`: `DRAFT | PENDING_VERIFICATION | LIVE | REJECTED | CLOSED` · `plan`: `BASIC | ELITE`.
+- `city` is always normalized to one of the canonical spellings below (e.g. `"Bangalore"`, not `"Bengaluru"`) — both on write and when filtering with `?city=` on `GET /properties`:
+  `Bangalore, Mumbai, Delhi, Pune, Hyderabad, Chennai, Kolkata, Ahmedabad, Noida, Gurgaon, Jaipur, Chandigarh, Kochi, Coimbatore, Lucknow, Indore, Nagpur, Surat, Thane, Navi Mumbai`.
+  Common alternates (`Bengaluru`, `Gurugram`, `Bombay`, `Cochin`, `Madras`, `Calcutta`, `New Delhi`, etc.) are recognized and mapped to the canonical name automatically; a city outside this list is stored/matched as typed.
 - `bhk`, `latitude`, `longitude`, `verifiedAt`, `agentId` may be `null` (`bhk` is `null` for plots/commercial).
 - `photos[].url` is a public URL, directly usable in `<img src>`. Ordered by `order` ascending — treat `photos[0]` as the cover image.
 - **All of the fields between `viewCount` and `builderName`/`projectName` above are optional/nullable** — they were added for richer listing detail pages and may be `null` on older or minimally-filled-out listings. Don't assume they're always present.
