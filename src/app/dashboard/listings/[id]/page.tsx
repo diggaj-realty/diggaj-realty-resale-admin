@@ -10,6 +10,8 @@ import DashboardEntrance from '@/components/dashboard/DashboardEntrance'
 import StatusPill from '@/components/dashboard/StatusPill'
 import EditListingForm from '@/components/dashboard/EditListingForm'
 import AssignAgentForm from '@/components/dashboard/AssignAgentForm'
+import ReviewActions from '@/components/dashboard/ReviewActions'
+import { reviewListing } from '@/lib/actions/backend'
 import { getPropertyViewStats } from '@/lib/data/propertyViews'
 import { getActiveAmenityNames } from '@/lib/data/amenities'
 import { Eye } from 'lucide-react'
@@ -37,8 +39,9 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
     property.agentId === userId
   if (!canView) redirect('/dashboard')
 
-  const canEdit = property.sellerId === userId || property.agentId === userId || role === 'ADMIN'
+  const canEdit = property.sellerId === userId || property.agentId === userId || role === 'ADMIN' || role === 'BACKEND'
   const canAssignAgent = role === 'ADMIN' || role === 'BACKEND'
+  const canReview = (role === 'ADMIN' || role === 'BACKEND') && ['DRAFT', 'PENDING_VERIFICATION'].includes(property.status)
 
   const agents = canAssignAgent
     ? await prisma.user.findMany({ where: { role: 'AGENT', isActive: true }, select: { id: true, name: true }, orderBy: { name: 'asc' } })
@@ -58,7 +61,18 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
         <div className="flex flex-col gap-6 lg:col-span-2" data-animate="fade-up">
           <div className="card p-6">
             <div className="mb-4 flex items-center justify-between">
-              <StatusPill status={property.status} />
+              <div className="flex items-center gap-3">
+                <StatusPill status={property.status} />
+                {canReview && (
+                  <ReviewActions
+                    action={reviewListing}
+                    hiddenFields={{ propertyId: property.id }}
+                    approveValue="LIVE"
+                    approveLabel="Approve"
+                    rejectLabel="Reject"
+                  />
+                )}
+              </div>
               <span className="text-lg font-bold" style={{ color: 'var(--accent-700)' }}>{formatINR(property.askingPrice)}</span>
             </div>
             <dl className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-3">

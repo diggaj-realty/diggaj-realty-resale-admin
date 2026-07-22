@@ -39,7 +39,8 @@ export async function reviewKyc(formData: FormData) {
 }
 
 export async function reviewListing(formData: FormData) {
-  await requireBackend()
+  const session = await getServerSession(authOptions)
+  if (!session || (session.user.role !== 'BACKEND' && session.user.role !== 'ADMIN')) throw new Error('Unauthorized')
   const propertyId = String(formData.get('propertyId'))
   const decision = String(formData.get('decision')) as 'LIVE' | 'REJECTED'
 
@@ -60,6 +61,7 @@ export async function reviewListing(formData: FormData) {
 
   revalidatePath('/dashboard/queue')
   revalidatePath('/dashboard')
+  revalidatePath(`/dashboard/listings/${propertyId}`)
 }
 
 async function requirePendingReviewOffer(offerId: string) {
