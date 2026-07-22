@@ -1,7 +1,8 @@
 import jwt from 'jsonwebtoken'
 import type { UserRole } from '@/types'
 
-const SECRET = process.env.NEXTAUTH_SECRET || 'dev-secret-change-in-prod'
+if (!process.env.NEXTAUTH_SECRET) throw new Error('NEXTAUTH_SECRET must be set')
+const SECRET: string = process.env.NEXTAUTH_SECRET
 
 export interface ApiTokenPayload {
   id: string

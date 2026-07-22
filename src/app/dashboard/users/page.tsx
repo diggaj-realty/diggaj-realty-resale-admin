@@ -7,6 +7,7 @@ import DashboardEntrance from '@/components/dashboard/DashboardEntrance'
 import UserActiveToggle from '@/components/dashboard/UserActiveToggle'
 import ExportButton from '@/components/dashboard/ExportButton'
 import CreateStaffUserForm from '@/components/dashboard/CreateStaffUserForm'
+import ApproveUserForm from '@/components/dashboard/ApproveUserForm'
 
 const ROLE_TONE: Record<string, { bg: string; text: string }> = {
   SELLER: { bg: 'var(--amber-50)', text: 'var(--amber-700)' },
@@ -14,6 +15,7 @@ const ROLE_TONE: Record<string, { bg: string; text: string }> = {
   AGENT: { bg: 'var(--green-50)', text: 'var(--green-700)' },
   BACKEND: { bg: 'var(--purple-50)', text: 'var(--purple-700)' },
   ADMIN: { bg: 'var(--red-50)', text: 'var(--red-700)' },
+  PENDING: { bg: 'var(--amber-50)', text: 'var(--amber-700)' },
 }
 
 const SORTS = {
@@ -108,7 +110,11 @@ export default async function UsersPage({
                     </span>
                   </td>
                   <td className="px-5 py-3.5">
-                    <UserActiveToggle userId={u.id} isActive={u.isActive} />
+                    {u.role === 'PENDING' ? (
+                      <ApproveUserForm userId={u.id} />
+                    ) : (
+                      <UserActiveToggle userId={u.id} isActive={u.isActive} />
+                    )}
                   </td>
                 </tr>
               ))}

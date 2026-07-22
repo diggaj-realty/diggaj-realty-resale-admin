@@ -19,10 +19,15 @@ export const authOptions: AuthOptions = {
           where: { email: credentials.email },
         })
 
-        if (!user || !user.isActive) return null
+        if (!user) return null
 
         const isValid = await bcrypt.compare(credentials.password, user.passwordHash)
         if (!isValid) return null
+
+        if (user.role === 'PENDING') {
+          throw new Error('Your signup is awaiting admin approval. Try again once approved.')
+        }
+        if (!user.isActive) throw new Error('This account has been deactivated.')
 
         if (user.role === 'BUYER' || user.role === 'SELLER') {
           throw new Error('This dashboard is for internal staff only. Please use the Diggaj Realty app to sign in.')

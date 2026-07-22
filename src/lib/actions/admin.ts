@@ -34,6 +34,27 @@ export async function createStaffUser(formData: FormData) {
   revalidatePath('/dashboard/users')
 }
 
+const ASSIGNABLE_ROLES = ['AGENT', 'BACKEND', 'ADMIN']
+
+/** Approves a pending self-signup (role: 'PENDING', isActive: false) by
+ *  assigning it a real internal role and activating it. */
+export async function approveUser(formData: FormData) {
+  const session = await getServerSession(authOptions)
+  if (!session || session.user.role !== 'ADMIN') throw new Error('Unauthorized')
+
+  const userId = String(formData.get('userId') || '')
+  const role = String(formData.get('role') || '').trim().toUpperCase()
+  if (!userId) throw new Error('userId is required')
+  if (!ASSIGNABLE_ROLES.includes(role)) throw new Error(`Role must be one of: ${ASSIGNABLE_ROLES.join(', ')}`)
+
+  const target = await prisma.user.findUnique({ where: { id: userId } })
+  if (!target || target.role !== 'PENDING') throw new Error('This account is not awaiting approval')
+
+  await prisma.user.update({ where: { id: userId }, data: { role, isActive: true } })
+
+  revalidatePath('/dashboard/users')
+}
+
 export async function toggleUserActive(formData: FormData) {
   const session = await getServerSession(authOptions)
   if (!session || session.user.role !== 'ADMIN') throw new Error('Unauthorized')

@@ -3,18 +3,13 @@
 import { useState } from 'react'
 import { signIn } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { Building2, Loader2 } from 'lucide-react'
-
-const DEMO_ACCOUNTS = [
-  { role: 'Agent', email: 'agent@demo.test' },
-  { role: 'Backend', email: 'backend@demo.test' },
-  { role: 'Admin', email: 'admin@demo.test' },
-]
 
 export default function LoginPage() {
   const router = useRouter()
   const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('password123')
+  const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
@@ -60,7 +55,6 @@ export default function LoginPage() {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@demo.test"
               className="w-full rounded-full border px-4 py-2.5 text-sm outline-none transition-colors focus:border-black/30"
               style={{ borderColor: 'var(--line)', color: 'var(--text-1)', background: 'var(--surface-2)' }}
             />
@@ -95,24 +89,12 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <div className="mt-6 rounded-[20px] border px-5 py-4 text-xs" style={{ borderColor: 'rgba(28,26,22,0.12)', color: 'var(--text-2)' }}>
-          <p className="mb-2 font-semibold" style={{ color: 'var(--text-1)' }}>Demo accounts (password: password123)</p>
-          <ul className="space-y-1.5">
-            {DEMO_ACCOUNTS.map((a) => (
-              <li key={a.email} className="flex justify-between">
-                <span>{a.role}</span>
-                <button
-                  type="button"
-                  onClick={() => setEmail(a.email)}
-                  className="font-mono hover:underline"
-                  style={{ color: 'var(--accent-600)' }}
-                >
-                  {a.email}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
+        <p className="mt-6 text-center text-xs" style={{ color: 'var(--text-3)' }}>
+          Need access?{' '}
+          <Link href="/signup" className="font-semibold hover:underline" style={{ color: 'var(--accent-600)' }}>
+            Request an account
+          </Link>
+        </p>
       </div>
     </main>
   )
