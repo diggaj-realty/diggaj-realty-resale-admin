@@ -64,7 +64,7 @@ export async function reviewListing(formData: FormData) {
   revalidatePath(`/dashboard/listings/${propertyId}`)
 }
 
-const SELLER_PLANS = ['BASIC', 'VERIFIED', 'VERIFIED_PLUS', 'ELITE'] as const
+const SELLER_PLANS = ['BASIC', 'ELITE'] as const
 
 export async function updatePropertyPlan(formData: FormData) {
   const session = await getServerSession(authOptions)

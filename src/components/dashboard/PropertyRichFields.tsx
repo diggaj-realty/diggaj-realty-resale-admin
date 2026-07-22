@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import { FURNISHING, FACING, POSSESSION_STATUS, OWNERSHIP_TYPE, CITIES, normalizeCity } from '@/lib/data/propertyFields'
 import { BUILDER_NAMES, projectsForBuilder } from '@/lib/data/builders'
@@ -54,9 +54,14 @@ function toDateInputValue(v: string | Date | null | undefined): string {
 export default function PropertyRichFields({
   amenityOptions,
   defaults,
+  onLocationSuggest,
 }: {
   amenityOptions: string[]
   defaults?: PropertyRichDefaults
+  /** Called with the resolved (city, locality) whenever they change, so the
+   *  parent form can keep its freehand "Location" field from drifting into
+   *  the same Bangalore/Bengaluru-style mismatches this dropdown fixes. */
+  onLocationSuggest?: (city: string, locality: string) => void
 }) {
   const [open, setOpen] = useState(!!defaults) // start expanded when editing existing data
   const d = defaults ?? {}
@@ -73,6 +78,13 @@ export default function PropertyRichFields({
   const [pincode, setPincode] = useState(d.pincode ?? '')
   const [lat, setLat] = useState<number | null>(d.latitude ?? null)
   const [lon, setLon] = useState<number | null>(d.longitude ?? null)
+
+  useEffect(() => {
+    const effectiveCity = city === OTHER_CITY ? cityOther : city
+    if (!effectiveCity) return
+    onLocationSuggest?.(effectiveCity, locality)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [city, cityOther, locality])
 
   function handleLocationPick(loc: { lat: number; lon: number; city?: string; locality?: string; pincode?: string }) {
     setLat(loc.lat)

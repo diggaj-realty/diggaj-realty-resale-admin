@@ -1,25 +1,18 @@
 import { prisma } from '@/lib/prisma'
 import { ok, withApi, parsePagination, paginatedEnvelope } from '@/lib/api/http'
 import { propertyDTO } from '@/lib/api/dto'
-import type { Prisma } from '@prisma/client'
+import { normalizeFilters, buildPropertyWhere } from '@/lib/data/propertySearch'
 
 /** Live, verified properties — fully public, no auth required, so an
  *  anonymous visitor can browse before signing up. Mirrors /dashboard/browse.
- *  Supports search (?q=) and type filter (?type=). */
+ *  Supports search (?q=), type (?type=), and city (?city=) filters — city
+ *  is normalised the same way as the dashboard/seller-facing dropdown so
+ *  "Bengaluru"/"bangalore"/etc. all match listings stored as "Bangalore". */
 export const GET = withApi(async (req) => {
   const url = new URL(req.url)
   const { page, pageSize, skip, take } = parsePagination(url)
-  const q = url.searchParams.get('q')?.trim()
-  const type = url.searchParams.get('type')?.trim()
-
-  const where: Prisma.PropertyWhereInput = { status: 'LIVE' }
-  if (type) where.type = type
-  if (q) {
-    where.OR = [
-      { title: { contains: q, mode: 'insensitive' } },
-      { location: { contains: q, mode: 'insensitive' } },
-    ]
-  }
+  const filters = normalizeFilters(Object.fromEntries(url.searchParams))
+  const where = buildPropertyWhere(filters)
 
   const [items, total] = await Promise.all([
     prisma.property.findMany({

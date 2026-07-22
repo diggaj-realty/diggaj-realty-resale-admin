@@ -5,8 +5,6 @@ import { updatePropertyPlan } from '@/lib/actions/backend'
 
 const PLANS = [
   { value: 'BASIC', label: 'Basic' },
-  { value: 'VERIFIED', label: 'Verified' },
-  { value: 'VERIFIED_PLUS', label: 'Premium (Verified+)' },
   { value: 'ELITE', label: 'Elite' },
 ]
 
@@ -20,6 +18,7 @@ export default function PropertyPlanForm({ propertyId, currentPlan }: { property
     >
       <input type="hidden" name="propertyId" value={propertyId} />
       <select
+        key={currentPlan}
         name="plan"
         defaultValue={currentPlan}
         className="w-full rounded-lg border px-3 py-2 text-sm outline-none"

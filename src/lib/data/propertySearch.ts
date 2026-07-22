@@ -1,4 +1,5 @@
 import type { Prisma } from '@prisma/client'
+import { normalizeCity } from './propertyFields'
 
 /** The filter shape persisted in SavedSearch.filters and accepted from the
  *  browse query string. All fields optional; unknown keys are ignored. */
@@ -36,7 +37,7 @@ export function normalizeFilters(raw: Record<string, unknown> | null | undefined
 export function buildPropertyWhere(filters: PropertyFilters): Prisma.PropertyWhereInput {
   const where: Prisma.PropertyWhereInput = { status: 'LIVE' }
   if (filters.type) where.type = filters.type
-  if (filters.city) where.city = { contains: filters.city, mode: 'insensitive' }
+  if (filters.city) where.city = { equals: normalizeCity(filters.city), mode: 'insensitive' }
   if (filters.minBhk) where.bhk = { gte: filters.minBhk }
   if (filters.minPrice || filters.maxPrice) {
     where.askingPrice = {
@@ -45,9 +46,11 @@ export function buildPropertyWhere(filters: PropertyFilters): Prisma.PropertyWhe
     }
   }
   if (filters.q) {
+    const normalizedQ = normalizeCity(filters.q)
     where.OR = [
       { title: { contains: filters.q, mode: 'insensitive' } },
       { location: { contains: filters.q, mode: 'insensitive' } },
+      { city: { equals: normalizedQ, mode: 'insensitive' } },
     ]
   }
   return where

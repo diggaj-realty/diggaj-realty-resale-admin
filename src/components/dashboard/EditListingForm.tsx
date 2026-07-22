@@ -42,6 +42,15 @@ export default function EditListingForm({
   const [askingPrice, setAskingPrice] = useState(String(initial.askingPrice))
   const [uploading, setUploading] = useState(false)
   const formRef = useRef<HTMLFormElement>(null)
+  const [location, setLocation] = useState(initial.location)
+  const autoLocationRef = useRef('')
+
+  function handleLocationSuggest(city: string, locality: string) {
+    const suggested = [locality, city].filter(Boolean).join(', ')
+    if (!suggested) return
+    setLocation((prev) => (prev === '' || prev === autoLocationRef.current ? suggested : prev))
+    autoLocationRef.current = suggested
+  }
 
   function handleSubmit(formData: FormData) {
     setError(null)
@@ -90,7 +99,16 @@ export default function EditListingForm({
 
       <div>
         <label className="mb-1.5 block text-xs font-semibold" style={{ color: 'var(--text-2)' }}>Location</label>
-        <input type="text" name="location" required defaultValue={initial.location} placeholder="Area, City" className="w-full rounded-lg border px-3 py-2 text-sm outline-none" style={inputStyle} />
+        <input
+          type="text"
+          name="location"
+          required
+          value={location}
+          onChange={(e) => setLocation(e.target.value)}
+          placeholder="Area, City"
+          className="w-full rounded-lg border px-3 py-2 text-sm outline-none"
+          style={inputStyle}
+        />
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -168,7 +186,7 @@ export default function EditListingForm({
         <p className="mt-1 text-xs" style={{ color: 'var(--text-3)' }}>Optional, appended to existing media, max 45MB each.</p>
       </div>
 
-      <PropertyRichFields amenityOptions={amenityOptions} defaults={initial} />
+      <PropertyRichFields amenityOptions={amenityOptions} defaults={initial} onLocationSuggest={handleLocationSuggest} />
 
       {error && (
         <p className="rounded-lg px-3 py-2 text-xs font-semibold" style={{ background: 'var(--red-50)', color: 'var(--red-700)' }}>
