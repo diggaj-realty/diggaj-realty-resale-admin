@@ -10,6 +10,7 @@ import DashboardEntrance from '@/components/dashboard/DashboardEntrance'
 import StatusPill from '@/components/dashboard/StatusPill'
 import EditListingForm from '@/components/dashboard/EditListingForm'
 import AssignAgentForm from '@/components/dashboard/AssignAgentForm'
+import MediaGallery from '@/components/dashboard/MediaGallery'
 import ReviewActions from '@/components/dashboard/ReviewActions'
 import { reviewListing } from '@/lib/actions/backend'
 import { getPropertyViewStats } from '@/lib/data/propertyViews'
@@ -112,31 +113,7 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
 
           <div className="card p-6">
             <h2 className="mb-4 text-sm font-semibold" style={{ color: 'var(--text-1)' }}>Media ({property.photos.length})</h2>
-            {property.photos.length > 0 ? (
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                {property.photos.map((photo) =>
-                  photo.mediaType === 'VIDEO' ? (
-                    <video
-                      key={photo.id}
-                      src={photo.photoUrl}
-                      controls
-                      className="aspect-square w-full rounded-lg border object-cover"
-                      style={{ borderColor: 'var(--line)' }}
-                    />
-                  ) : (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img key={photo.id} src={photo.photoUrl} alt={property.title} className="aspect-square w-full rounded-lg border object-cover" style={{ borderColor: 'var(--line)' }} />
-                  )
-                )}
-              </div>
-            ) : (
-              <div
-                className="flex aspect-[3/1] w-full items-center justify-center rounded-lg border border-dashed text-sm"
-                style={{ borderColor: 'var(--line)', color: 'var(--text-3)', background: 'var(--surface-2)' }}
-              >
-                No photos or videos uploaded yet
-              </div>
-            )}
+            <MediaGallery photos={property.photos} canEdit={canEdit} />
           </div>
 
           {canEdit && (

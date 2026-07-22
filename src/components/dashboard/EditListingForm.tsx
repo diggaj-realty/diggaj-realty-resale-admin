@@ -4,6 +4,7 @@ import { useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Building2 } from 'lucide-react'
 import { updateListing } from '@/lib/actions/listings'
+import { uploadPropertyMediaFiles } from '@/lib/clientMediaUpload'
 import PropertyRichFields, { type PropertyRichDefaults } from './PropertyRichFields'
 
 const PROPERTY_TYPES = [
@@ -36,6 +37,7 @@ export default function EditListingForm({
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
   const [type, setType] = useState(initial.type)
+  const [uploading, setUploading] = useState(false)
   const formRef = useRef<HTMLFormElement>(null)
 
   function handleSubmit(formData: FormData) {
@@ -43,11 +45,24 @@ export default function EditListingForm({
     setSuccess(false)
     startTransition(async () => {
       try {
+        const photos = formData.getAll('photos').filter((f): f is File => f instanceof File && f.size > 0)
+        const videos = formData.getAll('videos').filter((f): f is File => f instanceof File && f.size > 0)
+        formData.delete('photos')
+        formData.delete('videos')
+
         await updateListing(formData)
+
+        if (photos.length > 0 || videos.length > 0) {
+          setUploading(true)
+          await uploadPropertyMediaFiles(propertyId, photos, videos)
+        }
+
         setSuccess(true)
         router.refresh()
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.')
+      } finally {
+        setUploading(false)
       }
     })
   }
@@ -146,7 +161,7 @@ export default function EditListingForm({
         disabled={pending}
         className="btn-accent rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-70"
       >
-        {pending ? 'Saving...' : 'Save Changes'}
+        {uploading ? 'Uploading media...' : pending ? 'Saving...' : 'Save Changes'}
       </button>
     </form>
   )

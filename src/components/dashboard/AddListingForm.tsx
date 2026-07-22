@@ -4,6 +4,7 @@ import { useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Building2 } from 'lucide-react'
 import { createListing } from '@/lib/actions/listings'
+import { uploadPropertyMediaFiles } from '@/lib/clientMediaUpload'
 import PropertyRichFields from './PropertyRichFields'
 
 const PROPERTY_TYPES = [
@@ -19,17 +20,31 @@ export default function AddListingForm({ amenityOptions }: { amenityOptions: str
   const [pending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
   const [type, setType] = useState('RESIDENTIAL')
+  const [uploading, setUploading] = useState(false)
   const formRef = useRef<HTMLFormElement>(null)
 
   function handleSubmit(formData: FormData) {
     setError(null)
     startTransition(async () => {
       try {
-        await createListing(formData)
+        const photos = formData.getAll('photos').filter((f): f is File => f instanceof File && f.size > 0)
+        const videos = formData.getAll('videos').filter((f): f is File => f instanceof File && f.size > 0)
+        formData.delete('photos')
+        formData.delete('videos')
+
+        const propertyId = await createListing(formData)
+
+        if (photos.length > 0 || videos.length > 0) {
+          setUploading(true)
+          await uploadPropertyMediaFiles(propertyId, photos, videos)
+        }
+
         formRef.current?.reset()
         router.push('/dashboard/listings')
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.')
+      } finally {
+        setUploading(false)
       }
     })
   }
@@ -121,7 +136,7 @@ export default function AddListingForm({ amenityOptions }: { amenityOptions: str
         disabled={pending}
         className="btn-accent rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-70"
       >
-        {pending ? 'Submitting...' : 'Submit Listing'}
+        {uploading ? 'Uploading media...' : pending ? 'Submitting...' : 'Submit Listing'}
       </button>
     </form>
   )
