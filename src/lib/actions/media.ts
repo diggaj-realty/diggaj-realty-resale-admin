@@ -2,6 +2,7 @@
 
 import { getServerSession } from 'next-auth'
 import { revalidatePath } from 'next/cache'
+import { redirect } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
@@ -98,4 +99,30 @@ export async function deletePropertyMedia(photoId: string) {
   revalidatePath('/dashboard/listings')
   revalidatePath(`/dashboard/listings/${photo.propertyId}`)
   revalidatePath('/dashboard')
+}
+
+export async function deleteListing(formData: FormData) {
+  const propertyId = String(formData.get('propertyId'))
+  const property = await requirePropertyEditAccess(propertyId)
+
+  const deal = await prisma.deal.findUnique({ where: { propertyId } })
+  if (deal) throw new Error('This listing has a deal in progress and cannot be deleted.')
+
+  const photos = await prisma.propertyPhoto.findMany({ where: { propertyId } })
+  const marker = `/object/public/${BUCKET}/`
+  const paths = photos
+    .map((p) => {
+      const idx = p.photoUrl.indexOf(marker)
+      return idx === -1 ? null : p.photoUrl.slice(idx + marker.length)
+    })
+    .filter((p): p is string => p != null)
+  if (paths.length > 0) {
+    await supabaseAdmin().storage.from(BUCKET).remove(paths)
+  }
+
+  await prisma.property.delete({ where: { id: property.id } })
+
+  revalidatePath('/dashboard/listings')
+  revalidatePath('/dashboard')
+  redirect('/dashboard/listings')
 }

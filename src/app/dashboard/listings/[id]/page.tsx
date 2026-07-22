@@ -12,6 +12,7 @@ import EditListingForm from '@/components/dashboard/EditListingForm'
 import AssignAgentForm from '@/components/dashboard/AssignAgentForm'
 import MediaGallery from '@/components/dashboard/MediaGallery'
 import ReviewActions from '@/components/dashboard/ReviewActions'
+import DeleteListingButton from '@/components/dashboard/DeleteListingButton'
 import { reviewListing } from '@/lib/actions/backend'
 import { getPropertyViewStats } from '@/lib/data/propertyViews'
 import { getActiveAmenityNames } from '@/lib/data/amenities'
@@ -53,9 +54,12 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
 
   return (
     <DashboardEntrance>
-      <Link href="/dashboard/listings" className="mb-3 inline-flex items-center gap-1.5 text-xs font-semibold" style={{ color: 'var(--text-3)' }}>
-        <ArrowLeft size={13} /> Back to Listings
-      </Link>
+      <div className="mb-3 flex items-center justify-between">
+        <Link href="/dashboard/listings" className="inline-flex items-center gap-1.5 text-xs font-semibold" style={{ color: 'var(--text-3)' }}>
+          <ArrowLeft size={13} /> Back to Listings
+        </Link>
+        {canEdit && <DeleteListingButton propertyId={property.id} />}
+      </div>
       <PageHeader title={property.title} subtitle={property.location} />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
