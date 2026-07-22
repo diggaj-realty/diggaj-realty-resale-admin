@@ -29,6 +29,7 @@ export default function EditListingForm({
     areaSqft: number
     bhk: number | null
     askingPrice: number
+    unitsAvailable: number
   } & PropertyRichDefaults
   amenityOptions: string[]
 }) {
@@ -126,9 +127,17 @@ export default function EditListingForm({
         </div>
       </div>
 
-      <div>
-        <label className="mb-1.5 block text-xs font-semibold" style={{ color: 'var(--text-2)' }}>Asking Price (₹)</label>
-        <input type="number" name="askingPrice" min={1} required defaultValue={initial.askingPrice} className="w-full rounded-lg border px-3 py-2 text-sm outline-none" style={inputStyle} />
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div>
+          <label className="mb-1.5 block text-xs font-semibold" style={{ color: 'var(--text-2)' }}>Asking Price (₹)</label>
+          <input type="number" name="askingPrice" min={1} required defaultValue={initial.askingPrice} className="w-full rounded-lg border px-3 py-2 text-sm outline-none" style={inputStyle} />
+        </div>
+
+        <div>
+          <label className="mb-1.5 block text-xs font-semibold" style={{ color: 'var(--text-2)' }}>Units Available</label>
+          <input type="number" name="unitsAvailable" min={1} step={1} required defaultValue={initial.unitsAvailable} className="w-full rounded-lg border px-3 py-2 text-sm outline-none" style={inputStyle} />
+          <p className="mt-1 text-xs" style={{ color: 'var(--text-3)' }}>How many identical units of this property are for sale.</p>
+        </div>
       </div>
 
       <div>

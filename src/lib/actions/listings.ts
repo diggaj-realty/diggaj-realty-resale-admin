@@ -33,12 +33,15 @@ export async function createListing(formData: FormData): Promise<string> {
   const bhkRaw = formData.get('bhk')
   const bhk = type === 'PLOT' || !bhkRaw ? null : Number(bhkRaw)
   const askingPrice = Number(formData.get('askingPrice'))
+  const unitsAvailableRaw = formData.get('unitsAvailable')
+  const unitsAvailable = unitsAvailableRaw ? Number(unitsAvailableRaw) : 1
 
   if (!title) throw new Error('Title is required.')
   if (!location) throw new Error('Location is required.')
   if (!['RESIDENTIAL', 'PLOT', 'COMMERCIAL'].includes(type)) throw new Error('Invalid property type.')
   if (!areaSqft || areaSqft <= 0) throw new Error('Area (sqft) is required.')
   if (!askingPrice || askingPrice <= 0) throw new Error('Asking price is required.')
+  if (!Number.isInteger(unitsAvailable) || unitsAvailable < 1) throw new Error('Units available must be a positive whole number.')
 
   const { listingApprovalRequired } = await getAppConfig()
 
@@ -56,6 +59,7 @@ export async function createListing(formData: FormData): Promise<string> {
       areaSqft,
       bhk,
       askingPrice,
+      unitsAvailable,
       status: listingApprovalRequired ? 'DRAFT' : 'LIVE',
       verifiedAt: listingApprovalRequired ? null : new Date(),
     } as Prisma.PropertyUncheckedCreateInput,
@@ -100,12 +104,15 @@ export async function updateListing(formData: FormData) {
   const bhkRaw = formData.get('bhk')
   const bhk = type === 'PLOT' || !bhkRaw ? null : Number(bhkRaw)
   const askingPrice = Number(formData.get('askingPrice'))
+  const unitsAvailableRaw = formData.get('unitsAvailable')
+  const unitsAvailable = unitsAvailableRaw ? Number(unitsAvailableRaw) : 1
 
   if (!title) throw new Error('Title is required.')
   if (!location) throw new Error('Location is required.')
   if (!['RESIDENTIAL', 'PLOT', 'COMMERCIAL'].includes(type)) throw new Error('Invalid property type.')
   if (!areaSqft || areaSqft <= 0) throw new Error('Area (sqft) is required.')
   if (!askingPrice || askingPrice <= 0) throw new Error('Asking price is required.')
+  if (!Number.isInteger(unitsAvailable) || unitsAvailable < 1) throw new Error('Units available must be a positive whole number.')
 
   const rich = buildRichPropertyData(richInputFromFormData(formData))
 
@@ -120,6 +127,7 @@ export async function updateListing(formData: FormData) {
       areaSqft,
       bhk,
       askingPrice,
+      unitsAvailable,
     } as Prisma.PropertyUncheckedUpdateInput,
   })
 

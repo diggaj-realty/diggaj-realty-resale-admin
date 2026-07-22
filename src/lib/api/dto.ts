@@ -52,6 +52,7 @@ export function propertyDTO(p: PropertyWithRelations) {
     areaSqft: p.areaSqft,
     bhk: p.bhk,
     askingPrice: p.askingPrice,
+    unitsAvailable: p.unitsAvailable,
     status: p.status,
     plan: p.plan,
     viewCount: p.viewCount,

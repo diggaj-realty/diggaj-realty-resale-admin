@@ -80,6 +80,7 @@ model Property {
   areaSqft    Float
   bhk         Int?
   askingPrice Float
+  unitsAvailable Int    @default(1) // stock: how many identical units of this property are available
   status      String    @default("DRAFT") // PropertyStatus enum
   plan        String    @default("BASIC") // SellerPlan enum
   verifiedAt  DateTime?

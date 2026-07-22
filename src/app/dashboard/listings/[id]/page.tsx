@@ -92,6 +92,10 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
                 </div>
               )}
               <div>
+                <dt className="text-xs" style={{ color: 'var(--text-3)' }}>Units Available</dt>
+                <dd style={{ color: 'var(--text-1)' }}>{property.unitsAvailable}</dd>
+              </div>
+              <div>
                 <dt className="text-xs" style={{ color: 'var(--text-3)' }}>Listed</dt>
                 <dd style={{ color: 'var(--text-1)' }}>
                   {new Date(property.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
@@ -128,6 +132,7 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
                 areaSqft: property.areaSqft,
                 bhk: property.bhk,
                 askingPrice: property.askingPrice,
+                unitsAvailable: property.unitsAvailable,
                 city: property.city,
                 locality: property.locality,
                 pincode: property.pincode,
