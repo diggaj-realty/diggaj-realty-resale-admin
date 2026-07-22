@@ -10,6 +10,7 @@ import DashboardEntrance from '@/components/dashboard/DashboardEntrance'
 import StatusPill from '@/components/dashboard/StatusPill'
 import EditListingForm from '@/components/dashboard/EditListingForm'
 import AssignAgentForm from '@/components/dashboard/AssignAgentForm'
+import PropertyPlanForm from '@/components/dashboard/PropertyPlanForm'
 import MediaGallery from '@/components/dashboard/MediaGallery'
 import ReviewActions from '@/components/dashboard/ReviewActions'
 import DeleteListingButton from '@/components/dashboard/DeleteListingButton'
@@ -229,6 +230,13 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
               </div>
             )}
           </div>
+
+          {canAssignAgent && (
+            <div className="card p-6">
+              <h2 className="mb-4 text-sm font-semibold" style={{ color: 'var(--text-1)' }}>Listing Plan</h2>
+              <PropertyPlanForm propertyId={property.id} currentPlan={property.plan} />
+            </div>
+          )}
         </div>
       </div>
     </DashboardEntrance>

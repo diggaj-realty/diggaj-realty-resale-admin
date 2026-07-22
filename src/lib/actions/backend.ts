@@ -64,6 +64,33 @@ export async function reviewListing(formData: FormData) {
   revalidatePath(`/dashboard/listings/${propertyId}`)
 }
 
+const SELLER_PLANS = ['BASIC', 'VERIFIED', 'VERIFIED_PLUS', 'ELITE'] as const
+
+export async function updatePropertyPlan(formData: FormData) {
+  const session = await getServerSession(authOptions)
+  if (!session || (session.user.role !== 'BACKEND' && session.user.role !== 'ADMIN')) throw new Error('Unauthorized')
+  const propertyId = String(formData.get('propertyId'))
+  const plan = String(formData.get('plan'))
+  if (!SELLER_PLANS.includes(plan as (typeof SELLER_PLANS)[number])) throw new Error('Invalid plan')
+
+  const property = await prisma.property.update({
+    where: { id: propertyId },
+    data: { plan },
+  })
+
+  await notifyUsers([
+    {
+      userId: property.sellerId,
+      title: 'Listing plan updated',
+      message: `${property.title} has been moved to the ${plan.replace('_', ' ')} plan.`,
+    },
+  ])
+
+  revalidatePath('/dashboard/listings')
+  revalidatePath(`/dashboard/listings/${propertyId}`)
+  revalidatePath('/dashboard')
+}
+
 async function requirePendingReviewOffer(offerId: string) {
   const offer = await prisma.offer.findUnique({
     where: { id: offerId },

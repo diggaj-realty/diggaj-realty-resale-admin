@@ -8,6 +8,7 @@ import PageHeader from '@/components/dashboard/PageHeader'
 import StatusPill from '@/components/dashboard/StatusPill'
 import DashboardEntrance from '@/components/dashboard/DashboardEntrance'
 import ExportButton from '@/components/dashboard/ExportButton'
+import DeleteListingButton from '@/components/dashboard/DeleteListingButton'
 
 const SORTS = {
   newest: { createdAt: 'desc' as const },
@@ -116,6 +117,7 @@ export default async function ListingsPage({
                   <th className="px-5 py-3">Type</th>
                   <th className="px-5 py-3">Views</th>
                   <th className="px-5 py-3">Status</th>
+                  {(role === 'ADMIN' || role === 'BACKEND') && <th className="px-5 py-3">Actions</th>}
                 </tr>
               </thead>
               <tbody>
@@ -131,6 +133,9 @@ export default async function ListingsPage({
                     <td className="px-5 py-3.5" style={{ color: 'var(--text-2)' }}>{p.type}</td>
                     <td className="px-5 py-3.5" style={{ color: 'var(--text-2)' }}>{p.viewCount}</td>
                     <td className="px-5 py-3.5"><StatusPill status={p.status} /></td>
+                    {(role === 'ADMIN' || role === 'BACKEND') && (
+                      <td className="px-5 py-3.5"><DeleteListingButton propertyId={p.id} /></td>
+                    )}
                   </tr>
                 ))}
               </tbody>
