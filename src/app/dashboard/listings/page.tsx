@@ -26,7 +26,7 @@ export default async function ListingsPage({
   if (!session) redirect('/login')
   const { id, role } = session.user
 
-  if (!['SELLER', 'AGENT', 'ADMIN'].includes(role)) redirect('/dashboard')
+  if (!['SELLER', 'AGENT', 'ADMIN', 'BACKEND'].includes(role)) redirect('/dashboard')
 
   const where = {
     ...(role === 'SELLER' ? { sellerId: id } : role === 'AGENT' ? { agentId: id } : {}),
@@ -48,15 +48,20 @@ export default async function ListingsPage({
     <DashboardEntrance>
       <div className="flex items-center justify-between gap-3">
         <PageHeader title={title} subtitle={`${properties.length} propert${properties.length === 1 ? 'y' : 'ies'}`} />
-        <ExportButton
-          rows={properties.map((p) => ({
-            title: p.title,
-            subtitle: `${p.location} · ${p.type} · Seller: ${p.seller.name}${p.agent ? ` · Agent: ${p.agent.name}` : ''}`,
-            amountLabel: formatINR(p.askingPrice),
-            status: p.status,
-          }))}
-          filename="listings"
-        />
+        <div className="flex items-center gap-2">
+          <Link href="/dashboard/listings/new" className="btn-accent rounded-lg px-3 py-2 text-xs font-semibold">
+            Add Listing
+          </Link>
+          <ExportButton
+            rows={properties.map((p) => ({
+              title: p.title,
+              subtitle: `${p.location} · ${p.type} · Seller: ${p.seller.name}${p.agent ? ` · Agent: ${p.agent.name}` : ''}`,
+              amountLabel: formatINR(p.askingPrice),
+              status: p.status,
+            }))}
+            filename="listings"
+          />
+        </div>
       </div>
 
       <form className="mb-4 flex flex-wrap items-center gap-2 text-xs" data-animate="fade-up">

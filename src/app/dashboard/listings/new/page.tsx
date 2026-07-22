@@ -10,7 +10,7 @@ import { getActiveAmenityNames } from '@/lib/data/amenities'
 export default async function NewListingPage() {
   const session = await getServerSession(authOptions)
   if (!session) redirect('/login')
-  if (session.user.role !== 'SELLER' && session.user.role !== 'AGENT') redirect('/dashboard')
+  if (!['SELLER', 'AGENT', 'ADMIN', 'BACKEND'].includes(session.user.role)) redirect('/dashboard')
 
   if (session.user.role === 'SELLER') {
     const kyc = await prisma.sellerKyc.findUnique({ where: { userId: session.user.id } })

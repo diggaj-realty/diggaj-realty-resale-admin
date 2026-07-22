@@ -10,15 +10,18 @@ import { getAppConfig } from '@/lib/actions/appConfig'
 import { buildRichPropertyData, richInputFromFormData } from '@/lib/data/propertyFields'
 import type { Prisma } from '@prisma/client'
 
+const STAFF_ROLES = ['AGENT', 'ADMIN', 'BACKEND']
+
 export async function createListing(formData: FormData) {
   const session = await getServerSession(authOptions)
-  if (!session || (session.user.role !== 'SELLER' && session.user.role !== 'AGENT')) throw new Error('Unauthorized')
+  if (!session || (session.user.role !== 'SELLER' && !STAFF_ROLES.includes(session.user.role))) throw new Error('Unauthorized')
 
+  const isStaff = STAFF_ROLES.includes(session.user.role)
   const isAgent = session.user.role === 'AGENT'
 
-  // Agents act as the seller of record for properties they list themselves — they're
-  // internally vetted staff, not subject to the seller KYC flow.
-  if (!isAgent) {
+  // Staff (agents, backend ops, admins) act as the seller of record for properties
+  // they list themselves — they're internally vetted, not subject to the seller KYC flow.
+  if (!isStaff) {
     const kyc = await prisma.sellerKyc.findUnique({ where: { userId: session.user.id } })
     if (kyc?.status !== 'APPROVED') throw new Error('KYC must be approved before creating a listing.')
   }

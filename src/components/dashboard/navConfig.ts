@@ -69,6 +69,7 @@ export function getNavIcons(role: UserRole): NavIcon[] {
         home,
         { key: 'kyc', label: 'KYC Queue', icon: ShieldCheck, href: '/dashboard/kyc' },
         { key: 'queue', label: 'Listings Queue', icon: ClipboardList, href: '/dashboard/queue' },
+        { key: 'listings', label: 'All Listings', icon: Building2, href: '/dashboard/listings' },
         { key: 'negotiations', label: 'Negotiations', icon: Scale, href: '/dashboard/negotiations' },
         performance,
         settings,
