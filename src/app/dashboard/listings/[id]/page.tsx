@@ -141,6 +141,8 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
                 city: property.city,
                 locality: property.locality,
                 pincode: property.pincode,
+                latitude: property.latitude,
+                longitude: property.longitude,
                 carpetAreaSqft: property.carpetAreaSqft,
                 builtUpAreaSqft: property.builtUpAreaSqft,
                 superBuiltUpAreaSqft: property.superBuiltUpAreaSqft,

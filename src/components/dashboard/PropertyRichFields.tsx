@@ -2,11 +2,13 @@
 
 import { useState } from 'react'
 import { ChevronDown, ChevronUp } from 'lucide-react'
-import { FURNISHING, FACING, POSSESSION_STATUS, OWNERSHIP_TYPE } from '@/lib/data/propertyFields'
+import { FURNISHING, FACING, POSSESSION_STATUS, OWNERSHIP_TYPE, CITIES, normalizeCity } from '@/lib/data/propertyFields'
 import { BUILDER_NAMES, projectsForBuilder } from '@/lib/data/builders'
 import { formatMoneyHint } from '@/lib/format'
+import LocationPicker from './LocationPicker'
 
 const OTHER_BUILDER = 'Other / not listed'
+const OTHER_CITY = 'Other / not listed'
 
 const inputStyle = { borderColor: 'var(--line)', color: 'var(--text-1)', background: 'var(--surface)' }
 const labelClass = 'mb-1.5 block text-xs font-semibold'
@@ -15,6 +17,8 @@ export interface PropertyRichDefaults {
   city?: string | null
   locality?: string | null
   pincode?: string | null
+  latitude?: number | null
+  longitude?: number | null
   carpetAreaSqft?: number | null
   builtUpAreaSqft?: number | null
   superBuiltUpAreaSqft?: number | null
@@ -62,6 +66,31 @@ export default function PropertyRichFields({
   const projectOptions = projectsForBuilder(builder === OTHER_BUILDER ? undefined : builder)
   const [maintenanceMonthly, setMaintenanceMonthly] = useState(d.maintenanceMonthly != null ? String(d.maintenanceMonthly) : '')
 
+  const cityKnown = !!d.city && (CITIES as readonly string[]).includes(d.city)
+  const [city, setCity] = useState(cityKnown ? d.city! : d.city ? OTHER_CITY : '')
+  const [cityOther, setCityOther] = useState(cityKnown ? '' : d.city ?? '')
+  const [locality, setLocality] = useState(d.locality ?? '')
+  const [pincode, setPincode] = useState(d.pincode ?? '')
+  const [lat, setLat] = useState<number | null>(d.latitude ?? null)
+  const [lon, setLon] = useState<number | null>(d.longitude ?? null)
+
+  function handleLocationPick(loc: { lat: number; lon: number; city?: string; locality?: string; pincode?: string }) {
+    setLat(loc.lat)
+    setLon(loc.lon)
+    if (loc.locality) setLocality(loc.locality)
+    if (loc.pincode) setPincode(loc.pincode)
+    if (loc.city) {
+      const normalized = normalizeCity(loc.city)
+      if ((CITIES as readonly string[]).includes(normalized)) {
+        setCity(normalized)
+        setCityOther('')
+      } else {
+        setCity(OTHER_CITY)
+        setCityOther(normalized)
+      }
+    }
+  }
+
   return (
     <div className="border-t pt-5" style={{ borderColor: 'var(--line)' }}>
       <button
@@ -79,16 +108,60 @@ export default function PropertyRichFields({
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div>
               <label className={labelClass} style={{ color: 'var(--text-2)' }}>City</label>
-              <input type="text" name="city" defaultValue={d.city ?? ''} className="w-full rounded-lg border px-3 py-2 text-sm outline-none" style={inputStyle} />
+              <select
+                name={city === OTHER_CITY ? undefined : 'city'}
+                value={city}
+                onChange={(e) => setCity(e.target.value)}
+                className="w-full rounded-lg border px-3 py-2 text-sm outline-none"
+                style={inputStyle}
+              >
+                <option value="">—</option>
+                {CITIES.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+                <option value={OTHER_CITY}>{OTHER_CITY}</option>
+              </select>
+              {city === OTHER_CITY && (
+                <input
+                  type="text"
+                  name="city"
+                  placeholder="City name"
+                  value={cityOther}
+                  onChange={(e) => setCityOther(e.target.value)}
+                  className="mt-2 w-full rounded-lg border px-3 py-2 text-sm outline-none"
+                  style={inputStyle}
+                />
+              )}
             </div>
             <div>
               <label className={labelClass} style={{ color: 'var(--text-2)' }}>Locality</label>
-              <input type="text" name="locality" defaultValue={d.locality ?? ''} className="w-full rounded-lg border px-3 py-2 text-sm outline-none" style={inputStyle} />
+              <input
+                type="text"
+                name="locality"
+                value={locality}
+                onChange={(e) => setLocality(e.target.value)}
+                className="w-full rounded-lg border px-3 py-2 text-sm outline-none"
+                style={inputStyle}
+              />
             </div>
             <div>
               <label className={labelClass} style={{ color: 'var(--text-2)' }}>Pincode</label>
-              <input type="text" name="pincode" defaultValue={d.pincode ?? ''} className="w-full rounded-lg border px-3 py-2 text-sm outline-none" style={inputStyle} />
+              <input
+                type="text"
+                name="pincode"
+                value={pincode}
+                onChange={(e) => setPincode(e.target.value)}
+                className="w-full rounded-lg border px-3 py-2 text-sm outline-none"
+                style={inputStyle}
+              />
             </div>
+          </div>
+
+          <div>
+            <label className={labelClass} style={{ color: 'var(--text-2)' }}>Map location</label>
+            <input type="hidden" name="latitude" value={lat ?? ''} />
+            <input type="hidden" name="longitude" value={lon ?? ''} />
+            <LocationPicker initialLat={d.latitude} initialLon={d.longitude} onPick={handleLocationPick} />
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

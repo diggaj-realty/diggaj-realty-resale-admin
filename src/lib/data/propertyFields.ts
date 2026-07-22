@@ -5,6 +5,58 @@ export const FACING = ['N', 'S', 'E', 'W', 'NE', 'NW', 'SE', 'SW'] as const
 export const POSSESSION_STATUS = ['READY_TO_MOVE', 'UNDER_CONSTRUCTION'] as const
 export const OWNERSHIP_TYPE = ['FREEHOLD', 'LEASEHOLD', 'POWER_OF_ATTORNEY', 'CO_OPERATIVE'] as const
 
+/** Canonical Indian city names, offered as a dropdown so listings can't
+ *  fragment across spellings (Bangalore/Bengaluru, Gurgaon/Gurugram, ...). */
+export const CITIES = [
+  'Bangalore',
+  'Mumbai',
+  'Delhi',
+  'Pune',
+  'Hyderabad',
+  'Chennai',
+  'Kolkata',
+  'Ahmedabad',
+  'Noida',
+  'Gurgaon',
+  'Jaipur',
+  'Chandigarh',
+  'Kochi',
+  'Coimbatore',
+  'Lucknow',
+  'Indore',
+  'Nagpur',
+  'Surat',
+  'Thane',
+  'Navi Mumbai',
+] as const
+
+/** Common alternate spellings/old names mapped to the canonical CITIES entry above. */
+const CITY_ALIASES: Record<string, string> = {
+  bengaluru: 'Bangalore',
+  banglore: 'Bangalore',
+  bangaluru: 'Bangalore',
+  bombay: 'Mumbai',
+  gurugram: 'Gurgaon',
+  cochin: 'Kochi',
+  madras: 'Chennai',
+  calcutta: 'Kolkata',
+  navimumbai: 'Navi Mumbai',
+  'new delhi': 'Delhi',
+  newdelhi: 'Delhi',
+}
+
+/** Normalise a free-typed city string to its canonical form when recognised,
+ *  otherwise return it trimmed as-is (India has far more towns than CITIES lists). */
+export function normalizeCity(input: string): string {
+  const trimmed = input.trim()
+  if (!trimmed) return trimmed
+  const key = trimmed.toLowerCase()
+  const exact = CITIES.find((c) => c.toLowerCase() === key)
+  if (exact) return exact
+  if (CITY_ALIASES[key]) return CITY_ALIASES[key]
+  return trimmed
+}
+
 /** Fallback amenity checklist used when the Amenity master table is empty. */
 export const DEFAULT_AMENITIES = [
   'Lift',
@@ -29,6 +81,8 @@ export interface RichPropertyInput {
   city?: unknown
   locality?: unknown
   pincode?: unknown
+  latitude?: unknown
+  longitude?: unknown
   carpetAreaSqft?: unknown
   builtUpAreaSqft?: unknown
   superBuiltUpAreaSqft?: unknown
@@ -98,10 +152,13 @@ function assignDefined(target: Record<string, unknown>, entries: Record<string, 
  *  so a bad optional field never blocks a listing. */
 export function buildRichPropertyData(input: RichPropertyInput): Record<string, unknown> {
   const data: Record<string, unknown> = {}
+  const cityRaw = str(input.city)
   assignDefined(data, {
-    city: str(input.city),
+    city: cityRaw ? normalizeCity(cityRaw) : undefined,
     locality: str(input.locality),
     pincode: str(input.pincode),
+    latitude: float(input.latitude),
+    longitude: float(input.longitude),
     carpetAreaSqft: float(input.carpetAreaSqft),
     builtUpAreaSqft: float(input.builtUpAreaSqft),
     superBuiltUpAreaSqft: float(input.superBuiltUpAreaSqft),
@@ -136,6 +193,8 @@ export function richInputFromFormData(fd: FormData): RichPropertyInput {
     city: g('city'),
     locality: g('locality'),
     pincode: g('pincode'),
+    latitude: g('latitude'),
+    longitude: g('longitude'),
     carpetAreaSqft: g('carpetAreaSqft'),
     builtUpAreaSqft: g('builtUpAreaSqft'),
     superBuiltUpAreaSqft: g('superBuiltUpAreaSqft'),
