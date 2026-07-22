@@ -6,6 +6,7 @@ import PageHeader from '@/components/dashboard/PageHeader'
 import DashboardEntrance from '@/components/dashboard/DashboardEntrance'
 import UserActiveToggle from '@/components/dashboard/UserActiveToggle'
 import ExportButton from '@/components/dashboard/ExportButton'
+import CreateStaffUserForm from '@/components/dashboard/CreateStaffUserForm'
 
 const ROLE_TONE: Record<string, { bg: string; text: string }> = {
   SELLER: { bg: 'var(--amber-50)', text: 'var(--amber-700)' },
@@ -43,15 +44,18 @@ export default async function UsersPage({
     <DashboardEntrance>
       <div className="flex items-center justify-between gap-3">
         <PageHeader title="All Users" subtitle={`${users.length} accounts`} />
-        <ExportButton
-          rows={users.map((u) => ({
-            title: u.name,
-            subtitle: u.email,
-            amountLabel: u.role,
-            status: u.isActive ? 'ACTIVE' : 'INACTIVE',
-          }))}
-          filename="users"
-        />
+        <div className="flex items-center gap-2">
+          <CreateStaffUserForm />
+          <ExportButton
+            rows={users.map((u) => ({
+              title: u.name,
+              subtitle: u.email,
+              amountLabel: u.role,
+              status: u.isActive ? 'ACTIVE' : 'INACTIVE',
+            }))}
+            filename="users"
+          />
+        </div>
       </div>
 
       <form className="mb-4 flex flex-wrap items-center gap-2 text-xs" data-animate="fade-up">

@@ -1,10 +1,38 @@
 'use server'
 
+import bcrypt from 'bcryptjs'
 import { getServerSession } from 'next-auth'
 import { revalidatePath } from 'next/cache'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { notifyUsers } from '@/lib/notify'
+
+const STAFF_CREATABLE_ROLES = ['AGENT', 'BACKEND']
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+export async function createStaffUser(formData: FormData) {
+  const session = await getServerSession(authOptions)
+  if (!session || session.user.role !== 'ADMIN') throw new Error('Unauthorized')
+
+  const name = String(formData.get('name') || '').trim()
+  const email = String(formData.get('email') || '').trim().toLowerCase()
+  const password = String(formData.get('password') || '')
+  const phone = String(formData.get('phone') || '').trim() || null
+  const role = String(formData.get('role') || '').trim().toUpperCase()
+
+  if (!name) throw new Error('Name is required')
+  if (!EMAIL_RE.test(email)) throw new Error('A valid email is required')
+  if (password.length < 8) throw new Error('Password must be at least 8 characters')
+  if (!STAFF_CREATABLE_ROLES.includes(role)) throw new Error(`Role must be one of: ${STAFF_CREATABLE_ROLES.join(', ')}`)
+
+  const existing = await prisma.user.findUnique({ where: { email } })
+  if (existing) throw new Error('An account with this email already exists')
+
+  const passwordHash = await bcrypt.hash(password, 10)
+  await prisma.user.create({ data: { name, email, phone, passwordHash, role } })
+
+  revalidatePath('/dashboard/users')
+}
 
 export async function toggleUserActive(formData: FormData) {
   const session = await getServerSession(authOptions)
