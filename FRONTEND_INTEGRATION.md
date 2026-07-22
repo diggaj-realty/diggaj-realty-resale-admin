@@ -21,9 +21,7 @@ Prisma, Supabase SDKs, or any backend dependency — just `fetch`.
 
 - **Full endpoint + JSON reference:** `API.md` in the backend repo (copy it
   into this repo too if useful, or fetch it from GitHub).
-- **Base URL:**
-  - **Production (live now, real Supabase DB): `https://diggaj-realty-resale-admin.vercel.app/api/v1`**
-  - Local backend dev (only if you're running the backend yourself too): `http://localhost:3000/api/v1`
+- **Base URL: `https://diggaj-realty-resale-admin.vercel.app/api/v1`** (live now, real Supabase DB)
 - **CORS:** already open (`Access-Control-Allow-Origin: *`) on every
   `/api/v1/*` route, including `OPTIONS` preflight. No proxy needed — call it
   directly from the browser.
