@@ -36,6 +36,7 @@ export const POST = withApi(async (req) => {
     sellerName?: string
     sellerPhone?: string
     sellerEmail?: string
+    referralName?: string
     title?: string
     description?: string
     location?: string
@@ -51,6 +52,7 @@ export const POST = withApi(async (req) => {
   const sellerName = String(body.sellerName || '').trim()
   const sellerPhone = String(body.sellerPhone || '').trim()
   const sellerEmail = String(body.sellerEmail || '').trim().toLowerCase() || undefined
+  const referralName = String(body.referralName || '').trim() || null
 
   const title = String(body.title || '').trim()
   const description = String(body.description || '').trim()
@@ -86,6 +88,7 @@ export const POST = withApi(async (req) => {
       askingPrice,
       status: 'DRAFT',
       isPublicSubmission: true,
+      referralName,
     } as Prisma.PropertyUncheckedCreateInput,
   })
 

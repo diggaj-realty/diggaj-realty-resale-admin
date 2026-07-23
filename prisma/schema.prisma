@@ -91,6 +91,9 @@ model Property {
   // authenticated seller — the seller record behind it is a placeholder with
   // no KYC on file, so reviewers should expect to verify contact info by hand.
   isPublicSubmission Boolean @default(false)
+  // Who referred this seller/submission (optional, free text) — attribution
+  // for word-of-mouth / agent referrals, not tied to any user account.
+  referralName       String?
 
   // ── Structured location (for search/filtering) ──
   city     String?

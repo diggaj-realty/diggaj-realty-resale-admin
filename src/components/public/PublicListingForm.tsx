@@ -4,6 +4,7 @@ import { useRef, useState } from 'react'
 import { CheckCircle2, Loader2, UploadCloud } from 'lucide-react'
 import LocationPicker, { type PickedLocation } from '@/components/dashboard/LocationPicker'
 import { CITIES, FURNISHING, normalizeCity } from '@/lib/data/propertyFields'
+import { BUILDER_NAMES, projectsForBuilder } from '@/lib/data/builders'
 
 const PROPERTY_TYPES = [
   { value: 'RESIDENTIAL', label: 'Residential' },
@@ -12,6 +13,7 @@ const PROPERTY_TYPES = [
 ]
 
 const OTHER_CITY = 'Other'
+const OTHER_BUILDER = 'Other / not listed'
 const MAX_PHOTO_SIZE_BYTES = 15 * 1024 * 1024
 const MAX_VIDEO_SIZE_BYTES = 45 * 1024 * 1024
 
@@ -42,6 +44,10 @@ export default function PublicListingForm({ amenityOptions }: { amenityOptions: 
   const [lat, setLat] = useState<number | null>(null)
   const [lon, setLon] = useState<number | null>(null)
   const [selectedAmenities, setSelectedAmenities] = useState<Set<string>>(new Set())
+  const [builder, setBuilder] = useState('')
+  const [builderOther, setBuilderOther] = useState('')
+  const [projectName, setProjectName] = useState('')
+  const projectOptions = projectsForBuilder(builder === OTHER_BUILDER ? undefined : builder)
 
   const [submitting, setSubmitting] = useState(false)
   const [progress, setProgress] = useState<string | null>(null)
@@ -106,11 +112,13 @@ export default function PublicListingForm({ amenityOptions }: { amenityOptions: 
 
       setProgress('Submitting property details...')
       const resolvedCity = city === OTHER_CITY ? cityOther : city
+      const resolvedBuilder = builder === OTHER_BUILDER ? builderOther : builder
 
       const payload = {
         sellerName: String(fd.get('sellerName') || ''),
         sellerPhone: String(fd.get('sellerPhone') || ''),
         sellerEmail: String(fd.get('sellerEmail') || ''),
+        referralName: String(fd.get('referralName') || ''),
         title: String(fd.get('title') || ''),
         description: String(fd.get('description') || ''),
         location,
@@ -124,6 +132,8 @@ export default function PublicListingForm({ amenityOptions }: { amenityOptions: 
         latitude: lat ?? undefined,
         longitude: lon ?? undefined,
         furnishing: String(fd.get('furnishing') || '') || undefined,
+        builderName: resolvedBuilder || undefined,
+        projectName: projectName || undefined,
         amenities: Array.from(selectedAmenities),
         photoUrls,
         videoUrls,
@@ -189,6 +199,17 @@ export default function PublicListingForm({ amenityOptions }: { amenityOptions: 
           <label className={labelClass} style={{ color: 'var(--text-2)' }}>Email (optional)</label>
           <input type="email" name="sellerEmail" className="w-full rounded-lg border px-3 py-2 text-sm outline-none" style={inputStyle} />
         </div>
+      </div>
+
+      <div>
+        <label className={labelClass} style={{ color: 'var(--text-2)' }}>Referred by (optional)</label>
+        <input
+          type="text"
+          name="referralName"
+          placeholder="Name of the person/agent who referred you, if any"
+          className="w-full max-w-sm rounded-lg border px-3 py-2 text-sm outline-none"
+          style={inputStyle}
+        />
       </div>
 
       <hr style={{ borderColor: 'var(--line)' }} />
@@ -284,12 +305,60 @@ export default function PublicListingForm({ amenityOptions }: { amenityOptions: 
         </div>
       </div>
 
-      <div>
-        <label className={labelClass} style={{ color: 'var(--text-2)' }}>Furnishing</label>
-        <select name="furnishing" className="w-full max-w-xs rounded-lg border px-3 py-2 text-sm outline-none" style={inputStyle}>
-          <option value="">—</option>
-          {FURNISHING.map((f) => <option key={f} value={f}>{f.replace(/_/g, ' ')}</option>)}
-        </select>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div>
+          <label className={labelClass} style={{ color: 'var(--text-2)' }}>Furnishing</label>
+          <select name="furnishing" className="w-full rounded-lg border px-3 py-2 text-sm outline-none" style={inputStyle}>
+            <option value="">—</option>
+            {FURNISHING.map((f) => <option key={f} value={f}>{f.replace(/_/g, ' ')}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className={labelClass} style={{ color: 'var(--text-2)' }}>Builder (optional)</label>
+          <select
+            value={builder}
+            onChange={(e) => { setBuilder(e.target.value); setProjectName('') }}
+            className="w-full rounded-lg border px-3 py-2 text-sm outline-none"
+            style={inputStyle}
+          >
+            <option value="">—</option>
+            {BUILDER_NAMES.map((b) => <option key={b} value={b}>{b}</option>)}
+            <option value={OTHER_BUILDER}>{OTHER_BUILDER}</option>
+          </select>
+          {builder === OTHER_BUILDER && (
+            <input
+              type="text"
+              placeholder="Builder name"
+              value={builderOther}
+              onChange={(e) => setBuilderOther(e.target.value)}
+              className="mt-2 w-full rounded-lg border px-3 py-2 text-sm outline-none"
+              style={inputStyle}
+            />
+          )}
+        </div>
+        <div>
+          <label className={labelClass} style={{ color: 'var(--text-2)' }}>Project name (optional)</label>
+          {projectOptions.length > 0 ? (
+            <select
+              value={projectName}
+              onChange={(e) => setProjectName(e.target.value)}
+              className="w-full rounded-lg border px-3 py-2 text-sm outline-none"
+              style={inputStyle}
+            >
+              <option value="">—</option>
+              {projectOptions.map((p) => <option key={p} value={p}>{p}</option>)}
+            </select>
+          ) : (
+            <input
+              type="text"
+              placeholder="Project name"
+              value={projectName}
+              onChange={(e) => setProjectName(e.target.value)}
+              className="w-full rounded-lg border px-3 py-2 text-sm outline-none"
+              style={inputStyle}
+            />
+          )}
+        </div>
       </div>
 
       {amenityOptions.length > 0 && (

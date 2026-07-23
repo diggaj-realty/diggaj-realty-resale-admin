@@ -51,6 +51,9 @@ export default async function ListingsQueuePage() {
                           Public link · no KYC
                         </span>
                       )}
+                      {p.referralName && (
+                        <p className="mt-1 text-xs" style={{ color: 'var(--text-3)' }}>Referred by: {p.referralName}</p>
+                      )}
                     </td>
                     <td className="px-5 py-3.5" style={{ color: 'var(--text-2)' }}>
                       <p>{p.seller.name}</p>
