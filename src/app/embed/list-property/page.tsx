@@ -6,10 +6,11 @@ export const metadata = {
   description: 'Submit your property details for review. No account needed.',
 }
 
-/** The real seller-intake form. Lives under /embed so it can be proxied from
- *  diggajrealty.com/list-property (see vercel.json in the diggaj-realty-resale
- *  repo) without /list-property on this domain also needing to redirect —
- *  that path just forwards visitors to the canonical diggajrealty.com URL.
+/** The real seller-intake form. Canonical URL is list.diggajrealty.com/ (see
+ *  proxy.ts, which rewrites that domain's root here) — a dedicated custom
+ *  domain on this same Vercel project, avoiding the flaky cross-project
+ *  rewrite diggajrealty.com/list-property used to depend on. Still lives
+ *  under /embed for backward compatibility with that old rewrite path.
  *  Visual language (cream hero, lime accent, pill inputs) is matched to the
  *  diggajrealty.com marketing site rather than this app's own dashboard. */
 export default async function PublicListingPage() {
