@@ -48,3 +48,23 @@ export async function uploadFile(
   if (signError || !data) throw new Error(`Failed to sign URL for "${key}": ${signError?.message ?? 'unknown error'}`)
   return data.signedUrl
 }
+
+/**
+ * Issues a signed *upload* URL so the browser can PUT the file bytes straight
+ * to Supabase Storage, bypassing this server entirely. Needed for the public
+ * no-signup submission flow: routing the file through a Vercel Serverless
+ * Function (as uploadFile above does) hits Vercel's hard 4.5MB request-body
+ * cap regardless of any Next.js config, which silently broke uploads for
+ * virtually any real phone photo/video.
+ */
+export async function createSignedUpload(bucket: UploadBucket, folder: string, fileName: string) {
+  const supabase = supabaseAdmin()
+  const ext = fileName.includes('.') ? fileName.split('.').pop() : 'bin'
+  const key = `${folder}/${crypto.randomUUID()}.${ext}`
+
+  const { data, error } = await supabase.storage.from(bucket).createSignedUploadUrl(key)
+  if (error || !data) throw new Error(`Failed to create signed upload URL: ${error?.message ?? 'unknown error'}`)
+
+  const publicUrl = supabase.storage.from(bucket).getPublicUrl(key).data.publicUrl
+  return { signedUrl: data.signedUrl, token: data.token, path: data.path, publicUrl }
+}

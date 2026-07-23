@@ -2,6 +2,7 @@
 
 import { useRef, useState } from 'react'
 import type { ReactNode } from 'react'
+import { createClient } from '@supabase/supabase-js'
 import {
   Loader2, UploadCloud, User, Home, MapPin, Ruler,
   ScrollText, Building2, Sparkles, Images, X, ImageIcon, Video,
@@ -9,6 +10,15 @@ import {
 import LocationPicker, { type PickedLocation } from '@/components/dashboard/LocationPicker'
 import { CITIES, FURNISHING, FACING, POSSESSION_STATUS, OWNERSHIP_TYPE, normalizeCity } from '@/lib/data/propertyFields'
 import { BUILDER_NAMES, projectsForBuilder } from '@/lib/data/builders'
+
+// Uploads go straight from the browser to Supabase Storage via a signed URL
+// (see uploadOne below) instead of through this app's own API, because
+// routing the file through a Vercel Serverless Function hits Vercel's hard
+// 4.5MB request-body cap — well under a typical phone photo.
+const supabaseBrowser = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
 
 const PROPERTY_TYPES = [
   { value: 'RESIDENTIAL', label: 'Residential' },
@@ -125,13 +135,21 @@ function FileDropzone({
 }
 
 async function uploadOne(file: File, folder: string): Promise<string> {
-  const form = new FormData()
-  form.append('file', file)
-  form.append('folder', folder)
-  const res = await fetch('/api/v1/public/uploads', { method: 'POST', body: form })
+  const res = await fetch('/api/v1/public/uploads', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fileName: file.name, contentType: file.type || 'application/octet-stream', folder }),
+  })
   const json = await res.json()
-  if (!res.ok) throw new Error(json?.error?.message || `Failed to upload "${file.name}"`)
-  return json.data.url as string
+  if (!res.ok) throw new Error(json?.error?.message || `Failed to prepare upload for "${file.name}"`)
+
+  const { path, token, publicUrl } = json.data as { path: string; token: string; publicUrl: string }
+  const { error } = await supabaseBrowser.storage
+    .from('property-media')
+    .uploadToSignedUrl(path, token, file, { contentType: file.type || 'application/octet-stream' })
+  if (error) throw new Error(`Failed to upload "${file.name}": ${error.message}`)
+
+  return publicUrl
 }
 
 export default function PublicListingForm({ amenityOptions }: { amenityOptions: string[] }) {
