@@ -62,21 +62,22 @@ function buyerFacingOfferStatus(status: string): string {
 export { statusTone, buyerFacingOfferStatus }
 
 export async function getSellerDashboard(userId: string): Promise<DashboardData & { kyc: { pending: boolean; rejected: boolean; approved: boolean; remarks: string | null } }> {
-  const [kyc, properties, deals] = await Promise.all([
+  const sevenDaysAgo = new Date(Date.now() - 7 * DAY_MS)
+
+  const [kyc, properties, deals, offersOnMyProps] = await Promise.all([
     prisma.sellerKyc.findUnique({ where: { userId } }),
     prisma.property.findMany({ where: { sellerId: userId }, orderBy: { createdAt: 'desc' }, take: 5 }),
     prisma.deal.findMany({ where: { sellerId: userId }, orderBy: { createdAt: 'desc' }, take: 3, include: { property: { select: { title: true } } } }),
+    prisma.offer.findMany({
+      where: { property: { sellerId: userId }, createdAt: { gte: sevenDaysAgo } },
+      select: { createdAt: true },
+    }),
   ])
 
   const liveCount = properties.filter((p) => p.status === 'LIVE').length
   const pendingCount = properties.filter((p) => p.status === 'PENDING_VERIFICATION').length
   const activeDeals = deals.filter((d) => d.status === 'IN_PROGRESS').length
   const totalValue = properties.reduce((sum, p) => sum + p.askingPrice, 0)
-
-  const offersOnMyProps = await prisma.offer.findMany({
-    where: { property: { sellerId: userId } },
-    select: { createdAt: true },
-  })
 
   return {
     role: 'SELLER',
@@ -155,7 +156,9 @@ export interface NeedsAttentionItem {
 }
 
 export async function getAgentDashboard(agentId: string): Promise<DashboardData & { needsAttention: NeedsAttentionItem[] }> {
-  const [totalListings, totalDeals, closedDeals, unreadNotifs, agreementValueAgg, recentDeals, activeOffers, dealsMissingPayment] = await Promise.all([
+  const sevenDaysAgo = new Date(Date.now() - 7 * DAY_MS)
+
+  const [totalListings, totalDeals, closedDeals, unreadNotifs, agreementValueAgg, recentDeals, activeOffers, dealsMissingPayment, recentAgentDeals] = await Promise.all([
     prisma.property.count({ where: { agentId } }),
     prisma.deal.count({ where: { agentId } }),
     prisma.deal.count({ where: { agentId, status: 'CLOSED' } }),
@@ -175,13 +178,12 @@ export async function getAgentDashboard(agentId: string): Promise<DashboardData 
       where: { agentId, status: 'IN_PROGRESS', OR: [{ tokenAmount: null }, { finalAmount: null }] },
       select: { id: true, tokenAmount: true, finalAmount: true, property: { select: { title: true } } },
     }),
+    prisma.deal.findMany({ where: { agentId, createdAt: { gte: sevenDaysAgo } }, select: { createdAt: true } }),
   ])
 
   const activeDeals = totalDeals - closedDeals
   const closeRate = totalDeals > 0 ? Math.round((closedDeals / totalDeals) * 100) : 0
   const agreementValue = agreementValueAgg._sum.agreedPrice ?? 0
-
-  const allAgentDeals = await prisma.deal.findMany({ where: { agentId }, select: { createdAt: true } })
 
   const needsAttention: NeedsAttentionItem[] = [
     ...activeOffers.map((o) => ({
@@ -209,7 +211,7 @@ export async function getAgentDashboard(agentId: string): Promise<DashboardData 
       { label: 'Close Rate', value: `${closeRate}%`, hint: 'Conversion ratio', tone: 'purple' },
     ],
     performanceTitle: 'Deals — Last 7 Days',
-    performanceSeries: dailyCounts(allAgentDeals.map((d) => d.createdAt)),
+    performanceSeries: dailyCounts(recentAgentDeals.map((d) => d.createdAt)),
     itemsTitle: 'Recent Deal Pipeline',
     emptyMessage: 'No deals assigned yet. Deals will appear once an admin assigns them to you.',
     items: recentDeals.map((d) => ({
@@ -225,7 +227,9 @@ export async function getAgentDashboard(agentId: string): Promise<DashboardData 
 }
 
 export async function getBackendDashboard(): Promise<DashboardData> {
-  const [pendingKyc, totalKyc, draftListings, totalListings, recentKyc, approvedKyc] = await Promise.all([
+  const sevenDaysAgo = new Date(Date.now() - 7 * DAY_MS)
+
+  const [pendingKyc, totalKyc, draftListings, totalListings, recentKyc, approvedKyc, recentKycForChart] = await Promise.all([
     prisma.sellerKyc.count({ where: { status: 'PENDING' } }),
     prisma.sellerKyc.count(),
     prisma.property.count({ where: { status: 'DRAFT' } }),
@@ -237,10 +241,10 @@ export async function getBackendDashboard(): Promise<DashboardData> {
       include: { user: { select: { name: true, email: true } } },
     }),
     prisma.sellerKyc.count({ where: { status: 'APPROVED' } }),
+    prisma.sellerKyc.findMany({ where: { createdAt: { gte: sevenDaysAgo } }, select: { createdAt: true } }),
   ])
 
   const approvalRate = totalKyc > 0 ? Math.round((approvedKyc / totalKyc) * 100) : 0
-  const allKyc = await prisma.sellerKyc.findMany({ select: { createdAt: true } })
 
   return {
     role: 'BACKEND',
@@ -251,7 +255,7 @@ export async function getBackendDashboard(): Promise<DashboardData> {
       { label: 'Total Listings', value: String(totalListings), hint: 'All time', tone: 'purple' },
     ],
     performanceTitle: 'KYC Submissions — Last 7 Days',
-    performanceSeries: dailyCounts(allKyc.map((k) => k.createdAt)),
+    performanceSeries: dailyCounts(recentKycForChart.map((k) => k.createdAt)),
     itemsTitle: 'Oldest KYC Submissions',
     emptyMessage: 'KYC queue is empty. All pending applications have been reviewed.',
     items: recentKyc.map((k) => ({
@@ -265,7 +269,9 @@ export async function getBackendDashboard(): Promise<DashboardData> {
 }
 
 export async function getAdminDashboard(): Promise<DashboardData> {
-  const [totalUsers, totalListings, liveListings, totalDeals, closedDeals, pendingKyc, recentUsers, recentListings] = await Promise.all([
+  const sevenDaysAgo = new Date(Date.now() - 7 * DAY_MS)
+
+  const [totalUsers, totalListings, liveListings, totalDeals, closedDeals, pendingKyc, recentUsers, recentListings, valueResult, recentUsersForChart] = await Promise.all([
     prisma.user.count(),
     prisma.property.count(),
     prisma.property.count({ where: { status: 'LIVE' } }),
@@ -274,13 +280,12 @@ export async function getAdminDashboard(): Promise<DashboardData> {
     prisma.sellerKyc.count({ where: { status: 'PENDING' } }),
     prisma.user.findMany({ orderBy: { createdAt: 'desc' }, take: 5, select: { id: true, name: true, email: true, role: true, createdAt: true } }),
     prisma.property.findMany({ orderBy: { createdAt: 'desc' }, take: 5, include: { seller: { select: { name: true } } } }),
+    prisma.property.aggregate({ _sum: { askingPrice: true }, where: { status: 'LIVE' } }),
+    prisma.user.findMany({ where: { createdAt: { gte: sevenDaysAgo } }, select: { createdAt: true } }),
   ])
 
-  const valueResult = await prisma.property.aggregate({ _sum: { askingPrice: true }, where: { status: 'LIVE' } })
   const totalValue = valueResult._sum.askingPrice ?? 0
   const closeRate = totalDeals > 0 ? Math.round((closedDeals / totalDeals) * 100) : 0
-
-  const allUsers = await prisma.user.findMany({ select: { createdAt: true } })
 
   return {
     role: 'ADMIN',
@@ -293,7 +298,7 @@ export async function getAdminDashboard(): Promise<DashboardData> {
       { label: 'Live Portfolio Value', value: formatINR(totalValue), hint: 'Sum of live listings', tone: 'green' },
     ],
     performanceTitle: 'New Users — Last 7 Days',
-    performanceSeries: dailyCounts(allUsers.map((u) => u.createdAt)),
+    performanceSeries: dailyCounts(recentUsersForChart.map((u) => u.createdAt)),
     itemsTitle: 'Recent Listings',
     emptyMessage: 'No listings yet.',
     items: recentListings.map((l) => ({

@@ -66,37 +66,21 @@ export default async function DashboardPage() {
 
   const { id, role } = session.user
 
-  let data: DashboardData
   let kyc: { pending: boolean; rejected: boolean; approved: boolean; remarks: string | null } | null = null
   let needsAttention: NeedsAttentionItem[] | null = null
 
-  switch (role) {
-    case 'SELLER': {
-      const result = await getSellerDashboard(id)
-      data = result
-      kyc = result.kyc
-      break
-    }
-    case 'BUYER':
-      data = await getBuyerDashboard(id)
-      break
-    case 'AGENT': {
-      const result = await getAgentDashboard(id)
-      data = result
-      needsAttention = result.needsAttention
-      break
-    }
-    case 'BACKEND':
-      data = await getBackendDashboard()
-      break
-    case 'ADMIN':
-      data = await getAdminDashboard()
-      break
-    default:
-      redirect('/login')
-  }
+  const dashboardDataPromise: Promise<DashboardData> =
+    role === 'SELLER' ? getSellerDashboard(id)
+    : role === 'BUYER' ? getBuyerDashboard(id)
+    : role === 'AGENT' ? getAgentDashboard(id)
+    : role === 'BACKEND' ? getBackendDashboard()
+    : role === 'ADMIN' ? getAdminDashboard()
+    : (redirect('/login') as never)
 
-  const properties = await getExploreProperties(role, id)
+  const [data, properties] = await Promise.all([dashboardDataPromise, getExploreProperties(role, id)])
+
+  if (role === 'SELLER') kyc = (data as Awaited<ReturnType<typeof getSellerDashboard>>).kyc
+  if (role === 'AGENT') needsAttention = (data as Awaited<ReturnType<typeof getAgentDashboard>>).needsAttention
   const config = ROLE_CONFIG[role]
   const spark = data.performanceSeries.map((p) => p.value)
 
