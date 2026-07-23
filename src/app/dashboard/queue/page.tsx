@@ -16,7 +16,7 @@ export default async function ListingsQueuePage() {
   const queue = await prisma.property.findMany({
     where: { status: { in: ['DRAFT', 'PENDING_VERIFICATION'] } },
     orderBy: { createdAt: 'asc' },
-    include: { seller: { select: { name: true, email: true } } },
+    include: { seller: { select: { name: true, email: true, phone: true } } },
   })
 
   return (
@@ -43,8 +43,19 @@ export default async function ListingsQueuePage() {
                     <td className="px-5 py-3.5">
                       <p className="font-semibold" style={{ color: 'var(--text-1)' }}>{p.title}</p>
                       <p className="text-xs" style={{ color: 'var(--text-3)' }}>{p.location}</p>
+                      {p.isPublicSubmission && (
+                        <span
+                          className="mt-1 inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                          style={{ background: 'var(--amber-50)', color: 'var(--amber-700)' }}
+                        >
+                          Public link · no KYC
+                        </span>
+                      )}
                     </td>
-                    <td className="px-5 py-3.5" style={{ color: 'var(--text-2)' }}>{p.seller.name}</td>
+                    <td className="px-5 py-3.5" style={{ color: 'var(--text-2)' }}>
+                      <p>{p.seller.name}</p>
+                      {p.seller.phone && <p className="text-xs" style={{ color: 'var(--text-3)' }}>{p.seller.phone}</p>}
+                    </td>
                     <td className="px-5 py-3.5 font-semibold" style={{ color: 'var(--accent-700)' }}>{formatINR(p.askingPrice)}</td>
                     <td className="px-5 py-3.5">
                       <ReviewActions action={reviewListing} hiddenFields={{ propertyId: p.id }} approveValue="LIVE" approveLabel="Approve" rejectLabel="Reject" />

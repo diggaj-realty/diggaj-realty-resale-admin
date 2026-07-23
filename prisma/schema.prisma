@@ -68,24 +68,29 @@ model SellerKyc {
 }
 
 model Property {
-  id          String    @id @default(cuid())
-  sellerId    String
-  agentId     String?
-  type        String // PropertyType enum
-  title       String
-  description String?
-  location    String
-  latitude    Float?
-  longitude   Float?
-  areaSqft    Float
-  bhk         Int?
-  askingPrice Float
-  unitsAvailable Int    @default(1) // stock: how many identical units of this property are available
-  status      String    @default("DRAFT") // PropertyStatus enum
-  plan        String    @default("BASIC") // SellerPlan enum
-  verifiedAt  DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id             String    @id @default(cuid())
+  sellerId       String
+  agentId        String?
+  type           String // PropertyType enum
+  title          String
+  description    String?
+  location       String
+  latitude       Float?
+  longitude      Float?
+  areaSqft       Float
+  bhk            Int?
+  askingPrice    Float
+  unitsAvailable Int       @default(1) // stock: how many identical units of this property are available
+  status         String    @default("DRAFT") // PropertyStatus enum
+  plan           String    @default("BASIC") // SellerPlan enum
+  verifiedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  // Submitted through the no-signup public intake link rather than by an
+  // authenticated seller — the seller record behind it is a placeholder with
+  // no KYC on file, so reviewers should expect to verify contact info by hand.
+  isPublicSubmission Boolean @default(false)
 
   // ── Structured location (for search/filtering) ──
   city     String?
@@ -98,15 +103,15 @@ model Property {
   superBuiltUpAreaSqft Float?
 
   // ── Configuration ──
-  bathrooms       Int?
-  balconies       Int?
-  furnishing      String? // UNFURNISHED | SEMI_FURNISHED | FULLY_FURNISHED
-  facing          String? // N | S | E | W | NE | NW | SE | SW
-  floorNumber     Int?
-  totalFloors     Int?
-  ageYears        Int? // age of property in years
-  parkingCovered  Int?    @default(0)
-  parkingOpen     Int?    @default(0)
+  bathrooms      Int?
+  balconies      Int?
+  furnishing     String? // UNFURNISHED | SEMI_FURNISHED | FULLY_FURNISHED
+  facing         String? // N | S | E | W | NE | NW | SE | SW
+  floorNumber    Int?
+  totalFloors    Int?
+  ageYears       Int? // age of property in years
+  parkingCovered Int?    @default(0)
+  parkingOpen    Int?    @default(0)
 
   // ── Legal / commercial ──
   possessionStatus   String? // READY_TO_MOVE | UNDER_CONSTRUCTION
@@ -119,7 +124,7 @@ model Property {
   // ── Media & amenities ──
   floorPlanUrl String?
   videoUrl     String?
-  amenities    String[]  @default([])
+  amenities    String[] @default([])
 
   // ── Builder / project (Bangalore master list) ──
   builderName String?
@@ -131,12 +136,12 @@ model Property {
   seller User  @relation("SellerProperties", fields: [sellerId], references: [id])
   agent  User? @relation("AgentProperties", fields: [agentId], references: [id])
 
-  photos      PropertyPhoto[]
-  offers      Offer[]
-  deal        Deal?
-  shortlists  Shortlist[]
-  views       PropertyView[]
-  siteVisits  SiteVisit[]
+  photos     PropertyPhoto[]
+  offers     Offer[]
+  deal       Deal?
+  shortlists Shortlist[]
+  views      PropertyView[]
+  siteVisits SiteVisit[]
 
   @@index([city])
   @@index([status])
@@ -168,8 +173,8 @@ model Offer {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  property Property    @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-  buyer    User        @relation("BuyerOffers", fields: [buyerId], references: [id])
+  property Property     @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  buyer    User         @relation("BuyerOffers", fields: [buyerId], references: [id])
   events   OfferEvent[]
 
   @@map("offers")
@@ -244,8 +249,8 @@ model AppConfig {
   elitePlanPrice      Float @default(0)
 
   // ── Feature toggles ──
-  siteVisitsEnabled   Boolean @default(true)
-  savedSearchAlerts   Boolean @default(true)
+  siteVisitsEnabled Boolean @default(true)
+  savedSearchAlerts Boolean @default(true)
 
   @@map("app_config")
 }
@@ -267,13 +272,13 @@ model Shortlist {
 }
 
 model SavedSearch {
-  id            String   @id @default(cuid())
+  id            String    @id @default(cuid())
   userId        String
   name          String?
   filters       Json // { q?, type?, city?, minPrice?, maxPrice?, minBhk?, ... }
-  alertsEnabled Boolean  @default(true)
+  alertsEnabled Boolean   @default(true)
   lastAlertedAt DateTime?
-  createdAt     DateTime @default(now())
+  createdAt     DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
