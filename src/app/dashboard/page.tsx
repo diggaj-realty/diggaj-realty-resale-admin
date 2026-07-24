@@ -108,9 +108,7 @@ export default async function DashboardPage() {
         <DashboardHeroBanner
           eyebrow={config.heroEyebrow}
           title={featured.title}
-          count={featured.count}
           photoUrl={featured.heroPhotoUrl}
-          pinTags={featured.pinTags}
           status={featured.status}
         />
       )}

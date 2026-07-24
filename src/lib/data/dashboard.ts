@@ -322,18 +322,7 @@ export interface FeaturedProperty {
   longitude: number | null
   heroPhotoUrl: string | null
   filmstripPhotos: { photoUrl: string }[]
-  pinTags: { label: string; top: string; left: string }[]
   count: number
-}
-
-const PIN_POSITIONS = [
-  { top: '62%', left: '10%' },
-  { top: '72%', left: '48%' },
-  { top: '38%', left: '80%' },
-]
-
-function shortTitle(title: string): string {
-  return title.split('|')[0].split(',')[0].trim().split(' ').slice(0, 2).join(' ')
 }
 
 /** One "hero" property (most recent) plus a couple of others in the role-scoped
@@ -358,12 +347,12 @@ export async function getFeaturedProperties(role: UserRole, userId: string): Pro
     prisma.property.findMany({
       where,
       orderBy: { createdAt: 'desc' },
-      take: 3,
+      take: 1,
       include: { photos: { where: { mediaType: 'IMAGE' }, orderBy: { order: 'asc' }, take: 3 } },
     }),
   ])
 
-  const [hero, ...others] = properties
+  const [hero] = properties
   if (!hero) return null
 
   return {
@@ -376,7 +365,6 @@ export async function getFeaturedProperties(role: UserRole, userId: string): Pro
     longitude: hero.longitude,
     heroPhotoUrl: hero.photos[0]?.photoUrl ?? null,
     filmstripPhotos: hero.photos.slice(1, 3).map((p) => ({ photoUrl: p.photoUrl })),
-    pinTags: others.map((p, i) => ({ label: shortTitle(p.title), ...PIN_POSITIONS[i] })),
     count,
   }
 }
