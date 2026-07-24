@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import { SlidersHorizontal } from 'lucide-react'
 import { updateAppConfig } from '@/lib/actions/appConfig'
 
 export default function PlatformSettingsForm({
@@ -32,10 +33,18 @@ export default function PlatformSettingsForm({
           }
         })
       }}
-      className="card max-w-md p-6"
+      className="card p-6"
       data-animate="fade-up"
     >
-      <h2 className="mb-4 text-sm font-bold" style={{ color: 'var(--text-1)' }}>Platform Settings</h2>
+      <div className="mb-5 flex items-center gap-3">
+        <span
+          className="flex h-9 w-9 items-center justify-center rounded-full"
+          style={{ background: 'var(--accent-50)', color: 'var(--accent-700)' }}
+        >
+          <SlidersHorizontal size={16} />
+        </span>
+        <h2 className="text-sm font-bold" style={{ color: 'var(--text-1)' }}>Platform Settings</h2>
+      </div>
 
       <div className="mb-4">
         <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-3)' }}>Commission (%)</label>

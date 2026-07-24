@@ -27,7 +27,7 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
   const property = await prisma.property.findUnique({
     where: { id },
     include: {
-      seller: { select: { id: true, name: true, email: true, phone: true } },
+      seller: { select: { id: true, name: true, email: true, phone: true, role: true } },
       agent: { select: { id: true, name: true, email: true, phone: true } },
       photos: { orderBy: { order: 'asc' } },
     },
@@ -191,7 +191,9 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
           </div>
 
           <div className="card p-6">
-            <h2 className="mb-4 text-sm font-semibold" style={{ color: 'var(--text-1)' }}>Seller</h2>
+            <h2 className="mb-4 text-sm font-semibold" style={{ color: 'var(--text-1)' }}>
+              {property.seller.role === 'SELLER' ? 'Seller' : 'Uploaded by Backend'}
+            </h2>
             <dl className="flex flex-col gap-3 text-sm">
               <div>
                 <dt className="text-xs" style={{ color: 'var(--text-3)' }}>Name</dt>

@@ -66,7 +66,7 @@ export default function RequestVisitButton({ propertyId }: { propertyId: string 
       <button type="submit" disabled={pending} className="btn-accent rounded-lg px-3 py-2 text-xs font-semibold disabled:opacity-60">
         Request
       </button>
-      {error && <span className="text-xs" style={{ color: '#e11d48' }}>{error}</span>}
+      {error && <span className="text-xs" style={{ color: 'var(--red-700)' }}>{error}</span>}
     </form>
   )
 }

@@ -89,7 +89,7 @@ export default async function SavedSearchesPage() {
                       type="submit"
                       title="Delete saved search"
                       className="flex h-9 w-9 items-center justify-center rounded-lg border"
-                      style={{ borderColor: 'var(--line)', color: '#e11d48' }}
+                      style={{ borderColor: 'var(--line)', color: 'var(--red-700)' }}
                     >
                       <Trash2 size={14} />
                     </button>

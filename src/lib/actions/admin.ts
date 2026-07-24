@@ -65,12 +65,13 @@ export async function toggleUserActive(formData: FormData) {
   await prisma.user.update({ where: { id: userId }, data: { isActive: nextActive } })
 
   revalidatePath('/dashboard/users')
+  revalidatePath('/dashboard/clients')
   revalidatePath('/dashboard')
 }
 
 export async function assignAgent(formData: FormData) {
   const session = await getServerSession(authOptions)
-  if (!session || session.user.role !== 'ADMIN') throw new Error('Unauthorized')
+  if (!session || (session.user.role !== 'ADMIN' && session.user.role !== 'BACKEND')) throw new Error('Unauthorized')
 
   const dealId = String(formData.get('dealId'))
   const agentId = String(formData.get('agentId'))

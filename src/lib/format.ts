@@ -16,6 +16,26 @@ function trimZeros(value: number): string {
   return value.toFixed(2).replace(/\.?0+$/, '')
 }
 
+export function initials(name: string): string {
+  return name
+    .split(' ')
+    .map((p) => p[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase()
+}
+
+/** SLA-style aging bucket for review queues (listings/KYC/offers waiting on
+ *  staff action) — escalates color the longer something has sat untouched,
+ *  the pattern ops teams at 99acres/MagicBricks-style portals use to triage
+ *  a queue instead of treating every item as equally urgent. */
+export function agingBucket(date: Date): { label: string; tone: 'green' | 'amber' | 'red' } {
+  const diffDay = Math.floor((Date.now() - date.getTime()) / (24 * 60 * 60 * 1000))
+  const label = diffDay <= 0 ? 'Today' : `Waiting ${diffDay}d`
+  const tone = diffDay >= 4 ? 'red' : diffDay >= 2 ? 'amber' : 'green'
+  return { label, tone }
+}
+
 export function formatRelativeTime(date: Date): string {
   const diffMs = Date.now() - date.getTime()
   const diffMin = Math.round(diffMs / 60000)

@@ -6,6 +6,7 @@ import { ArrowRightCircle, Scale, X, ChevronDown } from 'lucide-react'
 import { formatINR } from '@/lib/format'
 import { forwardOffer, counterOfferAsBackend, rejectOfferAsBackend } from '@/lib/actions/backend'
 import OfferTimeline, { type OfferTimelineEvent } from '@/components/dashboard/OfferTimeline'
+import AgingBadge from '@/components/dashboard/AgingBadge'
 
 export default function NegotiationRow({
   offerId,
@@ -18,6 +19,7 @@ export default function NegotiationRow({
   amount,
   message,
   events,
+  createdAt,
 }: {
   offerId: string
   propertyId: string
@@ -29,6 +31,7 @@ export default function NegotiationRow({
   amount: number
   message: string | null
   events: OfferTimelineEvent[]
+  createdAt: Date
 }) {
   const [counterOpen, setCounterOpen] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
@@ -67,6 +70,7 @@ export default function NegotiationRow({
           {message && <p className="mt-1 truncate text-xs italic" style={{ color: 'var(--text-3)' }}>&ldquo;{message}&rdquo;</p>}
         </div>
         <span className="whitespace-nowrap text-sm font-bold" style={{ color: 'var(--accent-700)' }}>{formatINR(amount)}</span>
+        <AgingBadge since={createdAt} />
         <div className="flex items-center gap-2">
           <button
             type="button"

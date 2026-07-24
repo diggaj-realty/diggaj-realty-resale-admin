@@ -6,6 +6,7 @@ import { formatINR } from '@/lib/format'
 import PageHeader from '@/components/dashboard/PageHeader'
 import DashboardEntrance from '@/components/dashboard/DashboardEntrance'
 import ReviewActions from '@/components/dashboard/ReviewActions'
+import AgingBadge from '@/components/dashboard/AgingBadge'
 import { reviewListing } from '@/lib/actions/backend'
 
 export default async function ListingsQueuePage() {
@@ -16,7 +17,7 @@ export default async function ListingsQueuePage() {
   const queue = await prisma.property.findMany({
     where: { status: { in: ['DRAFT', 'PENDING_VERIFICATION'] } },
     orderBy: { createdAt: 'asc' },
-    include: { seller: { select: { name: true, email: true, phone: true } } },
+    include: { seller: { select: { name: true, email: true, phone: true, role: true } } },
   })
 
   return (
@@ -34,6 +35,7 @@ export default async function ListingsQueuePage() {
                   <th className="px-5 py-3">Property</th>
                   <th className="px-5 py-3">Seller</th>
                   <th className="px-5 py-3">Price</th>
+                  <th className="px-5 py-3">Age</th>
                   <th className="px-5 py-3">Action</th>
                 </tr>
               </thead>
@@ -56,10 +58,20 @@ export default async function ListingsQueuePage() {
                       )}
                     </td>
                     <td className="px-5 py-3.5" style={{ color: 'var(--text-2)' }}>
-                      <p>{p.seller.name}</p>
-                      {p.seller.phone && <p className="text-xs" style={{ color: 'var(--text-3)' }}>{p.seller.phone}</p>}
+                      {p.seller.role === 'SELLER' ? (
+                        <>
+                          <p>{p.seller.name}</p>
+                          {p.seller.phone && <p className="text-xs" style={{ color: 'var(--text-3)' }}>{p.seller.phone}</p>}
+                        </>
+                      ) : (
+                        <>
+                          <p style={{ color: 'var(--text-3)' }}>—</p>
+                          <p className="text-xs font-semibold" style={{ color: 'var(--accent-700)' }}>Uploaded by {p.seller.name} (Backend)</p>
+                        </>
+                      )}
                     </td>
                     <td className="px-5 py-3.5 font-semibold" style={{ color: 'var(--accent-700)' }}>{formatINR(p.askingPrice)}</td>
+                    <td className="px-5 py-3.5"><AgingBadge since={p.createdAt} /></td>
                     <td className="px-5 py-3.5">
                       <ReviewActions action={reviewListing} hiddenFields={{ propertyId: p.id }} approveValue="LIVE" approveLabel="Approve" rejectLabel="Reject" />
                     </td>

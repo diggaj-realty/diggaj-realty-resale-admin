@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import { Bell } from 'lucide-react'
 import { updateNotificationPrefs } from '@/lib/actions/profile'
 
 export default function NotificationPrefsForm({
@@ -22,10 +23,18 @@ export default function NotificationPrefsForm({
           setSaved(true)
         })
       }}
-      className="card max-w-md p-6"
+      className="card p-6"
       data-animate="fade-up"
     >
-      <h2 className="mb-4 text-sm font-bold" style={{ color: 'var(--text-1)' }}>Notifications</h2>
+      <div className="mb-5 flex items-center gap-3">
+        <span
+          className="flex h-9 w-9 items-center justify-center rounded-full"
+          style={{ background: 'var(--accent-50)', color: 'var(--accent-700)' }}
+        >
+          <Bell size={16} />
+        </span>
+        <h2 className="text-sm font-bold" style={{ color: 'var(--text-1)' }}>Notifications</h2>
+      </div>
 
       <label className="mb-3 flex items-center gap-2 text-sm" style={{ color: 'var(--text-2)' }}>
         <input type="checkbox" name="pushNotifications" defaultChecked={pushNotifications} />

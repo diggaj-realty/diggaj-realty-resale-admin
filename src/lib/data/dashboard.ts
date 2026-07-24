@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { formatINR } from '@/lib/format'
+import type { UserRole } from '@/types'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
@@ -308,6 +309,157 @@ export async function getAdminDashboard(): Promise<DashboardData> {
       amountLabel: formatINR(l.askingPrice),
       status: l.status,
     })),
+  }
+}
+
+export interface FeaturedProperty {
+  id: string
+  title: string
+  location: string
+  status: string
+  code: string
+  latitude: number | null
+  longitude: number | null
+  heroPhotoUrl: string | null
+  filmstripPhotos: { photoUrl: string }[]
+  pinTags: { label: string; top: string; left: string }[]
+  count: number
+}
+
+const PIN_POSITIONS = [
+  { top: '62%', left: '10%' },
+  { top: '72%', left: '48%' },
+  { top: '38%', left: '80%' },
+]
+
+function shortTitle(title: string): string {
+  return title.split('|')[0].split(',')[0].trim().split(' ').slice(0, 2).join(' ')
+}
+
+/** One "hero" property (most recent) plus a couple of others in the role-scoped
+ *  set (as scattered pin tags) and the total count — powers the overview hero banner. */
+export async function getFeaturedProperties(role: UserRole, userId: string): Promise<FeaturedProperty | null> {
+  // SELLER is never passed in from src/app/dashboard/page.tsx (SELLER sessions
+  // are redirected before that page renders) — no sellerId-scoped branch needed.
+  const where =
+    role === 'BUYER' ? { status: 'LIVE' }
+    : role === 'AGENT' ? { agentId: userId }
+    : role === 'BACKEND' ? { status: { in: ['DRAFT', 'PENDING_VERIFICATION'] } }
+    : {} // ADMIN
+
+  const [count, properties] = await Promise.all([
+    prisma.property.count({ where }),
+    prisma.property.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: 3,
+      include: { photos: { where: { mediaType: 'IMAGE' }, orderBy: { order: 'asc' }, take: 3 } },
+    }),
+  ])
+
+  const [hero, ...others] = properties
+  if (!hero) return null
+
+  return {
+    id: hero.id,
+    title: hero.title,
+    location: hero.location,
+    status: hero.status,
+    code: `${(hero.city ?? 'PR').slice(0, 3).toUpperCase()}-${hero.id.slice(-6).toUpperCase()}`,
+    latitude: hero.latitude,
+    longitude: hero.longitude,
+    heroPhotoUrl: hero.photos[0]?.photoUrl ?? null,
+    filmstripPhotos: hero.photos.slice(1, 3).map((p) => ({ photoUrl: p.photoUrl })),
+    pinTags: others.map((p, i) => ({ label: shortTitle(p.title), ...PIN_POSITIONS[i] })),
+    count,
+  }
+}
+
+export interface InterestData {
+  title: string
+  subtitle: string
+  percentLabel: string | null
+  people: { name: string; avatarUrl?: string | null }[]
+  series: number[]
+  seriesLabels: string[]
+}
+
+/** Real, DB-derived stand-in for the reference's "Tenant Search" card — mapped per
+ *  role since a resale marketplace has no literal tenant-search concept. */
+export async function getRecentInterest(role: UserRole, userId: string): Promise<InterestData> {
+  // SELLER is never passed in here from src/app/dashboard/page.tsx (SELLER
+  // sessions are redirected before that page renders) — AGENT is the only
+  // caller of this branch in practice now.
+  if (role === 'AGENT') {
+    const where = { property: { agentId: userId } }
+    const offers = await prisma.offer.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+      include: { buyer: { select: { name: true, avatarUrl: true } } },
+    })
+    const seenBuyers = new Set<string>()
+    const people = offers
+      .filter((o) => (seenBuyers.has(o.buyerId) ? false : (seenBuyers.add(o.buyerId), true)))
+      .slice(0, 8)
+      .map((o) => ({ name: o.buyer.name, avatarUrl: o.buyer.avatarUrl }))
+    const series = dailyCounts(offers.map((o) => o.createdAt))
+    return {
+      title: 'Recent Buyer Interest',
+      subtitle: `${seenBuyers.size} buyer${seenBuyers.size === 1 ? '' : 's'} this week`,
+      percentLabel: null,
+      people,
+      series: series.map((s) => s.value),
+      seriesLabels: series.map((s) => s.label),
+    }
+  }
+
+  if (role === 'BUYER') {
+    const deals = await prisma.deal.findMany({
+      where: { buyerId: userId, agentId: { not: null } },
+      orderBy: { createdAt: 'desc' },
+      take: 8,
+      include: { agent: { select: { name: true, avatarUrl: true } } },
+    })
+    const visits = await prisma.siteVisit.findMany({
+      where: { buyerId: userId },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+      select: { createdAt: true },
+    })
+    const series = dailyCounts(visits.map((v) => v.createdAt))
+    return {
+      title: 'Site Visits',
+      subtitle: `${visits.length} requested recently`,
+      percentLabel: null,
+      people: deals.filter((d) => d.agent).map((d) => ({ name: d.agent!.name, avatarUrl: d.agent!.avatarUrl })),
+      series: series.map((s) => s.value),
+      seriesLabels: series.map((s) => s.label),
+    }
+  }
+
+  // BACKEND / ADMIN — verification throughput
+  const staff = await prisma.user.findMany({
+    where: { role: { in: ['BACKEND', 'ADMIN'] } },
+    orderBy: { createdAt: 'asc' },
+    take: 8,
+    select: { name: true, avatarUrl: true },
+  })
+  const approvedKyc = await prisma.sellerKyc.findMany({
+    where: { status: 'APPROVED' },
+    orderBy: { updatedAt: 'desc' },
+    take: 30,
+    select: { updatedAt: true },
+  })
+  const series = dailyCounts(approvedKyc.map((k) => k.updatedAt))
+  const total = series.reduce((sum, s) => sum + s.value, 0)
+  return {
+    title: 'Verification Throughput',
+    subtitle: `${total} approved this week`,
+    percentLabel: null,
+    people: staff,
+    series: series.map((s) => s.value),
+    seriesLabels: series.map((s) => s.label),
   }
 }
 

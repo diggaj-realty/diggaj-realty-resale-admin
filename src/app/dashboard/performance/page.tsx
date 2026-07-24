@@ -2,7 +2,6 @@ import { getServerSession } from 'next-auth'
 import { redirect } from 'next/navigation'
 import { authOptions } from '@/lib/auth'
 import {
-  getSellerDashboard,
   getBuyerDashboard,
   getAgentDashboard,
   getBackendDashboard,
@@ -20,11 +19,10 @@ export default async function PerformancePage() {
   if (!session) redirect('/login')
   const { id, role } = session.user
 
+  // SELLER is excluded — dashboard/layout.tsx already redirects SELLER
+  // sessions before this page renders.
   let data: DashboardData
   switch (role) {
-    case 'SELLER':
-      data = await getSellerDashboard(id)
-      break
     case 'BUYER':
       data = await getBuyerDashboard(id)
       break

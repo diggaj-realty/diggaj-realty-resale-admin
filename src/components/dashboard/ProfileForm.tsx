@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import { User } from 'lucide-react'
 import { updateProfile } from '@/lib/actions/profile'
 
 export default function ProfileForm({ name, phone, email, avatarUrl }: { name: string; phone: string | null; email: string; avatarUrl: string | null }) {
@@ -16,9 +17,19 @@ export default function ProfileForm({ name, phone, email, avatarUrl }: { name: s
           setSaved(true)
         })
       }}
-      className="card max-w-md p-6"
+      className="card p-6"
       data-animate="fade-up"
     >
+      <div className="mb-5 flex items-center gap-3">
+        <span
+          className="flex h-9 w-9 items-center justify-center rounded-full"
+          style={{ background: 'var(--accent-50)', color: 'var(--accent-700)' }}
+        >
+          <User size={16} />
+        </span>
+        <h2 className="text-sm font-bold" style={{ color: 'var(--text-1)' }}>Profile</h2>
+      </div>
+
       <div className="mb-4 flex items-center gap-4">
         {avatarUrl ? (
           // eslint-disable-next-line @next/next/no-img-element

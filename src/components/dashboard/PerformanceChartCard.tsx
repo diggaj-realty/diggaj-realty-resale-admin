@@ -59,7 +59,7 @@ export default function PerformanceChartCard({
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--line)" />
           <XAxis dataKey="label" tick={{ fontSize: 11, fill: 'var(--text-3)' }} axisLine={false} tickLine={false} />
           <YAxis tick={{ fontSize: 11, fill: 'var(--text-3)' }} axisLine={false} tickLine={false} allowDecimals={false} />
-          <Tooltip contentStyle={tooltipStyle} cursor={{ fill: 'rgba(185,138,68,0.08)' }} />
+          <Tooltip contentStyle={tooltipStyle} cursor={{ fill: 'rgba(255,170,9,0.08)' }} />
           <Bar dataKey="value" fill="var(--ink-800)" radius={[10, 10, 10, 10]} maxBarSize={36} />
         </BarChart>
       </ResponsiveContainer>

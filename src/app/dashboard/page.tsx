@@ -5,35 +5,43 @@ import { prisma } from '@/lib/prisma'
 import Link from 'next/link'
 import { AlertTriangle } from 'lucide-react'
 import {
-  getSellerDashboard,
   getBuyerDashboard,
   getAgentDashboard,
   getBackendDashboard,
   getAdminDashboard,
+  getFeaturedProperties,
+  getRecentInterest,
   type DashboardData,
   type NeedsAttentionItem,
 } from '@/lib/data/dashboard'
 import DashboardEntrance from '@/components/dashboard/DashboardEntrance'
 import DashboardOverviewHeader from '@/components/dashboard/DashboardOverviewHeader'
+import DashboardHeroBanner from '@/components/dashboard/DashboardHeroBanner'
 import StatTile from '@/components/dashboard/StatTile'
 import PerformanceChartCard from '@/components/dashboard/PerformanceChartCard'
-import StatusBreakdownChart from '@/components/dashboard/StatusBreakdownChart'
+import QuickActionsCard from '@/components/dashboard/QuickActionsCard'
+import TrendingInterestCard from '@/components/dashboard/TrendingInterestCard'
+import PropertyLocationCard from '@/components/dashboard/PropertyLocationCard'
 import ExplorePropertiesGrid, { type ExploreProperty } from '@/components/dashboard/ExplorePropertiesGrid'
-import KycBanner from '@/components/dashboard/KycBanner'
 import type { UserRole } from '@/types'
 
-const ROLE_CONFIG: Record<UserRole, { primaryAction: { label: string; href: string }; viewHref: string; exploreTitle: string }> = {
-  SELLER: { primaryAction: { label: 'Add Listing', href: '/dashboard/listings/new' }, viewHref: '/dashboard/listings', exploreTitle: 'My Properties' },
-  BUYER: { primaryAction: { label: 'Browse Properties', href: '/dashboard/browse' }, viewHref: '/dashboard/browse', exploreTitle: 'Available Properties' },
-  AGENT: { primaryAction: { label: 'View Deals', href: '/dashboard/deals' }, viewHref: '/dashboard/listings', exploreTitle: 'My Listings' },
-  BACKEND: { primaryAction: { label: 'Review Queue', href: '/dashboard/queue' }, viewHref: '/dashboard/queue', exploreTitle: 'Awaiting Review' },
-  ADMIN: { primaryAction: { label: 'Manage Users', href: '/dashboard/users' }, viewHref: '/dashboard/listings', exploreTitle: 'Recent Listings' },
+// NOTE: ROLE_CONFIG, dashboardDataPromise, etc. are still typed/keyed over the
+// full UserRole union (including SELLER) even though SELLER can never reach
+// this page (see dashboard/layout.tsx redirect) — UserRole is shared with
+// api/v1 and other SELLER-facing surfaces, so it isn't narrowed here.
+const ROLE_CONFIG: Record<UserRole, { primaryAction: { label: string; href: string }; viewHref: string; exploreTitle: string; heroEyebrow: string; heroCountLabel: string }> = {
+  SELLER: { primaryAction: { label: 'Add Listing', href: '/dashboard/listings/new' }, viewHref: '/dashboard/listings', exploreTitle: 'My Properties', heroEyebrow: 'Property Management', heroCountLabel: 'Properties' },
+  BUYER: { primaryAction: { label: 'Browse Properties', href: '/dashboard/browse' }, viewHref: '/dashboard/browse', exploreTitle: 'Available Properties', heroEyebrow: 'Property Management', heroCountLabel: 'Available' },
+  AGENT: { primaryAction: { label: 'View Deals', href: '/dashboard/deals' }, viewHref: '/dashboard/listings', exploreTitle: 'My Listings', heroEyebrow: 'Property Management', heroCountLabel: 'Listings' },
+  BACKEND: { primaryAction: { label: 'Review Queue', href: '/dashboard/queue' }, viewHref: '/dashboard/queue', exploreTitle: 'Awaiting Review', heroEyebrow: 'Property Management', heroCountLabel: 'In Queue' },
+  ADMIN: { primaryAction: { label: 'Manage Users', href: '/dashboard/users' }, viewHref: '/dashboard/listings', exploreTitle: 'Recent Listings', heroEyebrow: 'Property Management', heroCountLabel: 'Listings' },
 }
 
 async function getExploreProperties(role: UserRole, userId: string): Promise<ExploreProperty[]> {
+  // SELLER can never reach this page (dashboard/layout.tsx redirects it before
+  // rendering), so no sellerId-scoped branch is needed here.
   const where =
-    role === 'SELLER' ? { sellerId: userId }
-    : role === 'BUYER' ? { status: 'LIVE' }
+    role === 'BUYER' ? { status: 'LIVE' }
     : role === 'AGENT' ? { agentId: userId }
     : role === 'BACKEND' ? { status: { in: ['DRAFT', 'PENDING_VERIFICATION'] } }
     : {} // ADMIN
@@ -66,33 +74,45 @@ export default async function DashboardPage() {
 
   const { id, role } = session.user
 
-  let kyc: { pending: boolean; rejected: boolean; approved: boolean; remarks: string | null } | null = null
   let needsAttention: NeedsAttentionItem[] | null = null
 
+  // SELLER is excluded here — dashboard/layout.tsx redirects SELLER sessions
+  // to /login before this page ever renders.
   const dashboardDataPromise: Promise<DashboardData> =
-    role === 'SELLER' ? getSellerDashboard(id)
-    : role === 'BUYER' ? getBuyerDashboard(id)
+    role === 'BUYER' ? getBuyerDashboard(id)
     : role === 'AGENT' ? getAgentDashboard(id)
     : role === 'BACKEND' ? getBackendDashboard()
     : role === 'ADMIN' ? getAdminDashboard()
     : (redirect('/login') as never)
 
-  const [data, properties] = await Promise.all([dashboardDataPromise, getExploreProperties(role, id)])
+  const [data, properties, featured, interest] = await Promise.all([
+    dashboardDataPromise,
+    getExploreProperties(role, id),
+    getFeaturedProperties(role, id),
+    getRecentInterest(role, id),
+  ])
 
-  if (role === 'SELLER') kyc = (data as Awaited<ReturnType<typeof getSellerDashboard>>).kyc
   if (role === 'AGENT') needsAttention = (data as Awaited<ReturnType<typeof getAgentDashboard>>).needsAttention
   const config = ROLE_CONFIG[role]
   const spark = data.performanceSeries.map((p) => p.value)
 
   return (
     <DashboardEntrance>
-      {kyc && !kyc.approved && <KycBanner rejected={kyc.rejected} remarks={kyc.remarks} />}
-
       <DashboardOverviewHeader
         exportRows={data.items}
         exportFilename={`${role.toLowerCase()}-overview`}
         primaryAction={config.primaryAction}
       />
+
+      {featured && (
+        <DashboardHeroBanner
+          eyebrow={config.heroEyebrow}
+          title={featured.title}
+          count={featured.count}
+          photoUrl={featured.heroPhotoUrl}
+          pinTags={featured.pinTags}
+        />
+      )}
 
       <div className="mb-6 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
         {data.stats.slice(0, 4).map((stat) => (
@@ -101,16 +121,27 @@ export default async function DashboardPage() {
       </div>
 
       <div className="mb-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div className="card p-6" data-animate="fade-up">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-sm font-bold" style={{ color: 'var(--text-1)' }}>Status Analysis</h2>
-          </div>
-          <StatusBreakdownChart items={data.items} />
-        </div>
-        <div className="lg:col-span-2">
+        <QuickActionsCard role={role} />
+        {featured ? (
+          <PropertyLocationCard
+            code={featured.code}
+            location={featured.location}
+            latitude={featured.latitude}
+            longitude={featured.longitude}
+            count={featured.count}
+            href={config.viewHref}
+          />
+        ) : (
+          <PerformanceChartCard title={data.performanceTitle} series={data.performanceSeries} />
+        )}
+        <TrendingInterestCard data={interest} />
+      </div>
+
+      {featured && (
+        <div className="mb-6">
           <PerformanceChartCard title={data.performanceTitle} series={data.performanceSeries} />
         </div>
-      </div>
+      )}
 
       {needsAttention && needsAttention.length > 0 && (
         <div className="card mb-6 p-6" data-animate="fade-up">

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import { Lock } from 'lucide-react'
 import { changePassword } from '@/lib/actions/profile'
 
 export default function PasswordChangeForm() {
@@ -32,10 +33,18 @@ export default function PasswordChangeForm() {
         })
       }}
       id="password-change-form"
-      className="card max-w-md p-6"
+      className="card p-6"
       data-animate="fade-up"
     >
-      <h2 className="mb-4 text-sm font-bold" style={{ color: 'var(--text-1)' }}>Change Password</h2>
+      <div className="mb-5 flex items-center gap-3">
+        <span
+          className="flex h-9 w-9 items-center justify-center rounded-full"
+          style={{ background: 'var(--accent-50)', color: 'var(--accent-700)' }}
+        >
+          <Lock size={16} />
+        </span>
+        <h2 className="text-sm font-bold" style={{ color: 'var(--text-1)' }}>Change Password</h2>
+      </div>
 
       <div className="mb-4">
         <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-3)' }}>Current Password</label>

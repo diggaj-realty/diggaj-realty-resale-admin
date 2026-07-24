@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { getServerSession } from 'next-auth'
 import { redirect } from 'next/navigation'
+import { MapPin, BedDouble, Ruler, Eye, Tag, ImageOff, User2 } from 'lucide-react'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { formatINR } from '@/lib/format'
@@ -9,6 +10,8 @@ import StatusPill from '@/components/dashboard/StatusPill'
 import DashboardEntrance from '@/components/dashboard/DashboardEntrance'
 import ExportButton from '@/components/dashboard/ExportButton'
 import DeleteListingButton from '@/components/dashboard/DeleteListingButton'
+import CompletenessBadge from '@/components/dashboard/CompletenessBadge'
+import { listingCompletenessScore } from '@/lib/data/propertyFields'
 
 const SORTS = {
   newest: { createdAt: 'desc' as const },
@@ -27,10 +30,12 @@ export default async function ListingsPage({
   if (!session) redirect('/login')
   const { id, role } = session.user
 
-  if (!['SELLER', 'AGENT', 'ADMIN', 'BACKEND'].includes(role)) redirect('/dashboard')
+  // SELLER is excluded — dashboard/layout.tsx already redirects SELLER
+  // sessions before this page renders.
+  if (!['AGENT', 'ADMIN', 'BACKEND'].includes(role)) redirect('/dashboard')
 
   const where = {
-    ...(role === 'SELLER' ? { sellerId: id } : role === 'AGENT' ? { agentId: id } : {}),
+    ...(role === 'AGENT' ? { agentId: id } : {}),
     ...(status ? { status } : {}),
     ...(q ? { OR: [{ title: { contains: q, mode: 'insensitive' as const } }, { location: { contains: q, mode: 'insensitive' as const } }] } : {}),
   }
@@ -40,10 +45,14 @@ export default async function ListingsPage({
   const properties = await prisma.property.findMany({
     where,
     orderBy,
-    include: { seller: { select: { name: true } }, agent: { select: { name: true } } },
+    include: {
+      seller: { select: { name: true, role: true } },
+      agent: { select: { name: true } },
+      photos: { where: { mediaType: 'IMAGE' }, orderBy: { order: 'asc' }, select: { photoUrl: true } },
+    },
   })
 
-  const title = role === 'SELLER' ? 'My Properties' : role === 'AGENT' ? 'My Listings' : 'All Listings'
+  const title = role === 'AGENT' ? 'My Listings' : 'All Listings'
 
   return (
     <DashboardEntrance>
@@ -56,7 +65,7 @@ export default async function ListingsPage({
           <ExportButton
             rows={properties.map((p) => ({
               title: p.title,
-              subtitle: `${p.location} · ${p.type} · Seller: ${p.seller.name}${p.agent ? ` · Agent: ${p.agent.name}` : ''}`,
+              subtitle: `${p.location} · ${p.type} · ${p.seller.role === 'SELLER' ? `Seller: ${p.seller.name}` : `Uploaded by Backend: ${p.seller.name}`}${p.agent ? ` · Agent: ${p.agent.name}` : ''}`,
               amountLabel: formatINR(p.askingPrice),
               status: p.status,
             }))}
@@ -101,48 +110,143 @@ export default async function ListingsPage({
         <button type="submit" className="btn-accent rounded-lg px-3 py-2 font-semibold">Apply</button>
       </form>
 
-      <div className="card overflow-hidden" data-animate="fade-up">
-        {properties.length === 0 ? (
+      {properties.length === 0 ? (
+        <div className="card" data-animate="fade-up">
           <p className="py-12 text-center text-sm" style={{ color: 'var(--text-3)' }}>No properties found.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-xs font-semibold uppercase tracking-wide" style={{ background: 'var(--surface-2)', color: 'var(--text-3)' }}>
-                  <th className="px-5 py-3">Property</th>
-                  {role !== 'SELLER' && <th className="px-5 py-3">Seller</th>}
-                  {role !== 'AGENT' && <th className="px-5 py-3">Agent</th>}
-                  <th className="px-5 py-3">Location</th>
-                  <th className="px-5 py-3">Price</th>
-                  <th className="px-5 py-3">Type</th>
-                  <th className="px-5 py-3">Views</th>
-                  <th className="px-5 py-3">Status</th>
-                  {(role === 'ADMIN' || role === 'BACKEND') && <th className="px-5 py-3">Actions</th>}
-                </tr>
-              </thead>
-              <tbody>
-                {properties.map((p) => (
-                  <tr key={p.id} className="border-t transition-colors hover:bg-black/[0.015]" style={{ borderColor: 'var(--line)' }}>
-                    <td className="px-5 py-3.5 font-semibold">
-                      <Link href={`/dashboard/listings/${p.id}`} className="hover:underline" style={{ color: 'var(--text-1)' }}>{p.title}</Link>
-                    </td>
-                    {role !== 'SELLER' && <td className="px-5 py-3.5" style={{ color: 'var(--text-2)' }}>{p.seller.name}</td>}
-                    {role !== 'AGENT' && <td className="px-5 py-3.5" style={{ color: 'var(--text-2)' }}>{p.agent?.name ?? '—'}</td>}
-                    <td className="px-5 py-3.5" style={{ color: 'var(--text-2)' }}>{p.location}</td>
-                    <td className="px-5 py-3.5 font-semibold" style={{ color: 'var(--accent-700)' }}>{formatINR(p.askingPrice)}</td>
-                    <td className="px-5 py-3.5" style={{ color: 'var(--text-2)' }}>{p.type}</td>
-                    <td className="px-5 py-3.5" style={{ color: 'var(--text-2)' }}>{p.viewCount}</td>
-                    <td className="px-5 py-3.5"><StatusPill status={p.status} /></td>
-                    {(role === 'ADMIN' || role === 'BACKEND') && (
-                      <td className="px-5 py-3.5"><DeleteListingButton propertyId={p.id} /></td>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3" data-animate="fade-up">
+          {properties.map((p) => {
+            const photoUrl = p.photos[0]?.photoUrl ?? null
+            const backendName = p.seller.role !== 'SELLER' ? p.seller.name : null
+            const sellerName = p.seller.role === 'SELLER' ? p.seller.name : null
+            return (
+              <div
+                key={p.id}
+                className="card card-hover flex flex-col gap-4 p-4 sm:flex-row sm:items-center"
+              >
+                {/* Thumbnail */}
+                <Link
+                  href={`/dashboard/listings/${p.id}`}
+                  className="relative h-40 w-full flex-shrink-0 overflow-hidden rounded-[var(--radius-md)] sm:h-24 sm:w-32"
+                >
+                  {photoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={photoUrl} alt={p.title} className="h-full w-full object-cover" />
+                  ) : (
+                    <div
+                      className="flex h-full w-full items-center justify-center"
+                      style={{ background: 'linear-gradient(135deg, var(--accent-50), var(--surface-2))' }}
+                    >
+                      <ImageOff size={20} style={{ color: 'var(--accent-500)' }} />
+                    </div>
+                  )}
+                </Link>
+
+                {/* Main info */}
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <Link
+                        href={`/dashboard/listings/${p.id}`}
+                        className="truncate text-sm font-bold hover:underline"
+                        style={{ color: 'var(--text-1)' }}
+                      >
+                        {p.title}
+                      </Link>
+                      <p className="mt-0.5 flex items-center gap-1 truncate text-xs" style={{ color: 'var(--text-3)' }}>
+                        <MapPin size={11} className="flex-shrink-0" /> {p.location}
+                      </p>
+                    </div>
+                    <div className="flex flex-shrink-0 items-center gap-2">
+                      <p className="text-sm font-bold" style={{ color: 'var(--accent-700)' }}>{formatINR(p.askingPrice)}</p>
+                      <StatusPill status={p.status} />
+                    </div>
+                  </div>
+
+                  <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+                    <span
+                      className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                      style={{ background: 'var(--surface-2)', color: 'var(--text-2)' }}
+                    >
+                      <Tag size={11} /> {p.type}
+                    </span>
+                    {p.bhk != null && (
+                      <span
+                        className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                        style={{ background: 'var(--surface-2)', color: 'var(--text-2)' }}
+                      >
+                        <BedDouble size={11} /> {p.bhk} BHK
+                      </span>
                     )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+                    <span
+                      className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                      style={{ background: 'var(--surface-2)', color: 'var(--text-2)' }}
+                    >
+                      <Ruler size={11} /> {p.areaSqft} sqft
+                    </span>
+                    <span
+                      className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                      style={{ background: 'var(--surface-2)', color: 'var(--text-2)' }}
+                    >
+                      <Eye size={11} /> {p.viewCount} views
+                    </span>
+                    <CompletenessBadge
+                      score={listingCompletenessScore({
+                        description: p.description,
+                        city: p.city,
+                        locality: p.locality,
+                        carpetAreaSqft: p.carpetAreaSqft,
+                        bathrooms: p.bathrooms,
+                        furnishing: p.furnishing,
+                        facing: p.facing,
+                        possessionStatus: p.possessionStatus,
+                        ownershipType: p.ownershipType,
+                        reraId: p.reraId,
+                        amenities: p.amenities,
+                        photoCount: p.photos.length,
+                        floorPlanUrl: p.floorPlanUrl,
+                        videoUrl: p.videoUrl,
+                      })}
+                    />
+                    {sellerName && (
+                      <span
+                        className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                        style={{ background: 'var(--accent-50)', color: 'var(--accent-700)' }}
+                      >
+                        <User2 size={11} /> Seller: {sellerName}
+                      </span>
+                    )}
+                    {(role === 'ADMIN' || role === 'BACKEND') && backendName && (
+                      <span
+                        className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                        style={{ background: 'var(--sky-50)', color: 'var(--sky-700)' }}
+                      >
+                        <User2 size={11} /> Uploaded by: {backendName}
+                      </span>
+                    )}
+                    {role !== 'AGENT' && p.agent?.name && (
+                      <span
+                        className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                        style={{ background: 'var(--surface-2)', color: 'var(--text-2)' }}
+                      >
+                        <User2 size={11} /> Agent: {p.agent.name}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Actions */}
+                {(role === 'ADMIN' || role === 'BACKEND') && (
+                  <div className="flex flex-shrink-0 justify-end sm:justify-center">
+                    <DeleteListingButton propertyId={p.id} />
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
     </DashboardEntrance>
   )
 }

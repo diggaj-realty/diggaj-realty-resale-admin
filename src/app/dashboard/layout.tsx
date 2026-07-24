@@ -2,8 +2,7 @@ import { redirect } from 'next/navigation'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import DashboardChrome from '@/components/dashboard/DashboardChrome'
-import Header from '@/components/dashboard/Header'
+import TopNav from '@/components/dashboard/TopNav'
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const session = await getServerSession(authOptions)
@@ -22,9 +21,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
   ])
 
   return (
-    <DashboardChrome role={role}>
-      <Header userName={name ?? 'User'} role={role} userEmail={email ?? ''} unreadCount={unreadCount} avatarUrl={user?.avatarUrl ?? null} />
-      <main className="px-4 py-6 sm:px-8 sm:py-8">{children}</main>
-    </DashboardChrome>
+    <div className="min-h-screen" style={{ background: 'var(--background)' }}>
+      <TopNav userName={name ?? 'User'} role={role} userEmail={email ?? ''} unreadCount={unreadCount} avatarUrl={user?.avatarUrl ?? null} />
+      <main className="mx-auto max-w-[1600px] px-4 py-6 sm:px-8 sm:py-8">{children}</main>
+    </div>
   )
 }

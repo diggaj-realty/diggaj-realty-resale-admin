@@ -56,6 +56,7 @@ export default async function NegotiationsPage() {
               amount={o.amount}
               message={o.message}
               events={o.events}
+              createdAt={o.createdAt}
             />
           ))
         )}

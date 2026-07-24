@@ -4,7 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import PageHeader from '@/components/dashboard/PageHeader'
 import DashboardEntrance from '@/components/dashboard/DashboardEntrance'
-import { createAmenity, toggleAmenity, deleteAmenity } from '@/lib/actions/amenities'
+import { createAmenity, toggleAmenity, deleteAmenity, seedDefaultAmenities } from '@/lib/actions/amenities'
 
 export default async function AmenitiesPage() {
   const session = await getServerSession(authOptions)
@@ -16,6 +16,15 @@ export default async function AmenitiesPage() {
   return (
     <DashboardEntrance>
       <PageHeader title="Amenities" subtitle={`${amenities.length} defined`} />
+
+      <form action={seedDefaultAmenities} className="card mb-4 flex flex-wrap items-center justify-between gap-3 p-4" data-animate="fade-up">
+        <p className="text-xs" style={{ color: 'var(--text-3)' }}>
+          {amenities.length === 0
+            ? 'No amenities defined yet — listing forms show a built-in default checklist until you add some here.'
+            : 'Missing a default amenity? Import will add any of the built-in defaults that aren’t in the table yet, without touching existing entries.'}
+        </p>
+        <button type="submit" className="btn-accent shrink-0 rounded-lg px-4 py-2 text-sm font-semibold">Import default amenities</button>
+      </form>
 
       <form action={createAmenity} className="card mb-4 flex flex-wrap items-end gap-2 p-4" data-animate="fade-up">
         <div>
@@ -85,7 +94,7 @@ export default async function AmenitiesPage() {
                       </form>
                       <form action={deleteAmenity}>
                         <input type="hidden" name="id" value={a.id} />
-                        <button type="submit" className="rounded-lg border px-3 py-1.5 text-xs font-semibold" style={{ borderColor: 'var(--line)', color: '#e11d48' }}>
+                        <button type="submit" className="rounded-lg border px-3 py-1.5 text-xs font-semibold" style={{ borderColor: 'var(--line)', color: 'var(--red-700)' }}>
                           Delete
                         </button>
                       </form>

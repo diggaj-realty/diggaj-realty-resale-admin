@@ -47,6 +47,7 @@ model User {
   propertyViews      PropertyView[]
   visitsAsBuyer      SiteVisit[]    @relation("BuyerVisits")
   visitsAsAgent      SiteVisit[]    @relation("AgentVisits")
+  feedbackSubmitted  Feedback[]
 
   @@map("users")
 }
@@ -326,6 +327,22 @@ model SiteVisit {
   @@index([agentId])
   @@index([status])
   @@map("site_visits")
+}
+
+// ── Internal staff feedback ──
+
+model Feedback {
+  id        String   @id @default(cuid())
+  userId    String
+  category  String   @default("GENERAL") // GENERAL | BUG | FEATURE_REQUEST
+  message   String
+  status    String   @default("OPEN") // OPEN | REVIEWED
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("feedback")
 }
 
 // ── Admin masters ──

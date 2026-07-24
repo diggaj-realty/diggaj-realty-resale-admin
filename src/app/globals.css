@@ -1,53 +1,67 @@
 @import "tailwindcss";
 
 :root {
-  /* Page surface — warm cream, matching the marketing site */
-  --background: #f0ebe1;
-  --foreground: #1c1a16;
+  /* Page surface — cool light-gray canvas */
+  --background: #f4f5f7;
+  --foreground: #0a0a0a;
 
-  /* Ink scale — warm near-black panels (frontend "panel" #171717) */
-  --ink-900: #141311;
-  --ink-800: #171717;
-  --ink-700: #232220;
-  --ink-600: #2e2c29;
+  /* Ink scale — near-black panels/buttons */
+  --ink-900: #000000;
+  --ink-800: #0a0a0a;
+  --ink-700: #171717;
+  --ink-600: #262626;
 
   /* Text */
-  --text-1: #1c1a16;
-  --text-2: #6f6f6f;
-  --text-3: #98938a;
+  --text-1: #0a0a0a;
+  --text-2: #5b5f66;
+  --text-3: #9aa0a8;
 
   /* Surfaces */
   --surface: #ffffff;
-  --surface-2: #faf8f3;
-  --surface-3: #f1ede4;
-  --cream: #f4efe5;
-  --line: rgba(28, 26, 22, 0.08);
+  --surface-2: #f7f8fa;
+  --surface-3: #eef0f3;
+  --cream: #f4f5f7;
+  --line: rgba(10, 10, 10, 0.08);
 
-  /* Signature accent — warm brass (no lime) */
-  --accent-50: #f8f1e2;
-  --accent-100: #f0e2c4;
-  --accent-300: #dcba7c;
-  --accent-500: #b98a44;
-  --accent-600: #a1742f;
-  --accent-700: #855d22;
+  /* Signature accent — orange → yellow */
+  --accent-50: #fff7e6;
+  --accent-100: #ffebbf;
+  --accent-300: #ffc94d;
+  --accent-500: #ffaa09;
+  --accent-600: #e69600;
+  --accent-700: #b87700;
+  --accent-gradient: linear-gradient(135deg, #ffaa09 0%, #ffd54d 100%);
 
-  /* Functional — slightly warmed */
+  /* Secondary accent — soft pastel blue, chart/ring use only (not chrome/status) */
+  --sky-50: #eff6fe;
+  --sky-300: #c7e0f7;
+  --sky-500: #a2c9f0;
+  --sky-700: #5d8fc7;
+
+  /* Functional tones — semantics preserved, refreshed for the cooler canvas */
   --blue-50: #eaf1fe; --blue-500: #3b82f6; --blue-700: #1d4ed8;
-  --green-50: #eaf6ec; --green-500: #3f9d5c; --green-700: #2c7345;
-  --amber-50: #fdf4e3; --amber-500: #e0a03c; --amber-700: #a3671a;
-  --red-50: #fbeeea; --red-500: #d96c50; --red-700: #a4432c;
-  --purple-50: #f2eff9; --purple-500: #8b7ec8; --purple-700: #5f519e;
+  --green-50: #e9f9ee; --green-500: #22c55e; --green-700: #15803d;
+  --amber-50: #fff7e6; --amber-500: #ffaa09; --amber-700: #b87700;
+  --red-50: #fdedec; --red-500: #ef4444; --red-700: #b91c1c;
+  --purple-50: #f3f0fb; --purple-500: #8b7ec8; --purple-700: #5f519e;
 
-  /* Elevation — soft, warm-tinted */
-  --elev-1: 0 1px 2px rgba(28, 26, 22, 0.04), 0 1px 3px rgba(28, 26, 22, 0.03);
-  --elev-2: 0 2px 6px rgba(28, 26, 22, 0.05), 0 8px 24px rgba(28, 26, 22, 0.04);
-  --elev-3: 0 4px 12px rgba(28, 26, 22, 0.08), 0 16px 40px rgba(28, 26, 22, 0.08);
-  --elev-accent: 0 10px 24px rgba(23, 23, 23, 0.22);
+  /* Elevation — neutral, cool-tinted */
+  --elev-1: 0 1px 2px rgba(10, 10, 10, 0.04), 0 1px 3px rgba(10, 10, 10, 0.03);
+  --elev-2: 0 2px 6px rgba(10, 10, 10, 0.05), 0 8px 24px rgba(10, 10, 10, 0.04);
+  --elev-3: 0 4px 12px rgba(10, 10, 10, 0.08), 0 16px 40px rgba(10, 10, 10, 0.08);
+  --elev-ink-accent: 0 10px 24px rgba(10, 10, 10, 0.24);
+  --elev-accent: 0 10px 24px rgba(255, 170, 9, 0.28);
 
   --radius-md: 14px;
   --radius-lg: 20px;
   --radius-xl: 24px;
   --radius-full: 999px;
+
+  /* Typography — Urbanist heading/body specs */
+  --tracking-heading: -0.5px;
+  --tracking-body: -0.36px;
+  --weight-heading: 500;
+  --weight-body: 400;
 
   --ease-out: cubic-bezier(0.25, 0.1, 0.25, 1);
 }
@@ -55,14 +69,14 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-inter);
+  --font-sans: var(--font-urbanist);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-inter), Helvetica, Arial, sans-serif;
-  letter-spacing: -0.01em;
+  font-family: var(--font-urbanist), Helvetica, Arial, sans-serif;
+  letter-spacing: var(--tracking-body);
   text-rendering: optimizeLegibility;
 }
 
@@ -89,6 +103,30 @@ a:focus-visible {
   outline-offset: 2px;
 }
 
+/* Typography utilities — Urbanist heading/body scale */
+.h-display {
+  font-weight: var(--weight-heading);
+  font-size: 48px;
+  letter-spacing: var(--tracking-heading);
+  line-height: 1.05;
+}
+.h-page {
+  font-weight: var(--weight-heading);
+  font-size: 28px;
+  letter-spacing: -0.3px;
+  line-height: 1.15;
+}
+.h-section {
+  font-weight: 600;
+  font-size: 14px;
+  letter-spacing: -0.2px;
+}
+.text-body {
+  font-weight: var(--weight-body);
+  font-size: 14px;
+  letter-spacing: var(--tracking-body);
+}
+
 /* Cards */
 .card {
   background: var(--surface);
@@ -104,19 +142,33 @@ a:focus-visible {
   box-shadow: var(--elev-3);
 }
 
-/* Primary action — ink pill, like the marketing site's dark buttons */
+/* Primary action — black pill, "high-contrast" per the reference */
 .btn-accent {
   background: var(--ink-800);
   color: #fff;
   border-radius: var(--radius-full);
-  box-shadow: var(--elev-accent);
+  box-shadow: var(--elev-ink-accent);
   transition: transform 0.2s var(--ease-out), box-shadow 0.2s var(--ease-out),
     background-color 0.2s ease;
 }
 .btn-accent:hover {
   transform: translateY(-2px);
   background: var(--ink-700);
-  box-shadow: 0 14px 30px rgba(23, 23, 23, 0.3);
+  box-shadow: 0 14px 30px rgba(10, 10, 10, 0.3);
+}
+
+/* Brand action — orange/yellow gradient pill, for the standout CTA on a screen */
+.btn-brand {
+  background: var(--accent-gradient);
+  color: var(--ink-900);
+  border-radius: var(--radius-full);
+  box-shadow: var(--elev-accent);
+  transition: transform 0.2s var(--ease-out), box-shadow 0.2s var(--ease-out),
+    background-color 0.2s ease;
+}
+.btn-brand:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 30px rgba(255, 170, 9, 0.36);
 }
 
 .scrollbar-thin::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -153,7 +205,8 @@ a:focus-visible {
   }
   button,
   .card-hover,
-  .btn-accent {
+  .btn-accent,
+  .btn-brand {
     transition: none;
   }
 }

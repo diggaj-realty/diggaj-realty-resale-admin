@@ -41,7 +41,7 @@ export default function ShortlistButton({
       style={{
         background: shortlisted ? 'var(--red-50, #fef2f2)' : 'var(--surface)',
         border: '1px solid var(--line)',
-        color: shortlisted ? '#e11d48' : 'var(--text-3)',
+        color: shortlisted ? 'var(--red-700)' : 'var(--text-3)',
       }}
     >
       <Heart size={size} fill={shortlisted ? 'currentColor' : 'none'} />

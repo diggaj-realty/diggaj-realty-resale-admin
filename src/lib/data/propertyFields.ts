@@ -1,3 +1,43 @@
+/** Listing completeness/quality score (0-100) — the same idea 99acres/MagicBricks
+ *  surface on seller inventory screens to nudge fuller listings and help staff
+ *  triage weak ones. Each present optional field/media item is worth one point. */
+export interface CompletenessInput {
+  description: string | null
+  city: string | null
+  locality: string | null
+  carpetAreaSqft: number | null
+  bathrooms: number | null
+  furnishing: string | null
+  facing: string | null
+  possessionStatus: string | null
+  ownershipType: string | null
+  reraId: string | null
+  amenities: string[]
+  photoCount: number
+  floorPlanUrl: string | null
+  videoUrl: string | null
+}
+
+export function listingCompletenessScore(p: CompletenessInput): number {
+  const checks = [
+    !!p.description,
+    !!p.city,
+    !!p.locality,
+    p.carpetAreaSqft != null,
+    p.bathrooms != null,
+    !!p.furnishing,
+    !!p.facing,
+    !!p.possessionStatus,
+    !!p.ownershipType,
+    !!p.reraId,
+    p.amenities.length > 0,
+    p.photoCount >= 3,
+    !!(p.floorPlanUrl || p.videoUrl),
+  ]
+  const score = checks.filter(Boolean).length
+  return Math.round((score / checks.length) * 100)
+}
+
 /** Allowed enum-like values for the free-form string columns (kept as String in
  *  the schema to match the source project's SQLite-era convention). */
 export const FURNISHING = ['UNFURNISHED', 'SEMI_FURNISHED', 'FULLY_FURNISHED'] as const

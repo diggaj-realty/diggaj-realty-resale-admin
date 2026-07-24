@@ -2,7 +2,7 @@
 
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts'
 
-const COLORS = ['#171717', '#b98a44', '#3f9d5c', '#d96c50', '#8b7ec8', '#98938a']
+const COLORS = ['#0a0a0a', '#ffaa09', '#22c55e', '#ef4444', '#8b7ec8', '#9aa0a8']
 
 export default function StatusBreakdownChart({ items }: { items: { status: string }[] }) {
   const counts = new Map<string, number>()

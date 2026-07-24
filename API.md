@@ -95,13 +95,38 @@ Content-Type: multipart/form-data
 ### Listings & browsing
 | Method | Path | Role | Body | Notes |
 |---|---|---|---|---|
-| GET | `/properties` | any | — paginated, `?q=` search, `?type=`, `?city=`, `?minPrice=`, `?maxPrice=`, `?minBhk=` filters | LIVE properties only (buyer browse); `city` is normalized server-side (`"Bengaluru"`/`"bangalore"`/etc. all match listings stored as `"Bangalore"` — see canonical city list below); recording a view (see below) happens automatically on `GET /properties/:id` |
+| GET | `/properties` | any | — paginated, filters below | LIVE properties only (buyer browse); `city` is normalized server-side (`"Bengaluru"`/`"bangalore"`/etc. all match listings stored as `"Bangalore"` — see canonical city list below); recording a view (see below) happens automatically on `GET /properties/:id` |
 | GET | `/properties/:id` | any | — | single property + photos; auto-records a `PropertyView` for the requesting user unless they're the listing's own seller/agent |
 | GET | `/properties/:id/views` | seller/agent (own listing) or ADMIN/BACKEND | — | `{ propertyId, viewCount, total, last7Days, uniqueViewers }` — view analytics, not for buyers |
 | GET | `/listings` | SELLER/AGENT/ADMIN/BACKEND | — paginated | role-scoped: seller sees own, agent sees assigned, admin/backend see all |
 | POST | `/listings` | SELLER | `{ title, description, location, type, areaSqft, bhk, askingPrice, photoUrls[], ...richFields? }` | requires approved KYC; `type` one of `RESIDENTIAL/PLOT/COMMERCIAL`; starts as `DRAFT`; `richFields` are all optional — see "Rich listing fields" below |
 | GET | `/queue` | BACKEND | — paginated | listings awaiting verification (`DRAFT`/`PENDING_VERIFICATION`) |
 | POST | `/queue/:id/review` | BACKEND | `{ decision: "LIVE" \| "REJECTED" }` | |
+
+#### `GET /properties` query params
+
+| Param | Type | Notes |
+|---|---|---|
+| `q` | string | matches title, location, or exact city (normalized) |
+| `type` | `RESIDENTIAL`\|`PLOT`\|`COMMERCIAL` | |
+| `city` | string | normalized (`Bengaluru`→`Bangalore`, etc.) |
+| `locality` | string | substring match, finer than `city` |
+| `pincode` | string | exact match |
+| `minPrice` / `maxPrice` | number | on `askingPrice` |
+| `minBhk` | number | |
+| `minBathrooms` | number | |
+| `minArea` / `maxArea` | number | on `areaSqft` |
+| `furnishing` | `UNFURNISHED`\|`SEMI_FURNISHED`\|`FULLY_FURNISHED` | |
+| `facing` | `N`\|`S`\|`E`\|`W`\|`NE`\|`NW`\|`SE`\|`SW` | |
+| `possessionStatus` | `READY_TO_MOVE`\|`UNDER_CONSTRUCTION` | |
+| `maxAgeYears` | number | age of property in years, at most this old |
+| `parking` | `true`/`1` | has covered or open parking |
+| `ownershipType` | `FREEHOLD`\|`LEASEHOLD`\|`POWER_OF_ATTORNEY`\|`CO_OPERATIVE` | |
+| `amenities` | comma-separated string | matches properties having **all** listed amenities |
+| `eliteOnly` | `true`/`1` | `plan = ELITE` only |
+| `sort` | `newest`\|`price_asc`\|`price_desc`\|`area_asc`\|`area_desc`\|`most_viewed` | defaults to `newest` |
+
+Invalid/unrecognized values for enum-like params (`type`, `furnishing`, `facing`, `possessionStatus`, `ownershipType`, `sort`) are silently dropped rather than erroring, same as a saved search.
 
 ### Amenities master list
 | Method | Path | Role | Body | Notes |
@@ -122,7 +147,7 @@ Content-Type: multipart/form-data
 | Method | Path | Role | Body | Notes |
 |---|---|---|---|---|
 | GET | `/saved-searches` | BUYER | — | own saved searches, newest first |
-| POST | `/saved-searches` | BUYER | `{ name?, filters, alertsEnabled? }` | `filters` shape: `{ q?, type?, minPrice?, maxPrice?, minBhk?, city? }` (same params as `GET /properties`); `alertsEnabled` defaults `true` |
+| POST | `/saved-searches` | BUYER | `{ name?, filters, alertsEnabled? }` | `filters` accepts the same keys as the `GET /properties` query params above (`q, type, city, locality, pincode, minPrice, maxPrice, minBhk, minBathrooms, minArea, maxArea, furnishing, facing, possessionStatus, maxAgeYears, parking, ownershipType, amenities, eliteOnly, sort`); `alertsEnabled` defaults `true` |
 | PATCH | `/saved-searches/:id` | BUYER (owner) | `{ name?, alertsEnabled? }` | |
 | DELETE | `/saved-searches/:id` | BUYER (owner) | — | idempotent |
 | POST | `/saved-searches/run-alerts` | BUYER/ADMIN/BACKEND | — | BUYER: scans only their own searches ("check now"); ADMIN/BACKEND: platform-wide scan (intended for a scheduled cron); returns `{ scanned, notified }`; new matches arrive as in-app `Notification`s |
@@ -280,7 +305,7 @@ Exact objects as returned inside `data` / `data.items`. All timestamps are ISO-8
   "createdAt": "…"
 }
 ```
-`filters` keys mirror `GET /properties` query params (`q, type, minPrice, maxPrice, minBhk, city`) — reuse the exact same object for both the saved search and the live search request.
+`filters` keys mirror the full `GET /properties` query param set (see above) — reuse the exact same object for both the saved search and the live search request.
 
 ### Site visit
 ```json

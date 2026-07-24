@@ -30,15 +30,19 @@ export function siteVisitDTO(v: SiteVisitWithRelations) {
 }
 
 /** Role-scoped site visits. BUYER: their own requests. AGENT: visits assigned to
- *  them. Optional ?status= filter. */
+ *  them. SELLER: visits requested on their own properties (read-only — sellers
+ *  can't schedule/cancel, only see who's coming and any post-visit feedback).
+ *  Optional ?status= filter. */
 export const GET = withApi(async (req) => {
-  const user = await authenticate(req, ['BUYER', 'AGENT'])
+  const user = await authenticate(req, ['BUYER', 'AGENT', 'SELLER'])
   const url = new URL(req.url)
   const { page, pageSize, skip, take } = parsePagination(url)
   const status = url.searchParams.get('status')?.trim()
 
   const where: Prisma.SiteVisitWhereInput =
-    user.role === 'BUYER' ? { buyerId: user.id } : { agentId: user.id }
+    user.role === 'BUYER' ? { buyerId: user.id }
+    : user.role === 'AGENT' ? { agentId: user.id }
+    : { property: { sellerId: user.id } }
   if (status) where.status = status
 
   const [items, total] = await Promise.all([

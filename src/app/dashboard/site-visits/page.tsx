@@ -113,7 +113,7 @@ export default async function SiteVisitsPage() {
                     )}
                     <form action={cancelSiteVisit}>
                       <input type="hidden" name="id" value={v.id} />
-                      <button type="submit" className="rounded-lg border px-3 py-2 text-xs font-semibold" style={{ borderColor: 'var(--line)', color: '#e11d48' }}>
+                      <button type="submit" className="rounded-lg border px-3 py-2 text-xs font-semibold" style={{ borderColor: 'var(--line)', color: 'var(--red-700)' }}>
                         Cancel
                       </button>
                     </form>
@@ -125,7 +125,7 @@ export default async function SiteVisitsPage() {
                   <div className="mt-3 border-t pt-3" style={{ borderColor: 'var(--line)' }}>
                     <form action={cancelSiteVisit}>
                       <input type="hidden" name="id" value={v.id} />
-                      <button type="submit" className="rounded-lg border px-3 py-2 text-xs font-semibold" style={{ borderColor: 'var(--line)', color: '#e11d48' }}>
+                      <button type="submit" className="rounded-lg border px-3 py-2 text-xs font-semibold" style={{ borderColor: 'var(--line)', color: 'var(--red-700)' }}>
                         Cancel request
                       </button>
                     </form>

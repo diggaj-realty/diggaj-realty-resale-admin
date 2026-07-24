@@ -4,6 +4,7 @@ import { getServerSession } from 'next-auth'
 import { revalidatePath } from 'next/cache'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { DEFAULT_AMENITIES } from '@/lib/data/propertyFields'
 
 async function requireAdmin() {
   const session = await getServerSession(authOptions)
@@ -37,5 +38,13 @@ export async function deleteAmenity(formData: FormData) {
   const id = String(formData.get('id') ?? '')
   if (!id) throw new Error('Missing id')
   await prisma.amenity.deleteMany({ where: { id } })
+  revalidatePath('/dashboard/amenities')
+}
+
+export async function seedDefaultAmenities() {
+  await requireAdmin()
+  for (const name of DEFAULT_AMENITIES) {
+    await prisma.amenity.upsert({ where: { name }, create: { name }, update: {} })
+  }
   revalidatePath('/dashboard/amenities')
 }

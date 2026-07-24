@@ -15,11 +15,12 @@ export default async function DealsPage() {
   if (!session) redirect('/login')
   const { id, role } = session.user
 
-  if (!['SELLER', 'BUYER', 'AGENT', 'ADMIN'].includes(role)) redirect('/dashboard')
+  // SELLER is excluded — dashboard/layout.tsx already redirects SELLER
+  // sessions before this page renders.
+  if (!['BUYER', 'AGENT', 'ADMIN'].includes(role)) redirect('/dashboard')
 
   const where =
-    role === 'SELLER' ? { sellerId: id }
-    : role === 'BUYER' ? { buyerId: id }
+    role === 'BUYER' ? { buyerId: id }
     : role === 'AGENT' ? { agentId: id }
     : {} // ADMIN sees all deals
 
@@ -38,7 +39,7 @@ export default async function DealsPage() {
     ? await prisma.user.findMany({ where: { role: 'AGENT' }, select: { id: true, name: true }, orderBy: { name: 'asc' } })
     : []
 
-  const title = role === 'BUYER' ? 'My Deals' : role === 'SELLER' ? 'My Deals' : role === 'ADMIN' ? 'All Deals' : 'Assigned Deals'
+  const title = role === 'BUYER' ? 'My Deals' : role === 'ADMIN' ? 'All Deals' : 'Assigned Deals'
 
   return (
     <DashboardEntrance>

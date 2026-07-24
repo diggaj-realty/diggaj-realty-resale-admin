@@ -13,13 +13,15 @@ export default async function OffersPage() {
   if (!session) redirect('/login')
   const { id, role } = session.user
 
-  if (role !== 'SELLER' && role !== 'BUYER' && role !== 'AGENT') redirect('/dashboard')
+  // SELLER is excluded — dashboard/layout.tsx already redirects SELLER
+  // sessions before this page renders.
+  if (role !== 'BUYER' && role !== 'AGENT') redirect('/dashboard')
 
-  if (role === 'SELLER' || role === 'AGENT') {
-    // Seller/agent must never see PENDING_REVIEW rows — those don't exist for them.
+  if (role === 'AGENT') {
+    // Agent must never see PENDING_REVIEW rows — those don't exist for them.
     const offers = await prisma.offer.findMany({
       where: {
-        property: role === 'AGENT' ? { agentId: id } : { sellerId: id },
+        property: { agentId: id },
         status: { not: 'PENDING_REVIEW' },
       },
       orderBy: { createdAt: 'desc' },

@@ -15,6 +15,10 @@ import {
   BookmarkPlus,
   CalendarCheck,
   ListChecks,
+  Contact,
+  MessageSquare,
+  LifeBuoy,
+  Globe,
 } from 'lucide-react'
 import type { UserRole } from '@/types'
 
@@ -29,19 +33,14 @@ export interface NavIcon {
 export function getNavIcons(role: UserRole): NavIcon[] {
   const home: NavIcon = { key: 'home', label: 'Dashboard', icon: Home, href: '/dashboard' }
   const performance: NavIcon = { key: 'performance', label: 'Performance', icon: BarChart3, href: '/dashboard/performance' }
+  const feedback: NavIcon = { key: 'feedback', label: 'Feedback', icon: MessageSquare, href: '/dashboard/feedback' }
+  const help: NavIcon = { key: 'help', label: 'Help Center', icon: LifeBuoy, href: '/dashboard/help' }
   const settings: NavIcon = { key: 'settings', label: 'Settings', icon: Settings, href: '/dashboard/settings' }
+  const publicListings: NavIcon = { key: 'public-listings', label: 'Public Listings', icon: Globe, href: '/dashboard/public-listings' }
 
+  // SELLER is intentionally absent — SELLER sessions never reach any page
+  // this nav renders for (see dashboard/layout.tsx redirect).
   switch (role) {
-    case 'SELLER':
-      return [
-        home,
-        { key: 'kyc', label: 'KYC Verification', icon: ShieldCheck, href: '/dashboard/kyc' },
-        { key: 'listings', label: 'My Properties', icon: Building2, href: '/dashboard/listings' },
-        { key: 'offers', label: 'Offers Received', icon: HandCoins, href: '/dashboard/offers' },
-        { key: 'deals', label: 'My Deals', icon: Briefcase, href: '/dashboard/deals' },
-        performance,
-        settings,
-      ]
     case 'BUYER':
       return [
         home,
@@ -52,6 +51,8 @@ export function getNavIcons(role: UserRole): NavIcon[] {
         { key: 'offers', label: 'My Offers', icon: HandCoins, href: '/dashboard/offers' },
         { key: 'deals', label: 'My Deals', icon: Briefcase, href: '/dashboard/deals' },
         performance,
+        feedback,
+        help,
         settings,
       ]
     case 'AGENT':
@@ -62,6 +63,8 @@ export function getNavIcons(role: UserRole): NavIcon[] {
         { key: 'offers', label: 'Offers Received', icon: HandCoins, href: '/dashboard/offers' },
         { key: 'deals', label: 'Assigned Deals', icon: Briefcase, href: '/dashboard/deals' },
         performance,
+        feedback,
+        help,
         settings,
       ]
     case 'BACKEND':
@@ -70,21 +73,29 @@ export function getNavIcons(role: UserRole): NavIcon[] {
         { key: 'kyc', label: 'KYC Queue', icon: ShieldCheck, href: '/dashboard/kyc' },
         { key: 'queue', label: 'Listings Queue', icon: ClipboardList, href: '/dashboard/queue' },
         { key: 'listings', label: 'All Listings', icon: Building2, href: '/dashboard/listings' },
+        publicListings,
         { key: 'negotiations', label: 'Negotiations', icon: Scale, href: '/dashboard/negotiations' },
+        { key: 'clients', label: 'Clients', icon: Contact, href: '/dashboard/clients' },
         performance,
+        feedback,
+        help,
         settings,
       ]
     case 'ADMIN':
       return [
         home,
         { key: 'users', label: 'All Users', icon: Users, href: '/dashboard/users' },
+        { key: 'clients', label: 'Clients', icon: Contact, href: '/dashboard/clients' },
         { key: 'listings', label: 'All Listings', icon: Building2, href: '/dashboard/listings' },
+        publicListings,
         { key: 'amenities', label: 'Amenities', icon: ListChecks, href: '/dashboard/amenities' },
         performance,
+        feedback,
+        help,
         settings,
       ]
     default:
-      return [home, performance, settings]
+      return [home, performance, feedback, help, settings]
   }
 }
 
