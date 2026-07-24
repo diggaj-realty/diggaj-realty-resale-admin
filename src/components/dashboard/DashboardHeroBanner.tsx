@@ -1,4 +1,5 @@
 import { MapPin } from 'lucide-react'
+import StatusPill from './StatusPill'
 
 export interface HeroPinTag {
   label: string
@@ -12,12 +13,16 @@ export interface DashboardHeroBannerProps {
   count: number
   photoUrl: string | null
   pinTags?: HeroPinTag[]
+  /** Property status (LIVE/DRAFT/PENDING_VERIFICATION/...) — shown as a pill next
+   *  to the title whenever it's anything other than LIVE, so a featured listing
+   *  that hasn't been approved yet is never mistaken for one that has. */
+  status?: string
 }
 
 /** Full-width hero photo banner — title + count badge sit inline top-left directly
  *  on the (mostly un-scrimmed) photo, with a couple of small floating location pin
  *  tags scattered on the image, matching the reference's airy, bright hero. */
-export default function DashboardHeroBanner({ eyebrow, title, count, photoUrl, pinTags }: DashboardHeroBannerProps) {
+export default function DashboardHeroBanner({ eyebrow, title, count, photoUrl, pinTags, status }: DashboardHeroBannerProps) {
   return (
     <div
       className="card relative mb-6 h-[300px] overflow-hidden sm:h-[340px]"
@@ -61,6 +66,7 @@ export default function DashboardHeroBanner({ eyebrow, title, count, photoUrl, p
         >
           {count}
         </span>
+        {status && status !== 'LIVE' && <StatusPill status={status} />}
       </div>
     </div>
   )

@@ -111,6 +111,7 @@ export default async function DashboardPage() {
           count={featured.count}
           photoUrl={featured.heroPhotoUrl}
           pinTags={featured.pinTags}
+          status={featured.status}
         />
       )}
 

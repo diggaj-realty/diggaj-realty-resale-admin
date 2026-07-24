@@ -341,11 +341,17 @@ function shortTitle(title: string): string {
 export async function getFeaturedProperties(role: UserRole, userId: string): Promise<FeaturedProperty | null> {
   // SELLER is never passed in from src/app/dashboard/page.tsx (SELLER sessions
   // are redirected before that page renders) — no sellerId-scoped branch needed.
+  // ADMIN/AGENT are restricted to LIVE here (unlike getExploreProperties' "Recent
+  // Listings" grid, which shows every status behind a clear StatusPill) — the hero
+  // banner has no room for a status label, so an unapproved DRAFT/PENDING listing
+  // showcased there reads as if it's already live and verified. BACKEND is the one
+  // deliberate exception: their hero is explicitly the review queue, and
+  // DashboardHeroBanner now renders a StatusPill so that's never ambiguous either.
   const where =
     role === 'BUYER' ? { status: 'LIVE' }
-    : role === 'AGENT' ? { agentId: userId }
+    : role === 'AGENT' ? { agentId: userId, status: 'LIVE' }
     : role === 'BACKEND' ? { status: { in: ['DRAFT', 'PENDING_VERIFICATION'] } }
-    : {} // ADMIN
+    : { status: 'LIVE' } // ADMIN
 
   const [count, properties] = await Promise.all([
     prisma.property.count({ where }),
