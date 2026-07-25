@@ -18,10 +18,12 @@ export const POST = withApi(async (req) => {
   const valid = await bcrypt.compare(password, user.passwordHash)
   if (!valid) throw new ApiError('Invalid credentials', 401)
 
-  if (user.role !== 'BUYER' && user.role !== 'SELLER') {
-    throw new ApiError('This account type must sign in through the internal dashboard, not the public API', 403)
-  }
-
+  // Every role can get a bearer token here now — AGENT/BACKEND/ADMIN normally
+  // work through the internal dashboard's session cookie, but the many
+  // role-gated /api/v1 routes built for them (negotiations, kyc/queue,
+  // users, deals/assign-agent, etc.) are otherwise unreachable dead ends
+  // without this. PENDING accounts are always isActive: false, so the check
+  // above already keeps them out without needing a role check here too.
   const token = signApiToken({ id: user.id, role: user.role as UserRole })
 
   return ok({ token, user: userDTO(user) })

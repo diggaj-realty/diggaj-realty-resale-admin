@@ -94,6 +94,11 @@ export async function closeDeal(formData: FormData) {
   const deal = await requireAssignedAgent(dealId, session.user.id)
   if (!deal.finalPaymentDate) throw new Error('Record the final payment before closing the deal')
 
+  const unresolvedDocs = await prisma.dealDocument.count({ where: { dealId, status: { not: 'APPROVED' } } })
+  if (unresolvedDocs > 0) {
+    throw new Error(`${unresolvedDocs} required document(s) are not yet approved — closing is blocked until they are`)
+  }
+
   const { commissionPercent } = await getAppConfig()
   const settlementAmount = deal.finalAmount ?? deal.agreedPrice
   const commissionAmount = Math.round(settlementAmount * (commissionPercent / 100) * 100) / 100

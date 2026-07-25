@@ -121,6 +121,34 @@ export async function completeSiteVisit(formData: FormData) {
   revalidate()
 }
 
+/** Staff assigns (or reassigns) an agent to a visit — the fix for visits
+ *  requested on a property with no agent at the time, which otherwise sit
+ *  invisible to everyone (no agent to see them in their queue, no admin/
+ *  backend queue existed until this page). */
+export async function assignSiteVisitAgent(formData: FormData) {
+  await requireRole('ADMIN', 'BACKEND')
+  const id = String(formData.get('id') ?? '')
+  const agentId = String(formData.get('agentId') ?? '')
+  if (!id) throw new Error('Missing id')
+  if (!agentId) throw new Error('Missing agentId')
+
+  const agent = await prisma.user.findUnique({ where: { id: agentId } })
+  if (!agent || agent.role !== 'AGENT') throw new Error('Invalid agent')
+
+  const visit = await prisma.siteVisit.update({
+    where: { id },
+    data: { agentId },
+    include: { property: { select: { title: true } } },
+  })
+
+  await notifyUsers([
+    { userId: agentId, title: 'Site visit assigned', message: `You've been assigned a visit request for ${visit.property.title}.` },
+  ])
+
+  revalidatePath('/dashboard/site-visits-queue')
+  revalidate()
+}
+
 /** Cancel a visit. A buyer can cancel their own; an agent can cancel one assigned
  *  to them. Terminal states (COMPLETED/CANCELLED) can't be cancelled again. */
 export async function cancelSiteVisit(formData: FormData) {

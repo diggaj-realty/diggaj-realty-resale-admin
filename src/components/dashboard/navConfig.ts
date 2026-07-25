@@ -37,6 +37,7 @@ export function getNavIcons(role: UserRole): NavIcon[] {
   const help: NavIcon = { key: 'help', label: 'Help Center', icon: LifeBuoy, href: '/dashboard/help' }
   const settings: NavIcon = { key: 'settings', label: 'Settings', icon: Settings, href: '/dashboard/settings' }
   const publicListings: NavIcon = { key: 'public-listings', label: 'Public Listings', icon: Globe, href: '/dashboard/public-listings' }
+  const siteVisitsQueue: NavIcon = { key: 'site-visits-queue', label: 'Site Visits', icon: CalendarCheck, href: '/dashboard/site-visits-queue' }
 
   // SELLER is intentionally absent — SELLER sessions never reach any page
   // this nav renders for (see dashboard/layout.tsx redirect).
@@ -75,6 +76,7 @@ export function getNavIcons(role: UserRole): NavIcon[] {
         { key: 'listings', label: 'All Listings', icon: Building2, href: '/dashboard/listings' },
         publicListings,
         { key: 'negotiations', label: 'Negotiations', icon: Scale, href: '/dashboard/negotiations' },
+        siteVisitsQueue,
         { key: 'clients', label: 'Clients', icon: Contact, href: '/dashboard/clients' },
         performance,
         feedback,
@@ -88,6 +90,7 @@ export function getNavIcons(role: UserRole): NavIcon[] {
         { key: 'clients', label: 'Clients', icon: Contact, href: '/dashboard/clients' },
         { key: 'listings', label: 'All Listings', icon: Building2, href: '/dashboard/listings' },
         publicListings,
+        siteVisitsQueue,
         { key: 'amenities', label: 'Amenities', icon: ListChecks, href: '/dashboard/amenities' },
         performance,
         feedback,

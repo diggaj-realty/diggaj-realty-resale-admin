@@ -28,11 +28,7 @@ Content-Type: application/json
 → 200 { "data": { "token": "<jwt>", "user": { id, name, email, phone, role, isActive, createdAt, updatedAt } } }
 ```
 
-**This public API only issues tokens to `BUYER`/`SELLER` accounts.** `AGENT`,
-`BACKEND`, and `ADMIN` credentials get a `403` here — those roles sign in
-exclusively through the internal dashboard's own `/login` page (a separate,
-cookie-based session, not part of this API). This is intentional: internal
-staff credentials are never usable from the public-facing surface.
+**`/auth/login` issues a bearer token for any active account, regardless of role** — BUYER/SELLER, and also AGENT/BACKEND/ADMIN. Internal staff normally work through the internal dashboard's own `/login` page (a separate, cookie-based session), but a growing number of `/api/v1` routes are role-gated for AGENT/BACKEND/ADMIN specifically (`/negotiations`, `/kyc/queue`, `/users`, `/deals/:id/assign-agent`, the deal-documents review actions, etc.) — those need a bearer token like any other endpoint, so staff accounts can get one here too. A `PENDING` (unapproved signup) account still can't log in anywhere, since it's `isActive: false` until an admin approves it.
 
 ```
 POST /api/v1/auth/google
@@ -202,8 +198,20 @@ Invalid/unrecognized values for enum-like params (`type`, `furnishing`, `facing`
 | POST | `/deals/:id/token-payment` | AGENT (assigned) | `{ tokenAmount, tokenDate }` | |
 | POST | `/deals/:id/final-payment` | AGENT (assigned) | `{ finalAmount, finalPaymentDate, paymentMode, transactionRef? }` | `paymentMode`: `BANK_TRANSFER/CHEQUE/OTHER` |
 | POST | `/deals/:id/notes` | AGENT (assigned) | `{ notes }` | |
-| POST | `/deals/:id/close` | AGENT (assigned) | — | requires final payment recorded first |
+| POST | `/deals/:id/close` | AGENT (assigned) | — | requires final payment recorded first **and every DealDocument on the deal to be `APPROVED`** — see below |
 | POST | `/deals/:id/assign-agent` | ADMIN | `{ agentId }` | |
+| GET | `/deals/:id/documents` | participant (buyer/seller/assigned agent) or ADMIN/BACKEND | — | the deal's closure document checklist, oldest first |
+| POST | `/deals/:id/documents` | AGENT (assigned)/ADMIN/BACKEND | `{ docType, requiredFrom: "BUYER"\|"SELLER"\|"EITHER" }` | adds a checklist item (e.g. "Sale Deed", requiredFrom `SELLER`); notifies whoever it's required from |
+| PATCH | `/deals/:id/documents/:docId` | see below | `{ fileUrl }` **or** `{ status, remarks? }` — not both | two distinct actions gated by caller: |
+
+#### Deal closure document checklist
+
+`Deal` doesn't track legal paperwork itself — a `DealDocument` model does, one row per required document (Sale Deed, NOC, Encumbrance Certificate, Khata, Tax Receipt, whatever the deal needs — `docType` is free text, no fixed enum). Each has a lifecycle: `PENDING` → `UPLOADED` → `APPROVED`/`REJECTED` (back to needing re-upload if rejected).
+
+- **Adding a requirement** (`POST .../documents`) is staff-only (an assigned AGENT, or ADMIN/BACKEND) — buyers/sellers don't define what's required, they fulfill it.
+- **Uploading** (`PATCH .../documents/:docId { fileUrl }`) is restricted to whichever party the document's `requiredFrom` names — a buyer can't upload a SELLER-required doc, and vice versa (`requiredFrom: "EITHER"` allows either). Uploading auto-advances status to `UPLOADED` and records `uploadedBy`.
+- **Reviewing** (`PATCH .../documents/:docId { status: "APPROVED"|"REJECTED", remarks? }`) is staff-only — the assigned agent, or ADMIN/BACKEND. A document must be `UPLOADED` before it can be reviewed. Neither buyer nor seller can approve their own upload.
+- **Deal closure is blocked** (`POST /deals/:id/close` returns `400`) while any `DealDocument` on the deal isn't `APPROVED` — the same rule is enforced both here and in the internal dashboard's `closeDeal` action, so there's no way around it from either surface.
 
 ### Users & notifications
 | Method | Path | Role | Body | Notes |

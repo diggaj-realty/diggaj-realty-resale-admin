@@ -12,6 +12,11 @@ export const POST = withApi(async (req, ctx) => {
   if (deal.agentId !== user.id) throw new ApiError('Unauthorized', 403)
   if (!deal.finalPaymentDate) throw new ApiError('Record the final payment before closing the deal', 400)
 
+  const unresolvedDocs = await prisma.dealDocument.count({ where: { dealId, status: { not: 'APPROVED' } } })
+  if (unresolvedDocs > 0) {
+    throw new ApiError(`${unresolvedDocs} required document(s) are not yet approved — closing is blocked until they are`, 400)
+  }
+
   const [updated] = await prisma.$transaction([
     prisma.deal.update({ where: { id: dealId }, data: { status: 'CLOSED' } }),
     prisma.property.update({ where: { id: deal.propertyId }, data: { status: 'CLOSED' } }),

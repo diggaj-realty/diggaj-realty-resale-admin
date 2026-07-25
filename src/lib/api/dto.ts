@@ -1,4 +1,4 @@
-import type { User, Property, PropertyPhoto, Offer, OfferEvent, Deal, SellerKyc, Notification } from '@prisma/client'
+import type { User, Property, PropertyPhoto, Offer, OfferEvent, Deal, DealDocument, SellerKyc, Notification } from '@prisma/client'
 import { buyerFacingOfferStatus } from '@/lib/data/dashboard'
 
 export function userDTO(u: User) {
@@ -177,6 +177,21 @@ export function dealDTO(d: DealWithRelations) {
     buyerName: d.buyer?.name,
     sellerName: d.seller?.name,
     agentName: d.agent?.name,
+  }
+}
+
+export function dealDocumentDTO(d: DealDocument) {
+  return {
+    id: d.id,
+    dealId: d.dealId,
+    docType: d.docType,
+    requiredFrom: d.requiredFrom,
+    fileUrl: d.fileUrl,
+    status: d.status,
+    remarks: d.remarks,
+    uploadedBy: d.uploadedBy,
+    createdAt: d.createdAt.toISOString(),
+    updatedAt: d.updatedAt.toISOString(),
   }
 }
 

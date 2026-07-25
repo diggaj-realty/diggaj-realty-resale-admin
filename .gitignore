@@ -47,3 +47,6 @@ prisma/dev.db
 # local dev artifacts
 dev.log
 .claude/
+
+.vercel
+.env*

@@ -218,12 +218,33 @@ model Deal {
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
-  property Property @relation(fields: [propertyId], references: [id])
-  buyer    User     @relation("BuyerDeals", fields: [buyerId], references: [id])
-  seller   User     @relation("SellerDeals", fields: [sellerId], references: [id])
-  agent    User?    @relation("AgentDeals", fields: [agentId], references: [id])
+  property  Property       @relation(fields: [propertyId], references: [id])
+  buyer     User           @relation("BuyerDeals", fields: [buyerId], references: [id])
+  seller    User           @relation("SellerDeals", fields: [sellerId], references: [id])
+  agent     User?          @relation("AgentDeals", fields: [agentId], references: [id])
+  documents DealDocument[]
 
   @@map("deals")
+}
+
+// ── Deal closure document checklist ──
+
+model DealDocument {
+  id           String   @id @default(cuid())
+  dealId       String
+  docType      String // e.g. SALE_DEED, NOC, ENCUMBRANCE_CERTIFICATE, KHATA, TAX_RECEIPT, OTHER — free text, no rigid enum
+  requiredFrom String // BUYER | SELLER | EITHER — whose responsibility to upload it
+  fileUrl      String?
+  status       String   @default("PENDING") // PENDING | UPLOADED | APPROVED | REJECTED
+  remarks      String?
+  uploadedBy   String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  deal Deal @relation(fields: [dealId], references: [id], onDelete: Cascade)
+
+  @@index([dealId])
+  @@map("deal_documents")
 }
 
 model Notification {
