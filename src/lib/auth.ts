@@ -1,8 +1,21 @@
 import type { AuthOptions, Session } from 'next-auth'
 import CredentialsProvider from 'next-auth/providers/credentials'
+import GoogleProvider from 'next-auth/providers/google'
 import bcrypt from 'bcryptjs'
 import { prisma } from '@/lib/prisma'
+import { notifyUsers } from '@/lib/notify'
 import type { UserRole } from '@/types'
+
+/** Same staff-only gate the credentials provider's authorize() enforces,
+ *  reused for Google sign-in so both paths land on identical rules: PENDING
+ *  (awaiting admin role assignment), deactivated, and BUYER/SELLER (public-app
+ *  roles, never this dashboard) all get turned away with a distinct reason. */
+function staffGateError(user: { role: string; isActive: boolean }): string | null {
+  if (user.role === 'PENDING') return 'PendingApproval'
+  if (!user.isActive) return 'Deactivated'
+  if (user.role === 'BUYER' || user.role === 'SELLER') return 'StaffOnly'
+  return null
+}
 
 export const authOptions: AuthOptions = {
   providers: [
@@ -41,10 +54,54 @@ export const authOptions: AuthOptions = {
         }
       },
     }),
+    ...(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
+      ? [GoogleProvider({ clientId: process.env.GOOGLE_CLIENT_ID, clientSecret: process.env.GOOGLE_CLIENT_SECRET })]
+      : []),
   ],
   callbacks: {
-    async jwt({ token, user }) {
-      if (user) {
+    async signIn({ user, account }) {
+      if (account?.provider !== 'google') return true // credentials already fully validated in authorize()
+      if (!user.email) return '/login?error=NoEmail'
+
+      let dbUser = await prisma.user.findUnique({ where: { email: user.email } })
+
+      if (!dbUser) {
+        // First time this Google account has signed in here — mirrors requestStaffSignup:
+        // no self-assigned role, sits PENDING until an ADMIN assigns one via /dashboard/users.
+        dbUser = await prisma.user.create({
+          data: {
+            name: user.name || user.email.split('@')[0],
+            email: user.email,
+            passwordHash: await bcrypt.hash(crypto.randomUUID(), 10), // Google-only account — never used to log in
+            role: 'PENDING',
+            isActive: false,
+            avatarUrl: user.image ?? null,
+          },
+        })
+
+        const admins = await prisma.user.findMany({ where: { role: 'ADMIN' }, select: { id: true } })
+        await notifyUsers(
+          admins.map((a) => ({
+            userId: a.id,
+            title: 'New signup awaiting approval',
+            message: `${dbUser!.name} (${dbUser!.email}) signed up with Google and needs a role assigned.`,
+          }))
+        )
+      }
+
+      const gateError = staffGateError(dbUser)
+      return gateError ? `/login?error=${gateError}` : true
+    },
+    async jwt({ token, user, account }) {
+      if (account?.provider === 'google' && user?.email) {
+        const dbUser = await prisma.user.findUnique({ where: { email: user.email } })
+        if (dbUser) {
+          token.id = dbUser.id
+          token.role = dbUser.role as UserRole
+          token.name = dbUser.name
+          token.email = dbUser.email
+        }
+      } else if (user) {
         token.id = user.id
         token.role = (user as any).role
       }
@@ -60,6 +117,7 @@ export const authOptions: AuthOptions = {
   },
   pages: {
     signIn: '/login',
+    error: '/login',
   },
   session: { strategy: 'jwt' },
   secret: process.env.NEXTAUTH_SECRET,

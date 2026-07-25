@@ -1,11 +1,12 @@
 'use client'
 
-import { useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { signIn } from 'next-auth/react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Building2, Loader2, Mail, Lock, Eye, EyeOff, ShieldCheck, LineChart, ClipboardCheck } from 'lucide-react'
 import AuthBrandPanel from '@/components/auth/AuthBrandPanel'
+import GoogleSignInButton from '@/components/auth/GoogleSignInButton'
 
 const FEATURES = [
   { icon: ShieldCheck, label: 'Role-based access for Agents, Ops and Admins' },
@@ -13,13 +14,34 @@ const FEATURES = [
   { icon: LineChart, label: 'Real-time performance and pipeline insights' },
 ]
 
+const GOOGLE_ERROR_MESSAGES: Record<string, string> = {
+  PendingApproval: 'Your signup is awaiting admin approval. Try again once approved.',
+  Deactivated: 'This account has been deactivated.',
+  StaffOnly: 'This dashboard is for internal staff only. Please use the Diggaj Realty app to sign in.',
+  NoEmail: 'Your Google account has no email on file — try a different sign-in method.',
+}
+
 export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
+  )
+}
+
+function LoginForm() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    const code = searchParams.get('error')
+    if (code) setError(GOOGLE_ERROR_MESSAGES[code] ?? 'Sign-in failed. Please try again.')
+  }, [searchParams])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -118,6 +140,14 @@ export default function LoginPage() {
                 Sign in
               </button>
             </form>
+
+            <div className="my-5 flex items-center gap-3">
+              <span className="h-px flex-1" style={{ background: 'var(--line)' }} />
+              <span className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--text-3)' }}>or</span>
+              <span className="h-px flex-1" style={{ background: 'var(--line)' }} />
+            </div>
+
+            <GoogleSignInButton />
           </div>
 
           <p className="mt-6 text-center text-xs" style={{ color: 'var(--text-3)' }}>

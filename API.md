@@ -34,6 +34,18 @@ exclusively through the internal dashboard's own `/login` page (a separate,
 cookie-based session, not part of this API). This is intentional: internal
 staff credentials are never usable from the public-facing surface.
 
+```
+POST /api/v1/auth/google
+Content-Type: application/json
+{ "idToken": "<google-id-token>", "role": "BUYER", "phone": "9876543210" }
+
+→ 200 (existing account) or 201 (new account) { "data": { "token": "<jwt>", "user": {...}, "isNewUser": true } }
+```
+- `idToken` is the ID token Google Identity Services returns on the frontend after the user signs in with Google — send it here, don't decode/trust it client-side. This endpoint verifies it server-side against Google's own tokeninfo endpoint (audience must match this app's `GOOGLE_CLIENT_ID`, email must be verified).
+- `role` (optional, default `"BUYER"`) only applies the first time this Google email signs in — same `"BUYER"`/`"SELLER"` restriction as `/auth/register`. Ignored for a returning user (their existing role is used).
+- If the email is already registered as internal staff (AGENT/BACKEND/ADMIN), this returns `409` — those accounts sign in only through the internal dashboard.
+- Same response shape as `/auth/register`/`/auth/login` — log the user in with the returned token immediately, no second request needed. `isNewUser` tells you whether to show a "complete your profile" step.
+
 Send the token on every subsequent request:
 ```
 Authorization: Bearer <jwt>

@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Loader2, CheckCircle2, User, Mail, Phone, Lock, Eye, EyeOff, UserCheck, Clock, KeyRound } from 'lucide-react'
 import { requestStaffSignup } from '@/lib/actions/staffSignup'
 import AuthBrandPanel from '@/components/auth/AuthBrandPanel'
+import GoogleSignInButton from '@/components/auth/GoogleSignInButton'
 
 const inputStyle = { borderColor: 'var(--line)', color: 'var(--text-1)', background: 'var(--surface-2)' }
 
@@ -130,6 +131,17 @@ export default function SignupPage() {
                   Request access
                 </button>
               </form>
+
+              <div className="my-5 flex items-center gap-3">
+                <span className="h-px flex-1" style={{ background: 'var(--line)' }} />
+                <span className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--text-3)' }}>or</span>
+                <span className="h-px flex-1" style={{ background: 'var(--line)' }} />
+              </div>
+
+              <GoogleSignInButton />
+              <p className="mt-3 text-center text-[11px]" style={{ color: 'var(--text-3)' }}>
+                First time signing in with Google also requires admin approval before you get access.
+              </p>
             </div>
           )}
 
