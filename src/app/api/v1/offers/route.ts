@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { authenticate } from '@/lib/api/auth'
 import { ok, withApi, readJson, ApiError, parsePagination, paginatedEnvelope } from '@/lib/api/http'
 import { offerDTO } from '@/lib/api/dto'
+import { logOfferEvent } from '@/lib/actions/offerEvents'
 import type { Prisma } from '@prisma/client'
 
 /** Role-scoped offers — mirrors /dashboard/offers.
@@ -52,6 +53,7 @@ export const POST = withApi(async (req) => {
   const offer = await prisma.offer.create({
     data: { propertyId, buyerId: user.id, amount, message },
   })
+  await logOfferEvent({ offerId: offer.id, type: 'CREATED', amount, actorId: user.id, actorRole: 'BUYER' })
 
   await prisma.notification.create({
     data: {

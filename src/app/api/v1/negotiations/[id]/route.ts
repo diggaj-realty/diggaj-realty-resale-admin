@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { authenticate } from '@/lib/api/auth'
 import { ok, withApi, readJson, ApiError } from '@/lib/api/http'
 import { offerDTO } from '@/lib/api/dto'
+import { logOfferEvent } from '@/lib/actions/offerEvents'
 
 type Action = 'forward' | 'counter' | 'reject'
 
@@ -25,6 +26,7 @@ export const PATCH = withApi(async (req, ctx) => {
       where: { id: offerId },
       data: { status: 'PENDING', reviewedBy: backendUser.id },
     })
+    await logOfferEvent({ offerId, type: 'FORWARDED', actorId: backendUser.id, actorRole: 'BACKEND' })
     await prisma.notification.create({
       data: { userId: offer.property.sellerId, title: 'New offer to review', message: `You have a new offer to review on ${offer.property.title}.` },
     })
@@ -35,6 +37,7 @@ export const PATCH = withApi(async (req, ctx) => {
       where: { id: offerId },
       data: { status: 'COUNTERED', counterAmount, counterBy: 'BACKEND', reviewedBy: backendUser.id },
     })
+    await logOfferEvent({ offerId, type: 'COUNTERED_BACKEND', amount: counterAmount, actorId: backendUser.id, actorRole: 'BACKEND' })
     // Seller intentionally never notified — this bypasses them. Buyer-facing copy
     // is identical to a seller-issued counter; no mention of backend/review.
     await prisma.notification.create({
@@ -42,6 +45,7 @@ export const PATCH = withApi(async (req, ctx) => {
     })
   } else {
     await prisma.offer.update({ where: { id: offerId }, data: { status: 'REJECTED', reviewedBy: backendUser.id } })
+    await logOfferEvent({ offerId, type: 'REJECTED', actorId: backendUser.id, actorRole: 'BACKEND' })
     // Seller never notified — bypassed entirely. Buyer copy reads like a normal rejection.
     await prisma.notification.create({
       data: { userId: offer.buyerId, title: 'Offer rejected', message: `Your offer on ${offer.property.title} was rejected.` },

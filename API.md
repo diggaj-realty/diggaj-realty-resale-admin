@@ -110,10 +110,14 @@ Content-Type: multipart/form-data
 | GET | `/properties` | any | — paginated, filters below | LIVE properties only (buyer browse); `city` is normalized server-side (`"Bengaluru"`/`"bangalore"`/etc. all match listings stored as `"Bangalore"` — see canonical city list below); recording a view (see below) happens automatically on `GET /properties/:id` |
 | GET | `/properties/:id` | any | — | single property + photos; auto-records a `PropertyView` for the requesting user unless they're the listing's own seller/agent |
 | GET | `/properties/:id/views` | seller/agent (own listing) or ADMIN/BACKEND | — | `{ propertyId, viewCount, total, last7Days, uniqueViewers }` — view analytics, not for buyers |
+| GET | `/properties/recently-viewed` | BUYER | — `?pageSize=` | the buyer's own recently-viewed properties, most recent first, **deduped by property** (viewing one 5 times shows it once, at its latest view time); each item is a full `Property` object plus `viewedAt` |
+| PATCH | `/properties/:id` | SELLER (owner) | any subset of the `POST /listings` body fields, plus `photoUrls[]` | edit your own listing — **no status restriction**, editing a `LIVE` listing doesn't pull it back into review; `photoUrls`, if included, **fully replaces** the photo set (send the complete list, not just additions) — omit it to leave photos untouched |
+| DELETE | `/properties/:id` | SELLER (owner) | — | deletes the listing and its Storage photos; `409` if a `Deal` already exists on it (an in-progress sale blocks deletion) |
 | GET | `/listings` | SELLER/AGENT/ADMIN/BACKEND | — paginated | role-scoped: seller sees own, agent sees assigned, admin/backend see all |
-| POST | `/listings` | SELLER | `{ title, description, location, type, areaSqft, bhk, askingPrice, photoUrls[], ...richFields? }` | requires approved KYC; `type` one of `RESIDENTIAL/PLOT/COMMERCIAL`; starts as `DRAFT`; `richFields` are all optional — see "Rich listing fields" below |
+| POST | `/listings` | SELLER | `{ title, description, location, type, areaSqft, bhk, askingPrice, unitsAvailable?, photoUrls[], ...richFields? }` | requires approved KYC; `type` one of `RESIDENTIAL/PLOT/COMMERCIAL`; starts as `DRAFT`; `unitsAvailable` defaults to `1` if omitted, must be a positive whole number; `richFields` are all optional — see "Rich listing fields" below |
 | GET | `/queue` | BACKEND | — paginated | listings awaiting verification (`DRAFT`/`PENDING_VERIFICATION`) |
 | POST | `/queue/:id/review` | BACKEND | `{ decision: "LIVE" \| "REJECTED" }` | |
+| GET | `/insights/locality-price` | any | — `?city=` (required) `&locality=` (optional, substring match) | `{ city, locality, sampleSize, avgPrice, avgPricePerSqft }`, computed live from `LIVE` listings only. **This is a current snapshot, not a trend** — there's no price-history model in the schema, so no "up/down N% vs last quarter" is possible yet. `sampleSize: 0` gives `null` for both averages. |
 
 #### `GET /properties` query params
 
@@ -136,6 +140,7 @@ Content-Type: multipart/form-data
 | `ownershipType` | `FREEHOLD`\|`LEASEHOLD`\|`POWER_OF_ATTORNEY`\|`CO_OPERATIVE` | |
 | `amenities` | comma-separated string | matches properties having **all** listed amenities |
 | `eliteOnly` | `true`/`1` | `plan = ELITE` only |
+| `ownerOnly` | `true`/`1` | excludes any property with an assigned agent (`agentId != null`) — a NoBroker-style "owner listed only" filter |
 | `sort` | `newest`\|`price_asc`\|`price_desc`\|`area_asc`\|`area_desc`\|`most_viewed` | defaults to `newest` |
 
 Invalid/unrecognized values for enum-like params (`type`, `furnishing`, `facing`, `possessionStatus`, `ownershipType`, `sort`) are silently dropped rather than erroring, same as a saved search.
@@ -174,11 +179,20 @@ Invalid/unrecognized values for enum-like params (`type`, `furnishing`, `facing`
 ### Offers & negotiations
 | Method | Path | Role | Body | Notes |
 |---|---|---|---|---|
-| GET | `/offers` | SELLER/BUYER | — paginated | seller: forwarded offers only; buyer: own offers with `displayStatus` collapsing PENDING_REVIEW→PENDING |
+| GET | `/offers` | SELLER/BUYER | — paginated | seller: forwarded offers only; buyer: own offers with `displayStatus` collapsing PENDING_REVIEW→PENDING. **Does not include `events`** — fetch the single-offer endpoint for the full timeline. |
+| GET | `/offers/:id` | SELLER/BUYER (party to the offer) | — | single offer **with its full negotiation timeline** in `events[]` (see "Negotiation timeline" below); seller gets `404` if the offer is still `PENDING_REVIEW` (not yet forwarded — same concealment as the list endpoint) |
 | POST | `/offers` | BUYER | `{ propertyId, amount, message? }` | always starts `PENDING_REVIEW` — seller never sees it directly |
 | PATCH | `/offers/:id` | SELLER/BUYER | `{ action, counterAmount? }` | seller actions: `accept`,`reject`,`counter`; buyer actions: `acceptCounter`,`rejectCounter`; `accept`/`acceptCounter` auto-creates a Deal |
 | GET | `/negotiations` | BACKEND | — paginated | offers awaiting triage (`PENDING_REVIEW`) |
 | PATCH | `/negotiations/:id` | BACKEND | `{ action, counterAmount? }` | `action`: `forward` (→ seller), `counter`, or `reject` |
+
+#### Negotiation timeline
+
+`GET /offers/:id` includes an `events` array — the full audit trail of everything that's happened to that offer, oldest first. Each entry:
+```json
+{ "id": "...", "type": "COUNTERED_SELLER", "amount": 5300000, "actorRole": "SELLER", "note": null, "createdAt": "..." }
+```
+`type` is one of `CREATED`, `FORWARDED`, `COUNTERED_BACKEND`, `COUNTERED_SELLER`, `ACCEPTED`, `REJECTED`, `COUNTER_ACCEPTED`, `COUNTER_REJECTED`. `actorRole` is `BUYER`, `SELLER`, or `BACKEND` — note that `FORWARDED` and `COUNTERED_BACKEND` events (actorRole `BACKEND`) do appear in this timeline; the backend-triage step is not hidden from the timeline the way it's hidden from notification copy. Build one shared timeline UI component for both the buyer and seller view of an offer rather than two separate ones — same events, same shape, on both sides.
 
 ### Deals
 | Method | Path | Role | Body | Notes |

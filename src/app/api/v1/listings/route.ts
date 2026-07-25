@@ -48,6 +48,7 @@ export const POST = withApi(async (req) => {
     areaSqft?: number
     bhk?: number | null
     askingPrice?: number
+    unitsAvailable?: number
     photoUrls?: string[]
     [key: string]: unknown
   }>(req)
@@ -59,6 +60,7 @@ export const POST = withApi(async (req) => {
   const areaSqft = Number(body.areaSqft)
   const bhk = type === 'PLOT' || body.bhk == null ? null : Number(body.bhk)
   const askingPrice = Number(body.askingPrice)
+  const unitsAvailable = body.unitsAvailable != null ? Number(body.unitsAvailable) : 1
   const photoUrls = Array.isArray(body.photoUrls) ? body.photoUrls.filter((u) => typeof u === 'string' && u) : []
 
   if (!title) throw new ApiError('title is required', 400)
@@ -66,6 +68,7 @@ export const POST = withApi(async (req) => {
   if (!['RESIDENTIAL', 'PLOT', 'COMMERCIAL'].includes(type)) throw new ApiError('Invalid property type', 400)
   if (!areaSqft || areaSqft <= 0) throw new ApiError('areaSqft is required', 400)
   if (!askingPrice || askingPrice <= 0) throw new ApiError('askingPrice is required', 400)
+  if (!Number.isInteger(unitsAvailable) || unitsAvailable < 1) throw new ApiError('unitsAvailable must be a positive whole number', 400)
 
   const rich = buildRichPropertyData(body as unknown as RichPropertyInput)
 
@@ -80,6 +83,7 @@ export const POST = withApi(async (req) => {
       areaSqft,
       bhk,
       askingPrice,
+      unitsAvailable,
       status: 'DRAFT',
     } as Prisma.PropertyUncheckedCreateInput,
   })

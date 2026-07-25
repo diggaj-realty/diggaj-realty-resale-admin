@@ -1,4 +1,4 @@
-import type { User, Property, PropertyPhoto, Offer, Deal, SellerKyc, Notification } from '@prisma/client'
+import type { User, Property, PropertyPhoto, Offer, OfferEvent, Deal, SellerKyc, Notification } from '@prisma/client'
 import { buyerFacingOfferStatus } from '@/lib/data/dashboard'
 
 export function userDTO(u: User) {
@@ -109,6 +109,21 @@ export function propertyDTO(p: PropertyWithRelations) {
 type OfferWithRelations = Offer & {
   property?: { title: string; location: string } | null
   buyer?: { name: string } | null
+  events?: OfferEvent[]
+}
+
+/** Buyer/seller-facing negotiation timeline entry. actorId (an internal user id)
+ *  is deliberately omitted — actorRole ("BUYER"/"SELLER"/"BACKEND") is enough
+ *  context for a timeline without exposing another party's raw id. */
+function offerEventDTO(e: OfferEvent) {
+  return {
+    id: e.id,
+    type: e.type,
+    amount: e.amount,
+    actorRole: e.actorRole,
+    note: e.note,
+    createdAt: e.createdAt.toISOString(),
+  }
 }
 
 export function offerDTO(o: OfferWithRelations, opts?: { forBuyer?: boolean }) {
@@ -128,6 +143,7 @@ export function offerDTO(o: OfferWithRelations, opts?: { forBuyer?: boolean }) {
     propertyTitle: o.property?.title,
     propertyLocation: o.property?.location,
     buyerName: o.buyer?.name,
+    ...(o.events ? { events: o.events.map(offerEventDTO) } : {}),
   }
 }
 

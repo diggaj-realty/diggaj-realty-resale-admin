@@ -23,6 +23,10 @@ export interface PropertyFilters {
   ownershipType?: string
   amenities?: string[]
   eliteOnly?: boolean
+  /** NoBroker-style "owner listed only" filter — true excludes any property
+   *  with an assigned agent (agentId != null), leaving only listings the
+   *  seller manages directly. */
+  ownerOnly?: boolean
   sort?: string
 }
 
@@ -74,6 +78,7 @@ export function normalizeFilters(raw: Record<string, unknown> | null | undefined
   if (oneOf(raw.ownershipType, OWNERSHIP_TYPE)) out.ownershipType = oneOf(raw.ownershipType, OWNERSHIP_TYPE)
   if (strArray(raw.amenities)) out.amenities = strArray(raw.amenities)
   if (bool(raw.eliteOnly)) out.eliteOnly = true
+  if (bool(raw.ownerOnly)) out.ownerOnly = true
   if (oneOf(raw.sort, SORTS)) out.sort = oneOf(raw.sort, SORTS)
 
   return out
@@ -112,6 +117,7 @@ export function buildPropertyWhere(filters: PropertyFilters): Prisma.PropertyWhe
   if (filters.ownershipType) where.ownershipType = filters.ownershipType
   if (filters.amenities && filters.amenities.length > 0) where.amenities = { hasEvery: filters.amenities }
   if (filters.eliteOnly) where.plan = 'ELITE'
+  if (filters.ownerOnly) where.agentId = null
   if (filters.q) {
     const normalizedQ = normalizeCity(filters.q)
     where.OR = [
