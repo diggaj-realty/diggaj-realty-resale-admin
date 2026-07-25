@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { signOut } from 'next-auth/react'
@@ -36,7 +36,18 @@ export default function TopNav({
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
+
+  useEffect(() => {
+    document.body.style.overflow = mobileNavOpen ? 'hidden' : ''
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [mobileNavOpen])
   const pathname = usePathname()
+
+  useEffect(() => {
+    setMobileNavOpen(false)
+  }, [pathname])
   const navItems = getNavIcons(role)
   const firstName = userName.split(' ')[0]
 
@@ -155,29 +166,60 @@ export default function TopNav({
         </div>
       </div>
 
-      {mobileNavOpen && (
-        <nav
-          className="flex flex-col gap-1 border-t p-3 lg:hidden"
-          style={{ borderColor: 'var(--line)' }}
-        >
-          {navItems.map((item) => {
-            const isActive = item.href === '/dashboard' ? pathname === '/dashboard' : pathname.startsWith(item.href)
-            const Icon = item.icon
-            return (
-              <Link
-                key={item.key}
-                href={item.href}
-                onClick={() => setMobileNavOpen(false)}
-                className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium"
-                style={{ background: isActive ? 'var(--surface-2)' : 'transparent', color: isActive ? 'var(--text-1)' : 'var(--text-3)' }}
-              >
-                <Icon size={17} />
-                {item.label}
-              </Link>
-            )
-          })}
-        </nav>
-      )}
+      {/* Mobile nav — slides in from the left, desktop nav above is untouched. */}
+      <div
+        className={`fixed inset-0 z-40 bg-black/40 transition-opacity duration-300 lg:hidden ${
+          mobileNavOpen ? 'opacity-100' : 'pointer-events-none opacity-0'
+        }`}
+        onClick={() => setMobileNavOpen(false)}
+        aria-hidden="true"
+      />
+      <nav
+        className={`fixed left-0 top-0 z-50 flex h-full w-72 max-w-[80vw] flex-col gap-1 overflow-y-auto p-4 transition-transform duration-300 ease-out lg:hidden ${
+          mobileNavOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}
+        style={{ background: 'var(--surface)', boxShadow: 'var(--elev-3)' }}
+      >
+        <div className="mb-3 flex items-center justify-between">
+          <Link href="/dashboard" onClick={() => setMobileNavOpen(false)} className="flex items-center gap-2.5">
+            <span
+              className="flex h-9 w-9 items-center justify-center rounded-full text-sm font-bold"
+              style={{ background: 'var(--accent-gradient)', color: 'var(--ink-900)' }}
+            >
+              D
+            </span>
+            <span className="truncate text-sm font-semibold tracking-tight" style={{ color: 'var(--text-1)' }}>
+              Diggaj Realty
+            </span>
+          </Link>
+          <button
+            type="button"
+            onClick={() => setMobileNavOpen(false)}
+            className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full transition-colors hover:bg-black/[0.04]"
+            style={{ color: 'var(--text-2)' }}
+            aria-label="Close menu"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        {navItems.map((item) => {
+          const isActive = item.href === '/dashboard' ? pathname === '/dashboard' : pathname.startsWith(item.href)
+          const Icon = item.icon
+          return (
+            <Link
+              key={item.key}
+              href={item.href}
+              onClick={() => setMobileNavOpen(false)}
+              className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium"
+              style={{ background: isActive ? 'var(--surface-2)' : 'transparent', color: isActive ? 'var(--text-1)' : 'var(--text-3)' }}
+            >
+              <Icon size={17} />
+              {item.label}
+            </Link>
+          )
+        })}
+      </nav>
     </header>
   )
 }
