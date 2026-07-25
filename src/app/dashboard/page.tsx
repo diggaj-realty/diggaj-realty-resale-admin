@@ -128,7 +128,6 @@ export default async function DashboardPage() {
             latitude={featured.latitude}
             longitude={featured.longitude}
             count={featured.count}
-            href={config.viewHref}
           />
         ) : (
           <PerformanceChartCard title={data.performanceTitle} series={data.performanceSeries} />

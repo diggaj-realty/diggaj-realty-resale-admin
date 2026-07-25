@@ -15,14 +15,27 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // catches any session cookie issued before that restriction existed.
   if (role === 'BUYER' || role === 'SELLER') redirect('/login')
 
-  const [unreadCount, user] = await Promise.all([
+  const [unreadCount, user, notifications] = await Promise.all([
     prisma.notification.count({ where: { userId: id, isRead: false } }),
     prisma.user.findUnique({ where: { id }, select: { avatarUrl: true } }),
+    prisma.notification.findMany({
+      where: { userId: id },
+      orderBy: { createdAt: 'desc' },
+      take: 8,
+      select: { id: true, title: true, message: true, isRead: true, createdAt: true },
+    }),
   ])
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--background)' }}>
-      <TopNav userName={name ?? 'User'} role={role} userEmail={email ?? ''} unreadCount={unreadCount} avatarUrl={user?.avatarUrl ?? null} />
+      <TopNav
+        userName={name ?? 'User'}
+        role={role}
+        userEmail={email ?? ''}
+        unreadCount={unreadCount}
+        avatarUrl={user?.avatarUrl ?? null}
+        initialNotifications={notifications}
+      />
       <main className="mx-auto max-w-[1600px] px-4 py-6 sm:px-8 sm:py-8">{children}</main>
     </div>
   )

@@ -1,4 +1,4 @@
-import { statusTone } from '@/lib/data/dashboard'
+import { statusTone } from '@/lib/statusTone'
 
 const TONE_BG: Record<string, string> = {
   green: 'var(--green-50)',

@@ -4,9 +4,11 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { signOut } from 'next-auth/react'
-import { Bell, Search, ChevronDown, LogOut, Settings, Menu, X } from 'lucide-react'
+import { ChevronDown, LogOut, Settings, Menu, X } from 'lucide-react'
 import { getNavIcons, ROLE_LABELS } from './navConfig'
 import { initials } from '@/lib/format'
+import SearchOverlay from './SearchOverlay'
+import NotificationsDropdown, { type DashboardNotification } from './NotificationsDropdown'
 import type { UserRole } from '@/types'
 
 const ROLE_AVATAR_BG: Record<UserRole, string> = {
@@ -23,12 +25,14 @@ export default function TopNav({
   userEmail,
   unreadCount,
   avatarUrl,
+  initialNotifications,
 }: {
   userName: string
   role: UserRole
   userEmail: string
   unreadCount: number
   avatarUrl: string | null
+  initialNotifications: DashboardNotification[]
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
@@ -87,27 +91,9 @@ export default function TopNav({
         </nav>
 
         <div className="ml-auto flex flex-shrink-0 items-center gap-1 sm:gap-2">
-          <button
-            type="button"
-            className="hidden h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-black/[0.04] sm:flex"
-            style={{ color: 'var(--text-2)' }}
-          >
-            <Search size={18} />
-          </button>
+          <SearchOverlay />
 
-          <button
-            type="button"
-            className="relative flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-black/[0.04]"
-            style={{ color: 'var(--text-2)' }}
-          >
-            <Bell size={18} />
-            {unreadCount > 0 && (
-              <span
-                className="absolute right-2 top-2 h-2 w-2 rounded-full"
-                style={{ background: 'var(--accent-500)', boxShadow: '0 0 0 2px var(--surface)' }}
-              />
-            )}
-          </button>
+          <NotificationsDropdown initialNotifications={initialNotifications} initialUnreadCount={unreadCount} />
 
           <Link
             href="/dashboard/settings"

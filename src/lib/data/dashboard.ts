@@ -45,22 +45,13 @@ export interface DashboardData {
   emptyMessage: string
 }
 
-function statusTone(status: string): string {
-  const s = status.toUpperCase()
-  if (['LIVE', 'CLOSED', 'ACCEPTED', 'APPROVED'].includes(s)) return 'green'
-  if (['PENDING_VERIFICATION', 'PENDING', 'PENDING_REVIEW', 'UNDER_REVIEW'].includes(s)) return 'gold'
-  if (['IN_PROGRESS', 'COUNTERED'].includes(s)) return 'blue'
-  if (['REJECTED'].includes(s)) return 'red'
-  return 'purple'
-}
-
 /** Buyer/seller-facing offer status never distinguishes "awaiting backend triage"
  *  from "forwarded, awaiting seller" — both display as a plain "Pending". */
 function buyerFacingOfferStatus(status: string): string {
   return status === 'PENDING_REVIEW' ? 'PENDING' : status
 }
 
-export { statusTone, buyerFacingOfferStatus }
+export { buyerFacingOfferStatus }
 
 export async function getSellerDashboard(userId: string): Promise<DashboardData & { kyc: { pending: boolean; rejected: boolean; approved: boolean; remarks: string | null } }> {
   const sevenDaysAgo = new Date(Date.now() - 7 * DAY_MS)
