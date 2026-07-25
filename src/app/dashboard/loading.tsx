@@ -1,7 +1,7 @@
 export default function DashboardLoading() {
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-col gap-2">
           <div className="skeleton h-6 w-48 rounded-lg" />
           <div className="skeleton h-3.5 w-32 rounded-lg" />

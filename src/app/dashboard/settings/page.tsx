@@ -57,8 +57,8 @@ export default async function SettingsPage() {
                 />
               ) : (
                 <span
-                  className="flex h-14 w-14 items-center justify-center rounded-full text-lg font-bold"
-                  style={{ background: 'var(--accent-gradient)', color: 'var(--ink-900)' }}
+                  className="flex h-14 w-14 items-center justify-center rounded-full text-lg font-bold text-white"
+                  style={{ background: 'var(--accent-gradient)' }}
                 >
                   {user.name.slice(0, 1).toUpperCase()}
                 </span>

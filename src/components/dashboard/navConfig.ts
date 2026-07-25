@@ -27,15 +27,22 @@ export interface NavIcon {
   label: string
   icon: LucideIcon
   href: string
+  /** Utility items (Performance/Feedback/Help) — collapsed into the "More"
+   *  dropdown on the desktop nav bar instead of taking a primary slot, since
+   *  every role now has enough core work-queue items that all of them in one
+   *  row wraps or overflows on real laptop widths (BACKEND/ADMIN were up to
+   *  11-12 plain-text links). The mobile drawer still lists every item, flat,
+   *  since a vertical scrollable list doesn't have this problem. */
+  secondary?: boolean
 }
 
 /** Icon-rail nav per role — every icon routes to a real page under /dashboard. */
 export function getNavIcons(role: UserRole): NavIcon[] {
   const home: NavIcon = { key: 'home', label: 'Dashboard', icon: Home, href: '/dashboard' }
-  const performance: NavIcon = { key: 'performance', label: 'Performance', icon: BarChart3, href: '/dashboard/performance' }
-  const feedback: NavIcon = { key: 'feedback', label: 'Feedback', icon: MessageSquare, href: '/dashboard/feedback' }
-  const help: NavIcon = { key: 'help', label: 'Help Center', icon: LifeBuoy, href: '/dashboard/help' }
-  const settings: NavIcon = { key: 'settings', label: 'Settings', icon: Settings, href: '/dashboard/settings' }
+  const performance: NavIcon = { key: 'performance', label: 'Performance', icon: BarChart3, href: '/dashboard/performance', secondary: true }
+  const feedback: NavIcon = { key: 'feedback', label: 'Feedback', icon: MessageSquare, href: '/dashboard/feedback', secondary: true }
+  const help: NavIcon = { key: 'help', label: 'Help Center', icon: LifeBuoy, href: '/dashboard/help', secondary: true }
+  const settings: NavIcon = { key: 'settings', label: 'Settings', icon: Settings, href: '/dashboard/settings', secondary: true }
   const publicListings: NavIcon = { key: 'public-listings', label: 'Public Listings', icon: Globe, href: '/dashboard/public-listings' }
   const siteVisitsQueue: NavIcon = { key: 'site-visits-queue', label: 'Site Visits', icon: CalendarCheck, href: '/dashboard/site-visits-queue' }
 

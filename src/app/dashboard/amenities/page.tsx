@@ -51,6 +51,7 @@ export default async function AmenitiesPage() {
       </form>
 
       <div className="card overflow-hidden" data-animate="fade-up">
+        <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="text-left text-xs font-semibold uppercase tracking-wide" style={{ background: 'var(--surface-2)', color: 'var(--text-3)' }}>
@@ -105,6 +106,7 @@ export default async function AmenitiesPage() {
             )}
           </tbody>
         </table>
+        </div>
       </div>
     </DashboardEntrance>
   )

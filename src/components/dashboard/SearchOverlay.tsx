@@ -79,7 +79,7 @@ export default function SearchOverlay() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="hidden h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-black/[0.04] sm:flex"
+        className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full transition-colors hover:bg-black/[0.04]"
         style={{ color: 'var(--text-2)' }}
         aria-label="Search"
       >

@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import TopNav from '@/components/dashboard/TopNav'
+import DashboardShell from '@/components/dashboard/DashboardShell'
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const session = await getServerSession(authOptions)
@@ -27,16 +27,15 @@ export default async function DashboardLayout({ children }: { children: React.Re
   ])
 
   return (
-    <div className="min-h-screen" style={{ background: 'var(--background)' }}>
-      <TopNav
-        userName={name ?? 'User'}
-        role={role}
-        userEmail={email ?? ''}
-        unreadCount={unreadCount}
-        avatarUrl={user?.avatarUrl ?? null}
-        initialNotifications={notifications}
-      />
-      <main className="mx-auto max-w-[1600px] px-4 py-6 sm:px-8 sm:py-8">{children}</main>
-    </div>
+    <DashboardShell
+      userName={name ?? 'User'}
+      role={role}
+      userEmail={email ?? ''}
+      unreadCount={unreadCount}
+      avatarUrl={user?.avatarUrl ?? null}
+      initialNotifications={notifications}
+    >
+      {children}
+    </DashboardShell>
   )
 }

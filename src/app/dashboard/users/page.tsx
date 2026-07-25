@@ -44,7 +44,7 @@ export default async function UsersPage({
 
   return (
     <DashboardEntrance>
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <PageHeader title="All Users" subtitle={`${users.length} accounts`} />
         <div className="flex items-center gap-2">
           <CreateStaffUserForm />

@@ -314,6 +314,10 @@ export interface FeaturedProperty {
   heroPhotoUrl: string | null
   filmstripPhotos: { photoUrl: string }[]
   count: number
+  askingPrice: number
+  areaSqft: number
+  bhk: number | null
+  type: string
 }
 
 /** One "hero" property (most recent) plus a couple of others in the role-scoped
@@ -357,6 +361,10 @@ export async function getFeaturedProperties(role: UserRole, userId: string): Pro
     heroPhotoUrl: hero.photos[0]?.photoUrl ?? null,
     filmstripPhotos: hero.photos.slice(1, 3).map((p) => ({ photoUrl: p.photoUrl })),
     count,
+    askingPrice: hero.askingPrice,
+    areaSqft: hero.areaSqft,
+    bhk: hero.bhk,
+    type: hero.type,
   }
 }
 

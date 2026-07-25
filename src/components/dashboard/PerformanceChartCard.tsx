@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid } from 'recharts'
+import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid, LabelList } from 'recharts'
 
 const tooltipStyle = {
   background: '#fff',
@@ -22,6 +22,26 @@ function toMonthlyBuckets(series: { label: string; value: number }[]) {
   ]
 }
 
+/** Floating value label above the tallest bar — the reference's "$3.9m"
+ *  peak-callout pattern, using our own real series values (no fabricated
+ *  figures). Recharts positions each <Bar> child label via the injected
+ *  x/y/width props at render time. */
+function PeakLabel(props: Record<string, unknown> & { peakValue: number }) {
+  const x = Number(props.x ?? 0)
+  const y = Number(props.y ?? 0)
+  const width = Number(props.width ?? 0)
+  const value = Number(props.value ?? NaN)
+  if (value !== props.peakValue) return null
+  return (
+    <g transform={`translate(${x + width / 2}, ${y - 14})`}>
+      <rect x={-20} y={-16} width={40} height={22} rx={11} fill="var(--accent-600)" />
+      <text x={0} y={0} textAnchor="middle" fontSize={11} fontWeight={700} fill="#fff">
+        {value}
+      </text>
+    </g>
+  )
+}
+
 export default function PerformanceChartCard({
   title,
   series,
@@ -31,12 +51,13 @@ export default function PerformanceChartCard({
 }) {
   const [range, setRange] = useState<'week' | 'month'>('week')
   const data = range === 'week' ? series : toMonthlyBuckets(series)
+  const peakValue = Math.max(...data.map((d) => d.value), 0)
 
   return (
     <div className="card card-hover p-6" data-animate="fade-up">
-      <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-sm font-bold" style={{ color: 'var(--text-1)' }}>{title}</h2>
-        <div className="flex gap-1 rounded-full p-1" style={{ background: 'var(--surface-3)' }}>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <h2 className="min-w-0 truncate text-sm font-bold" style={{ color: 'var(--text-1)' }}>{title}</h2>
+        <div className="flex flex-shrink-0 gap-1 rounded-full p-1" style={{ background: 'var(--surface-3)' }}>
           {(['week', 'month'] as const).map((r) => (
             <button
               key={r}
@@ -54,13 +75,18 @@ export default function PerformanceChartCard({
           ))}
         </div>
       </div>
-      <ResponsiveContainer width="100%" height={220}>
-        <BarChart data={data} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+      <ResponsiveContainer width="100%" height={230}>
+        <BarChart data={data} margin={{ top: 30, right: 4, left: -20, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--line)" />
           <XAxis dataKey="label" tick={{ fontSize: 11, fill: 'var(--text-3)' }} axisLine={false} tickLine={false} />
           <YAxis tick={{ fontSize: 11, fill: 'var(--text-3)' }} axisLine={false} tickLine={false} allowDecimals={false} />
-          <Tooltip contentStyle={tooltipStyle} cursor={{ fill: 'rgba(255,170,9,0.08)' }} />
-          <Bar dataKey="value" fill="var(--ink-800)" radius={[10, 10, 10, 10]} maxBarSize={36} />
+          <Tooltip contentStyle={tooltipStyle} cursor={{ fill: 'var(--accent-50)' }} />
+          <Bar dataKey="value" radius={[10, 10, 10, 10]} maxBarSize={36}>
+            {data.map((d, i) => (
+              <Cell key={i} fill={d.value === peakValue ? 'var(--accent-600)' : 'var(--surface-3)'} />
+            ))}
+            <LabelList dataKey="value" content={(props) => <PeakLabel {...props} peakValue={peakValue} />} />
+          </Bar>
         </BarChart>
       </ResponsiveContainer>
     </div>

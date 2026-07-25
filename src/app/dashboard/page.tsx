@@ -18,6 +18,7 @@ import DashboardEntrance from '@/components/dashboard/DashboardEntrance'
 import DashboardOverviewHeader from '@/components/dashboard/DashboardOverviewHeader'
 import DashboardHeroBanner from '@/components/dashboard/DashboardHeroBanner'
 import StatTile from '@/components/dashboard/StatTile'
+import IndexRangeCard from '@/components/dashboard/IndexRangeCard'
 import PerformanceChartCard from '@/components/dashboard/PerformanceChartCard'
 import QuickActionsCard from '@/components/dashboard/QuickActionsCard'
 import TrendingInterestCard from '@/components/dashboard/TrendingInterestCard'
@@ -108,15 +109,23 @@ export default async function DashboardPage() {
         <DashboardHeroBanner
           eyebrow={config.heroEyebrow}
           title={featured.title}
+          location={featured.location}
           photoUrl={featured.heroPhotoUrl}
+          askingPrice={featured.askingPrice}
+          areaSqft={featured.areaSqft}
+          bhk={featured.bhk}
+          type={featured.type}
           status={featured.status}
         />
       )}
 
-      <div className="mb-6 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-        {data.stats.slice(0, 4).map((stat) => (
-          <StatTile key={stat.label} stat={stat} spark={spark} />
-        ))}
+      <div className="mb-6 grid grid-cols-1 gap-5 lg:grid-cols-3">
+        <IndexRangeCard stat={data.stats[0]} series={data.performanceSeries} />
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-3 lg:col-span-2">
+          {data.stats.slice(1, 4).map((stat) => (
+            <StatTile key={stat.label} stat={stat} spark={spark} />
+          ))}
+        </div>
       </div>
 
       <div className="mb-6 grid grid-cols-1 gap-6 lg:grid-cols-3">

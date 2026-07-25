@@ -37,7 +37,7 @@ export default async function ClientsPage({
 
   return (
     <DashboardEntrance>
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <PageHeader title="Clients" subtitle={`${clients.length} buyers & sellers`} />
         <ExportButton
           rows={clients.map((c) => ({

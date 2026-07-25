@@ -56,7 +56,7 @@ export default async function ListingsPage({
 
   return (
     <DashboardEntrance>
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <PageHeader title={title} subtitle={`${properties.length} propert${properties.length === 1 ? 'y' : 'ies'}`} />
         <div className="flex items-center gap-2">
           <Link href="/dashboard/listings/new" className="btn-accent rounded-lg px-3 py-2 text-xs font-semibold">

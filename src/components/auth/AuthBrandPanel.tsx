@@ -34,7 +34,7 @@ export default function AuthBrandPanel({
 
       <div className="relative z-10 flex items-center gap-3">
         <div className="flex h-11 w-11 items-center justify-center rounded-full" style={{ background: 'var(--accent-gradient)' }}>
-          <Building2 size={20} style={{ color: 'var(--ink-900)' }} />
+          <Building2 size={20} className="text-white" />
         </div>
         <span className="text-lg font-semibold tracking-[-0.02em] text-white">Diggaj Realty</span>
       </div>

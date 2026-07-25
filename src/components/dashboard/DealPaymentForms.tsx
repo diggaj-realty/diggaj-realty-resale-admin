@@ -78,7 +78,7 @@ export default function DealPaymentForms({
 
       <form action={runAction(recordTokenPayment, startTokenTransition)} className="card p-6">
         <h3 className="mb-4 text-sm font-bold" style={{ color: 'var(--text-1)' }}>Token Payment</h3>
-        <div className="mb-3 grid grid-cols-2 gap-3">
+        <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
             <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-3)' }}>Amount (₹)</label>
             <input name="tokenAmount" type="number" step="0.01" min="0" defaultValue={tokenAmount ?? ''} required className="w-full rounded-lg border px-3 py-2.5 text-sm outline-none" style={{ borderColor: 'var(--line)', color: 'var(--text-1)' }} />
@@ -95,7 +95,7 @@ export default function DealPaymentForms({
 
       <form action={runAction(recordFinalPayment, startFinalTransition)} className="card p-6">
         <h3 className="mb-4 text-sm font-bold" style={{ color: 'var(--text-1)' }}>Final Payment</h3>
-        <div className="mb-3 grid grid-cols-2 gap-3">
+        <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
             <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-3)' }}>Amount (₹)</label>
             <input name="finalAmount" type="number" step="0.01" min="0" defaultValue={finalAmount ?? ''} required className="w-full rounded-lg border px-3 py-2.5 text-sm outline-none" style={{ borderColor: 'var(--line)', color: 'var(--text-1)' }} />
