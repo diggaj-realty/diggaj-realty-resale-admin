@@ -6,7 +6,8 @@ import { prisma } from '@/lib/prisma'
 import PageHeader from '@/components/dashboard/PageHeader'
 import DashboardEntrance from '@/components/dashboard/DashboardEntrance'
 import AgingBadge from '@/components/dashboard/AgingBadge'
-import { assignSiteVisitAgent } from '@/lib/actions/siteVisits'
+import AssignSiteVisitAgentForm from '@/components/dashboard/AssignSiteVisitAgentForm'
+import SiteVisitOutcomePanel from '@/components/dashboard/SiteVisitOutcomePanel'
 
 const STATUS_STYLE: Record<string, { bg: string; fg: string; label: string }> = {
   REQUESTED: { bg: 'rgba(234,179,8,0.14)', fg: '#a16207', label: 'Requested' },
@@ -42,7 +43,7 @@ export default async function SiteVisitsQueuePage() {
     prisma.siteVisit.findMany({
       orderBy: { createdAt: 'desc' },
       include: {
-        property: { select: { title: true, location: true } },
+        property: { select: { title: true, location: true, askingPrice: true } },
         buyer: { select: { name: true } },
         agent: { select: { name: true } },
       },
@@ -103,24 +104,19 @@ export default async function SiteVisitsQueuePage() {
                 </div>
 
                 {(v.status === 'REQUESTED' || v.status === 'SCHEDULED') && (
-                  <form action={assignSiteVisitAgent} className="mt-3 flex flex-wrap items-center gap-2 border-t pt-3" style={{ borderColor: 'var(--line)' }}>
-                    <input type="hidden" name="id" value={v.id} />
-                    <select
-                      name="agentId"
-                      required
-                      defaultValue={v.agentId ?? ''}
-                      className="rounded-lg border px-2.5 py-2 text-xs outline-none"
-                      style={{ borderColor: 'var(--line)', color: 'var(--text-1)', background: 'var(--surface)' }}
-                    >
-                      <option value="" disabled>Select an agent</option>
-                      {agents.map((a) => (
-                        <option key={a.id} value={a.id}>{a.name}</option>
-                      ))}
-                    </select>
-                    <button type="submit" className="btn-accent rounded-lg px-3 py-2 text-xs font-semibold">
-                      {v.agentId ? 'Reassign' : 'Assign agent'}
-                    </button>
-                  </form>
+                  <AssignSiteVisitAgentForm visitId={v.id} agentId={v.agentId} agents={agents} />
+                )}
+
+                {v.status === 'COMPLETED' && (
+                  <SiteVisitOutcomePanel
+                    visitId={v.id}
+                    outcome={v.outcome}
+                    interestedAmount={v.interestedAmount}
+                    askingPrice={v.property.askingPrice}
+                    dealId={v.dealId}
+                    canRecordOutcome={false}
+                    canCreateDeal={true}
+                  />
                 )}
               </div>
             )

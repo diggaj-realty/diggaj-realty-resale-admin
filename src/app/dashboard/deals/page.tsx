@@ -7,7 +7,7 @@ import { formatINR } from '@/lib/format'
 import PageHeader from '@/components/dashboard/PageHeader'
 import StatusPill from '@/components/dashboard/StatusPill'
 import DashboardEntrance from '@/components/dashboard/DashboardEntrance'
-import AgentAssignSelect from '@/components/dashboard/AgentAssignSelect'
+import AssignDealAgentForm from '@/components/dashboard/AssignDealAgentForm'
 import { Briefcase } from 'lucide-react'
 
 export default async function DealsPage() {
@@ -16,13 +16,17 @@ export default async function DealsPage() {
   const { id, role } = session.user
 
   // SELLER is excluded — dashboard/layout.tsx already redirects SELLER
-  // sessions before this page renders.
-  if (!['BUYER', 'AGENT', 'ADMIN'].includes(role)) redirect('/dashboard')
+  // sessions before this page renders. BACKEND sees every deal, same as
+  // ADMIN — they run the paperwork/closing process day to day and were
+  // previously locked out of this page entirely (could only see a single
+  // summary line on the dashboard home, no way to open a deal's detail).
+  if (!['BUYER', 'AGENT', 'ADMIN', 'BACKEND'].includes(role)) redirect('/dashboard')
 
+  const isStaff = role === 'ADMIN' || role === 'BACKEND'
   const where =
     role === 'BUYER' ? { buyerId: id }
     : role === 'AGENT' ? { agentId: id }
-    : {} // ADMIN sees all deals
+    : {} // ADMIN/BACKEND see all deals
 
   const deals = await prisma.deal.findMany({
     where,
@@ -35,11 +39,11 @@ export default async function DealsPage() {
     },
   })
 
-  const agents = role === 'ADMIN'
+  const agents = isStaff
     ? await prisma.user.findMany({ where: { role: 'AGENT' }, select: { id: true, name: true }, orderBy: { name: 'asc' } })
     : []
 
-  const title = role === 'BUYER' ? 'My Deals' : role === 'ADMIN' ? 'All Deals' : 'Assigned Deals'
+  const title = role === 'BUYER' ? 'My Deals' : isStaff ? 'All Deals' : 'Assigned Deals'
 
   return (
     <DashboardEntrance>
@@ -71,8 +75,8 @@ export default async function DealsPage() {
               </div>
               <span className="whitespace-nowrap text-sm font-bold" style={{ color: 'var(--accent-700)' }}>{formatINR(d.agreedPrice)}</span>
               <StatusPill status={d.status} />
-              {role === 'ADMIN' && (
-                <AgentAssignSelect dealId={d.id} agentId={d.agentId} agents={agents} />
+              {isStaff && (
+                <AssignDealAgentForm dealId={d.id} agentId={d.agentId} agents={agents} />
               )}
             </Link>
           ))

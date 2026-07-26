@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma'
 import { scheduleSiteVisit, completeSiteVisit, cancelSiteVisit } from '@/lib/actions/siteVisits'
 import PageHeader from '@/components/dashboard/PageHeader'
 import DashboardEntrance from '@/components/dashboard/DashboardEntrance'
+import SiteVisitOutcomePanel from '@/components/dashboard/SiteVisitOutcomePanel'
 
 const STATUS_STYLE: Record<string, { bg: string; fg: string; label: string }> = {
   REQUESTED: { bg: 'rgba(234,179,8,0.14)', fg: '#a16207', label: 'Requested' },
@@ -37,7 +38,7 @@ export default async function SiteVisitsPage() {
     where: role === 'BUYER' ? { buyerId: session.user.id } : { agentId: session.user.id },
     orderBy: { createdAt: 'desc' },
     include: {
-      property: { select: { title: true, location: true } },
+      property: { select: { title: true, location: true, askingPrice: true } },
       buyer: { select: { name: true } },
     },
   })
@@ -130,6 +131,20 @@ export default async function SiteVisitsPage() {
                       </button>
                     </form>
                   </div>
+                )}
+
+                {/* Post-visit outcome — negotiation happens in person, this just
+                    records it. Agent can log/update it; buyer sees a read-only summary. */}
+                {v.status === 'COMPLETED' && (
+                  <SiteVisitOutcomePanel
+                    visitId={v.id}
+                    outcome={v.outcome}
+                    interestedAmount={v.interestedAmount}
+                    askingPrice={v.property.askingPrice}
+                    dealId={v.dealId}
+                    canRecordOutcome={role === 'AGENT'}
+                    canCreateDeal={role === 'AGENT'}
+                  />
                 )}
               </div>
             )
