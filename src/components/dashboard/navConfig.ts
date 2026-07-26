@@ -20,6 +20,7 @@ import {
   LifeBuoy,
   Globe,
   FileCheck2,
+  UserRound,
 } from 'lucide-react'
 import type { UserRole } from '@/types'
 
@@ -50,6 +51,8 @@ export function getNavIcons(role: UserRole): NavIcon[] {
   // is where post-acceptance work (agent, visits, offline negotiation, docs,
   // payments, closure) is driven from.
   const acceptedOffers: NavIcon = { key: 'accepted-offers', label: 'Accepted Offers', icon: FileCheck2, href: '/dashboard/accepted-offers' }
+  // The front of the funnel: genuine buyer interest before any offer exists.
+  const leads: NavIcon = { key: 'leads', label: 'Buyer Leads', icon: UserRound, href: '/dashboard/leads' }
 
   // SELLER is intentionally absent — SELLER sessions never reach any page
   // this nav renders for (see dashboard/layout.tsx redirect).
@@ -75,6 +78,7 @@ export function getNavIcons(role: UserRole): NavIcon[] {
         { key: 'site-visits', label: 'Site Visits', icon: CalendarCheck, href: '/dashboard/site-visits' },
         { key: 'offers', label: 'Offers Received', icon: HandCoins, href: '/dashboard/offers' },
         { key: 'deals', label: 'Assigned Deals', icon: Briefcase, href: '/dashboard/deals' },
+        leads,
         acceptedOffers,
         performance,
         feedback,
@@ -89,6 +93,7 @@ export function getNavIcons(role: UserRole): NavIcon[] {
         { key: 'listings', label: 'All Listings', icon: Building2, href: '/dashboard/listings' },
         publicListings,
         { key: 'negotiations', label: 'Negotiations', icon: Scale, href: '/dashboard/negotiations' },
+        leads,
         acceptedOffers,
         siteVisitsQueue,
         { key: 'clients', label: 'Clients', icon: Contact, href: '/dashboard/clients' },
@@ -104,6 +109,7 @@ export function getNavIcons(role: UserRole): NavIcon[] {
         { key: 'clients', label: 'Clients', icon: Contact, href: '/dashboard/clients' },
         { key: 'listings', label: 'All Listings', icon: Building2, href: '/dashboard/listings' },
         publicListings,
+        leads,
         acceptedOffers,
         siteVisitsQueue,
         { key: 'amenities', label: 'Amenities', icon: ListChecks, href: '/dashboard/amenities' },

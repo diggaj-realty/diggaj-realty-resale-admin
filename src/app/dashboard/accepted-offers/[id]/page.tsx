@@ -15,7 +15,9 @@ import DealLog from '@/components/dashboard/DealLog'
 import DealPaymentForms from '@/components/dashboard/DealPaymentForms'
 import OfflineNegotiationPanel from '@/components/dashboard/OfflineNegotiationPanel'
 import PaymentRequestsPanel from '@/components/dashboard/PaymentRequestsPanel'
+import DealCompliancePanel from '@/components/dashboard/DealCompliancePanel'
 import { computeDealProgress } from '@/lib/data/dealProgress'
+import { evaluateClosureGate } from '@/lib/data/closureGate'
 import { Building2, User2, CalendarCheck, ArrowLeft } from 'lucide-react'
 
 /** The single operational page for a transaction after acceptance. Everything
@@ -44,6 +46,25 @@ export default async function AcceptedOfferDetailPage({ params }: { params: Prom
       documents: { orderBy: { createdAt: 'asc' } },
       logEntries: { orderBy: { createdAt: 'desc' } },
       siteVisit: true,
+      documentRequests: {
+        orderBy: { createdAt: 'desc' },
+        include: {
+          requestedBy: { select: { name: true } },
+          requestedFrom: { select: { name: true } },
+        },
+      },
+      documentAccessGrants: {
+        orderBy: { createdAt: 'desc' },
+        include: {
+          document: { select: { docType: true } },
+          grantedTo: { select: { name: true } },
+        },
+      },
+      identityVerifications: true,
+      agreements: {
+        orderBy: { version: 'desc' },
+        include: { signatures: { include: { user: { select: { name: true } } }, orderBy: { createdAt: 'asc' } } },
+      },
       offlineNegotiations: {
         orderBy: { createdAt: 'desc' },
         include: { recordedBy: { select: { name: true } } },
@@ -78,7 +99,30 @@ export default async function AcceptedOfferDetailPage({ params }: { params: Prom
     : []
 
   const progress = computeDealProgress(deal)
+  const closure = await evaluateClosureGate(deal.id)
   const p = deal.property
+
+  // Approved documents each party already owns, so the agent can satisfy a
+  // request by sharing one instead of asking for a fresh upload. Keyed by owner
+  // id — names aren't unique enough to key on.
+  const shareableByOwner: Record<string, { id: string; docType: string; ownerId: string | null }[]> = {}
+  for (const doc of deal.documents) {
+    if (doc.status !== 'APPROVED' || !doc.fileUrl || !doc.ownerId) continue
+    shareableByOwner[doc.ownerId] ??= []
+    shareableByOwner[doc.ownerId].push({ id: doc.id, docType: doc.docType, ownerId: doc.ownerId })
+  }
+
+  const latestAgreement = deal.agreements[0] ?? null
+
+  /** A party's verification state, defaulted for someone who hasn't started. */
+  function verificationFor(userId: string) {
+    const v = deal!.identityVerifications.find((x) => x.userId === userId)
+    return {
+      status: v?.status ?? null,
+      providerReference: v?.providerReference ?? null,
+      remarks: v?.remarks ?? null,
+    }
+  }
 
   return (
     <DashboardEntrance>
@@ -279,6 +323,67 @@ export default async function AcceptedOfferDetailPage({ params }: { params: Prom
         />
       </div>
 
+      {/* ── Compliance: cross-party requests, identity, agreement, closure ── */}
+      <div className="mt-6">
+        <DealCompliancePanel
+          dealId={deal.id}
+          canManage={canManage}
+          isStaff={isStaff}
+          closure={closure!}
+          shareableByOwner={shareableByOwner}
+          requests={deal.documentRequests.map((r) => ({
+            id: r.id,
+            docType: r.docType,
+            reason: r.reason,
+            status: r.status,
+            reviewRemarks: r.reviewRemarks,
+            requestedByName: r.requestedBy.name,
+            requestedFromId: r.requestedFromId,
+            requestedFromName: r.requestedFrom.name,
+            createdAt: r.createdAt.toISOString(),
+          }))}
+          grants={deal.documentAccessGrants.map((g) => ({
+            id: g.id,
+            docType: g.document?.docType ?? null,
+            grantedToName: g.grantedTo?.name ?? null,
+            status: g.status,
+            createdAt: g.createdAt.toISOString(),
+          }))}
+          identities={[
+            {
+              userId: deal.buyerId,
+              userName: deal.buyer.name,
+              role: 'BUYER' as const,
+              ...verificationFor(deal.buyerId),
+            },
+            {
+              userId: deal.sellerId,
+              userName: deal.seller.name,
+              role: 'SELLER' as const,
+              ...verificationFor(deal.sellerId),
+            },
+          ]}
+          agreement={
+            latestAgreement
+              ? {
+                  id: latestAgreement.id,
+                  version: latestAgreement.version,
+                  status: latestAgreement.status,
+                  documentUrl: latestAgreement.documentUrl,
+                  agreedAmount: latestAgreement.agreedAmount,
+                  signatures: latestAgreement.signatures.map((s) => ({
+                    userId: s.userId,
+                    userName: s.user.name,
+                    role: s.role,
+                    status: s.status,
+                    providerReference: s.providerReference,
+                  })),
+                }
+              : null
+          }
+        />
+      </div>
+
       {/* ── Section G: Payments ── */}
       <div className="mt-6">
         <PaymentRequestsPanel
@@ -288,6 +393,7 @@ export default async function AcceptedOfferDetailPage({ params }: { params: Prom
             id: r.id,
             recipient: r.recipient,
             amount: r.amount,
+            purpose: r.purpose,
             title: r.title,
             description: r.description,
             dueDate: r.dueDate ? r.dueDate.toISOString() : null,

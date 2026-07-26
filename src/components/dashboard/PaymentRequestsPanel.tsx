@@ -9,6 +9,7 @@ export interface PaymentRequestView {
   id: string
   recipient: string
   amount: number
+  purpose: string | null
   title: string | null
   description: string | null
   dueDate: string | null
@@ -128,6 +129,23 @@ export default function PaymentRequestsPanel({
               </select>
             </div>
             <div className="flex flex-col gap-1">
+              <label className="text-[11px] font-medium" style={{ color: 'var(--text-3)' }}>What for</label>
+              <select
+                name="purpose"
+                defaultValue="TOKEN"
+                className="rounded-lg border px-2.5 py-2 text-sm outline-none"
+                style={{ borderColor: 'var(--line)', color: 'var(--text-1)', background: 'var(--surface)' }}
+              >
+                <option value="TOKEN">Token amount</option>
+                <option value="REGISTRATION">Registration</option>
+                <option value="STAMP_DUTY">Stamp duty</option>
+                <option value="DOCUMENTATION">Documentation fee</option>
+                <option value="FINAL_SETTLEMENT">Final settlement</option>
+                <option value="COMMISSION">Commission</option>
+                <option value="OTHER">Other</option>
+              </select>
+            </div>
+            <div className="flex flex-col gap-1">
               <label className="text-[11px] font-medium" style={{ color: 'var(--text-3)' }}>Due date</label>
               <input
                 type="date"
@@ -192,8 +210,9 @@ export default function PaymentRequestsPanel({
                       {r.title || 'Payment'} · {formatINR(r.amount)}
                     </p>
                     <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>
-                      From: {r.recipient === 'SELLER' ? 'Seller' : 'Buyer'} · raised by {r.createdByName} ·{' '}
-                      {formatRelativeTime(new Date(r.createdAt))}
+                      From: {r.recipient === 'SELLER' ? 'Seller' : 'Buyer'}
+                      {r.purpose ? ` · ${r.purpose.replace(/_/g, ' ').toLowerCase()}` : ''} · raised by{' '}
+                      {r.createdByName} · {formatRelativeTime(new Date(r.createdAt))}
                       {r.dueDate ? ` · due ${new Date(r.dueDate).toLocaleDateString('en-IN')}` : ''}
                     </p>
                   </div>
