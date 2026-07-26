@@ -39,27 +39,33 @@ model User {
   updatedAt          DateTime @updatedAt
 
   sellerKyc                   SellerKyc?
-  propertiesAsSeller          Property[]           @relation("SellerProperties")
-  propertiesAsAgent           Property[]           @relation("AgentProperties")
-  offersAsBuyer               Offer[]              @relation("BuyerOffers")
-  dealsAsBuyer                Deal[]               @relation("BuyerDeals")
-  dealsAsSeller               Deal[]               @relation("SellerDeals")
-  dealsAsAgent                Deal[]               @relation("AgentDeals")
+  propertiesAsSeller          Property[]            @relation("SellerProperties")
+  propertiesAsAgent           Property[]            @relation("AgentProperties")
+  offersAsBuyer               Offer[]               @relation("BuyerOffers")
+  dealsAsBuyer                Deal[]                @relation("BuyerDeals")
+  dealsAsSeller               Deal[]                @relation("SellerDeals")
+  dealsAsAgent                Deal[]                @relation("AgentDeals")
   notifications               Notification[]
   shortlists                  Shortlist[]
   savedSearches               SavedSearch[]
   propertyViews               PropertyView[]
-  visitsAsBuyer               SiteVisit[]          @relation("BuyerVisits")
-  visitsAsAgent               SiteVisit[]          @relation("AgentVisits")
+  visitsAsBuyer               SiteVisit[]           @relation("BuyerVisits")
+  visitsAsAgent               SiteVisit[]           @relation("AgentVisits")
   feedbackSubmitted           Feedback[]
-  offlineNegotiationsRecorded OfflineNegotiation[] @relation("OfflineNegotiationsRecorded")
-  paymentRequestsCreated      PaymentRequest[]     @relation("PaymentRequestsCreated")
-  interestsAsBuyer            PropertyInterest[]   @relation("BuyerInterests")
-  interestsAsAgent            PropertyInterest[]   @relation("AgentInterests")
-  negotiationsAsBuyer         NegotiationSession[] @relation("BuyerNegotiations")
-  negotiationsAsSeller        NegotiationSession[] @relation("SellerNegotiations")
-  negotiationsAsAgent         NegotiationSession[] @relation("AgentNegotiations")
-  negotiationEventsRecorded   NegotiationEvent[]   @relation("NegotiationEventsRecorded")
+  offlineNegotiationsRecorded OfflineNegotiation[]  @relation("OfflineNegotiationsRecorded")
+  paymentRequestsCreated      PaymentRequest[]      @relation("PaymentRequestsCreated")
+  interestsAsBuyer            PropertyInterest[]    @relation("BuyerInterests")
+  interestsAsAgent            PropertyInterest[]    @relation("AgentInterests")
+  negotiationsAsBuyer         NegotiationSession[]  @relation("BuyerNegotiations")
+  negotiationsAsSeller        NegotiationSession[]  @relation("SellerNegotiations")
+  negotiationsAsAgent         NegotiationSession[]  @relation("AgentNegotiations")
+  negotiationEventsRecorded   NegotiationEvent[]    @relation("NegotiationEventsRecorded")
+  documentRequestsMade        DocumentRequest[]     @relation("DocumentRequestsMade")
+  documentRequestsReceived    DocumentRequest[]     @relation("DocumentRequestsReceived")
+  documentRequestsReviewed    DocumentRequest[]     @relation("DocumentRequestsReviewed")
+  documentAccessReceived      DocumentAccessGrant[] @relation("DocumentAccessReceived")
+  documentAccessGranted       DocumentAccessGrant[] @relation("DocumentAccessGranted")
+  documentsOwned              DealDocument[]        @relation("DocumentsOwned")
 
   @@map("users")
 }
@@ -233,16 +239,18 @@ model Deal {
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
-  property            Property             @relation(fields: [propertyId], references: [id])
-  buyer               User                 @relation("BuyerDeals", fields: [buyerId], references: [id])
-  seller              User                 @relation("SellerDeals", fields: [sellerId], references: [id])
-  agent               User?                @relation("AgentDeals", fields: [agentId], references: [id])
-  documents           DealDocument[]
-  logEntries          DealLogEntry[]
-  siteVisit           SiteVisit?
-  offlineNegotiations OfflineNegotiation[]
-  paymentRequests     PaymentRequest[]
-  negotiationSessions NegotiationSession[]
+  property             Property              @relation(fields: [propertyId], references: [id])
+  buyer                User                  @relation("BuyerDeals", fields: [buyerId], references: [id])
+  seller               User                  @relation("SellerDeals", fields: [sellerId], references: [id])
+  agent                User?                 @relation("AgentDeals", fields: [agentId], references: [id])
+  documents            DealDocument[]
+  logEntries           DealLogEntry[]
+  siteVisit            SiteVisit?
+  offlineNegotiations  OfflineNegotiation[]
+  paymentRequests      PaymentRequest[]
+  negotiationSessions  NegotiationSession[]
+  documentRequests     DocumentRequest[]
+  documentAccessGrants DocumentAccessGrant[]
 
   @@map("deals")
 }
@@ -281,9 +289,18 @@ model DealDocument {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  deal Deal @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  /// The party this document belongs to. Distinct from uploadedBy: ownership
+  /// determines who may see it by default and who must consent before the
+  /// counterparty gets access, and it survives even before anything is uploaded.
+  ownerId String?
+
+  deal         Deal                  @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  owner        User?                 @relation("DocumentsOwned", fields: [ownerId], references: [id])
+  accessGrants DocumentAccessGrant[]
+  sharedFor    DocumentRequest[]
 
   @@index([dealId])
+  @@index([ownerId])
   @@map("deal_documents")
 }
 
@@ -459,6 +476,82 @@ model PaymentRequest {
 
   @@index([dealId])
   @@map("payment_requests")
+}
+
+/// A request from one party for a document held by the other — "I need to see
+/// the seller's Aadhaar".
+///
+/// Never a direct channel between buyer and seller: every request lands on the
+/// agent first, who decides whether it's legitimate. The agent can reject it,
+/// forward it to the owner to upload something new, or — if the owner has
+/// already had that document approved — grant access to the existing file
+/// instead of asking for it again.
+model DocumentRequest {
+  id     String @id @default(cuid())
+  dealId String
+
+  requestedById   String
+  requestedFromId String
+  /// The agent who must review this before it reaches the other party.
+  agentId         String?
+
+  docType String
+  reason  String?
+
+  status String @default("PENDING_AGENT_REVIEW")
+  // PENDING_AGENT_REVIEW | REJECTED | FORWARDED_TO_OWNER
+  // EXISTING_DOCUMENT_SHARED | OWNER_UPLOADED | APPROVED | COMPLETED | CANCELLED
+
+  /// Set when the agent satisfied this request by sharing an already-approved
+  /// document, or when forwarding created a new DealDocument to be filled.
+  sourceDocumentId String?
+
+  /// Why the agent rejected it — required on rejection, so a refusal is never
+  /// silent.
+  reviewRemarks String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  deal           Deal          @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  requestedBy    User          @relation("DocumentRequestsMade", fields: [requestedById], references: [id])
+  requestedFrom  User          @relation("DocumentRequestsReceived", fields: [requestedFromId], references: [id])
+  agent          User?         @relation("DocumentRequestsReviewed", fields: [agentId], references: [id])
+  sourceDocument DealDocument? @relation(fields: [sourceDocumentId], references: [id])
+
+  @@index([dealId])
+  @@index([status])
+  @@index([requestedFromId])
+  @@map("document_requests")
+}
+
+/// Explicit permission for someone other than the owner to see a document.
+///
+/// The counterparty gets no access to a deal's documents by default — this is
+/// the only thing that opens one up, and it's revocable. Sharing grants access
+/// to the existing file rather than copying it, so the original party stays the
+/// owner and there's exactly one copy to audit.
+model DocumentAccessGrant {
+  id          String  @id @default(cuid())
+  documentId  String
+  dealId      String
+  grantedToId String
+  grantedById String
+  purpose     String?
+  status      String  @default("ACTIVE") // ACTIVE | REVOKED
+
+  createdAt DateTime  @default(now())
+  revokedAt DateTime?
+
+  document  DealDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  deal      Deal         @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  grantedTo User         @relation("DocumentAccessReceived", fields: [grantedToId], references: [id])
+  grantedBy User         @relation("DocumentAccessGranted", fields: [grantedById], references: [id])
+
+  @@unique([documentId, grantedToId, dealId])
+  @@index([dealId])
+  @@index([grantedToId])
+  @@map("document_access_grants")
 }
 
 model Notification {

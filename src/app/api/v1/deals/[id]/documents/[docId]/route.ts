@@ -3,6 +3,7 @@ import { authenticate } from '@/lib/api/auth'
 import { ok, withApi, readJson, ApiError } from '@/lib/api/http'
 import { dealDocumentDTO } from '@/lib/api/dto'
 import { notifyUsers } from '@/lib/notify'
+import { recordAudit } from '@/lib/audit'
 
 const REVIEW_STATUSES = ['APPROVED', 'REJECTED'] as const
 
@@ -35,15 +36,32 @@ export const PATCH = withApi(async (req, ctx) => {
     }
     if (document.status !== 'UPLOADED') throw new ApiError('Document must be uploaded before it can be reviewed', 400)
 
+    const remarks = body.remarks ? String(body.remarks).trim() : ''
+    // A rejection with no reason leaves the uploader guessing at what to fix, so
+    // they just re-upload the same file. Approvals need no justification.
+    if (status === 'REJECTED' && !remarks) {
+      throw new ApiError('remarks is required when rejecting a document — say what needs fixing', 400)
+    }
+
     const updated = await prisma.dealDocument.update({
       where: { id: docId },
-      data: { status, remarks: body.remarks ? String(body.remarks).trim() : null },
+      data: { status, remarks: remarks || null },
+    })
+    await recordAudit({
+      action: status === 'APPROVED' ? 'DOCUMENT_APPROVED' : 'DOCUMENT_REJECTED',
+      actorId: user.id,
+      entity: 'DealDocument',
+      entityId: docId,
+      meta: { docType: document.docType, remarks: remarks || null },
     })
     await notifyUsers([
       {
         userId: document.uploadedBy ?? (document.requiredFrom === 'SELLER' ? deal.sellerId : deal.buyerId),
         title: status === 'APPROVED' ? 'Document approved' : 'Document rejected',
-        message: `"${document.docType}" was ${status === 'APPROVED' ? 'approved' : 'rejected — please re-upload'}.`,
+        message:
+          status === 'APPROVED'
+            ? `"${document.docType}" was approved.`
+            : `"${document.docType}" was rejected — please re-upload. Reason: ${remarks}`,
       },
     ])
     return ok(dealDocumentDTO(updated))
@@ -61,7 +79,23 @@ export const PATCH = withApi(async (req, ctx) => {
 
     const updated = await prisma.dealDocument.update({
       where: { id: docId },
-      data: { fileUrl, status: 'UPLOADED', uploadedBy: user.id, remarks: null },
+      data: {
+        fileUrl,
+        status: 'UPLOADED',
+        uploadedBy: user.id,
+        // An EITHER document has no owner until someone actually supplies it —
+        // whoever uploads becomes the owner, which is what governs who may read it.
+        ...(document.ownerId == null && user.id !== deal.agentId ? { ownerId: user.id } : {}),
+        remarks: null,
+      },
+    })
+
+    await recordAudit({
+      action: 'DOCUMENT_UPLOADED',
+      actorId: user.id,
+      entity: 'DealDocument',
+      entityId: docId,
+      meta: { docType: document.docType },
     })
 
     if (deal.agentId) {

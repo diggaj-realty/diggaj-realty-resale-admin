@@ -137,7 +137,16 @@ export async function addDealDocument(formData: FormData) {
   const deal = await requireDealStaff(dealId, session)
 
   await prisma.dealDocument.create({
-    data: { dealId, docType, requiredFrom, status: 'PENDING', remarks: remarks || null },
+    data: {
+      dealId,
+      docType,
+      requiredFrom,
+      // Ownership decides who may read the file; recorded now so it holds even
+      // before anything is uploaded. EITHER has no single owner until upload.
+      ownerId: requiredFrom === 'BUYER' ? deal.buyerId : requiredFrom === 'SELLER' ? deal.sellerId : null,
+      status: 'PENDING',
+      remarks: remarks || null,
+    },
   })
 
   const recipients =
@@ -220,6 +229,11 @@ export async function reviewDealDocument(formData: FormData) {
   const status = String(formData.get('status') || '').toUpperCase()
   const remarks = String(formData.get('remarks') || '').trim()
   if (!['APPROVED', 'REJECTED'].includes(status)) throw new Error('Invalid review status')
+  // A rejection with no reason leaves the uploader guessing, so they just
+  // re-upload the same file.
+  if (status === 'REJECTED' && !remarks) {
+    throw new Error('Add a reason when rejecting a document — say what needs fixing')
+  }
 
   const deal = await requireDealStaff(dealId, session)
 

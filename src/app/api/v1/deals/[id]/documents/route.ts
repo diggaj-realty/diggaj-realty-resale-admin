@@ -3,6 +3,7 @@ import { authenticate } from '@/lib/api/auth'
 import { ok, withApi, readJson, ApiError } from '@/lib/api/http'
 import { dealDocumentDTO } from '@/lib/api/dto'
 import { notifyUsers } from '@/lib/notify'
+import { inferOwnerId } from '@/lib/data/documentRequests'
 
 const REQUIRED_FROM = ['BUYER', 'SELLER', 'EITHER'] as const
 
@@ -17,15 +18,53 @@ async function requireDealAccess(dealId: string, user: { id: string; role: strin
 
 /** Deal closure document checklist — the legal paperwork (sale deed, NOC,
  *  encumbrance certificate, etc.) tracked per deal, each with a status and
- *  who's responsible for uploading it. Visible to every deal participant
- *  (buyer, seller, assigned agent) plus ADMIN/BACKEND. */
+ *  who's responsible for uploading it.
+ *
+ *  Visibility is per-document, not per-deal. These are sensitive personal
+ *  records, so being party to the deal is not by itself grounds to read the
+ *  other side's ID documents:
+ *
+ *    - the owner sees their own;
+ *    - the assigned agent and ADMIN/BACKEND get review access to all;
+ *    - the counterparty sees a document only via an explicit access grant.
+ *
+ *  Each item carries `canView`, and `fileUrl` is withheld when that's false, so
+ *  a party can still see *that* a requirement exists and its progress without
+ *  being handed the file itself. */
 export const GET = withApi(async (req, ctx) => {
   const user = await authenticate(req, ['SELLER', 'BUYER', 'AGENT', 'ADMIN', 'BACKEND'])
   const { id: dealId } = await ctx.params
-  await requireDealAccess(dealId, user)
+  const deal = await requireDealAccess(dealId, user)
 
   const documents = await prisma.dealDocument.findMany({ where: { dealId }, orderBy: { createdAt: 'asc' } })
-  return ok(documents.map(dealDocumentDTO))
+
+  // One query for every grant this caller holds on this deal, rather than a
+  // per-document round trip.
+  const grants = await prisma.documentAccessGrant.findMany({
+    where: { dealId, grantedToId: user.id, status: 'ACTIVE' },
+    select: { documentId: true },
+  })
+  const grantedIds = new Set(grants.map((g) => g.documentId))
+
+  const isStaff = user.role === 'ADMIN' || user.role === 'BACKEND'
+  const isAgent = deal.agentId === user.id
+
+  const payload = documents.map((d) => {
+    const ownerId = d.ownerId ?? inferOwnerId(d.requiredFrom, deal)
+    const canView =
+      isStaff ||
+      isAgent ||
+      ownerId === user.id ||
+      grantedIds.has(d.id) ||
+      // Documents predating ownership tracking fall back to participant
+      // visibility so existing deals don't suddenly go dark.
+      ownerId === null
+
+    const dto = dealDocumentDTO(d)
+    return { ...dto, ownerId, canView, ...(canView ? {} : { fileUrl: null }) }
+  })
+
+  return ok(payload)
 })
 
 /** Adds a checklist item. Staff-only (ADMIN/BACKEND, or the deal's own
@@ -48,7 +87,16 @@ export const POST = withApi(async (req, ctx) => {
   }
 
   const document = await prisma.dealDocument.create({
-    data: { dealId, docType, requiredFrom, status: 'PENDING', remarks: remarks || null },
+    data: {
+      dealId,
+      docType,
+      requiredFrom,
+      // Recorded up front so visibility works before anything is uploaded.
+      // EITHER genuinely has no single owner until someone actually uploads.
+      ownerId: inferOwnerId(requiredFrom, deal),
+      status: 'PENDING',
+      remarks: remarks || null,
+    },
   })
 
   const recipients =
