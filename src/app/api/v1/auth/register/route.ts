@@ -34,7 +34,7 @@ export const POST = withApi(async (req) => {
   const passwordHash = await bcrypt.hash(password, 10)
 
   const user = await prisma.user.create({
-    data: { name, email, phone, passwordHash, role },
+    data: { name, email, phone, passwordHash, role, roles: [role] },
   })
 
   const token = signApiToken({ id: user.id, role: user.role as UserRole })

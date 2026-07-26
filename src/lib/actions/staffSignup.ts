@@ -23,7 +23,7 @@ export async function requestStaffSignup(formData: FormData) {
   if (existing) throw new Error('An account with this email already exists')
 
   const passwordHash = await bcrypt.hash(password, 10)
-  await prisma.user.create({ data: { name, email, phone, passwordHash, role: 'PENDING', isActive: false } })
+  await prisma.user.create({ data: { name, email, phone, passwordHash, role: 'PENDING', roles: [], isActive: false } })
 
   const admins = await prisma.user.findMany({ where: { role: 'ADMIN' }, select: { id: true } })
   await notifyUsers(

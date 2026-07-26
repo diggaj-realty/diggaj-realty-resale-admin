@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { ok, withApi, readJson, ApiError } from '@/lib/api/http'
 import { notifyUsers } from '@/lib/notify'
 import { buildRichPropertyData, type RichPropertyInput } from '@/lib/data/propertyFields'
+import { hasAnyRole } from '@/lib/api/auth'
 import type { Prisma } from '@prisma/client'
 
 /** Creates (or reuses) the placeholder SELLER account behind a no-signup public
@@ -12,7 +13,7 @@ async function resolveSubmitterUser(name: string, phone: string, email: string |
   if (email) {
     const existing = await prisma.user.findUnique({ where: { email } })
     if (existing) {
-      if (existing.role !== 'SELLER') {
+      if (!hasAnyRole(existing, ['SELLER'])) {
         throw new ApiError('This email is already registered under a different account type. Use a different email or sign in normally.', 409)
       }
       return existing
@@ -23,7 +24,7 @@ async function resolveSubmitterUser(name: string, phone: string, email: string |
   const passwordHash = await bcrypt.hash(crypto.randomUUID(), 10)
 
   return prisma.user.create({
-    data: { name, phone, email: placeholderEmail, passwordHash, role: 'SELLER', isActive: true },
+    data: { name, phone, email: placeholderEmail, passwordHash, role: 'SELLER', roles: ['SELLER'], isActive: true },
   })
 }
 

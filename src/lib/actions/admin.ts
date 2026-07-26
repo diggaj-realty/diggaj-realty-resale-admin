@@ -29,7 +29,7 @@ export async function createStaffUser(formData: FormData) {
   if (existing) throw new Error('An account with this email already exists')
 
   const passwordHash = await bcrypt.hash(password, 10)
-  await prisma.user.create({ data: { name, email, phone, passwordHash, role } })
+  await prisma.user.create({ data: { name, email, phone, passwordHash, role, roles: [role] } })
 
   revalidatePath('/dashboard/users')
 }
@@ -50,7 +50,7 @@ export async function approveUser(formData: FormData) {
   const target = await prisma.user.findUnique({ where: { id: userId } })
   if (!target || target.role !== 'PENDING') throw new Error('This account is not awaiting approval')
 
-  await prisma.user.update({ where: { id: userId }, data: { role, isActive: true } })
+  await prisma.user.update({ where: { id: userId }, data: { role, roles: [role], isActive: true } })
 
   revalidatePath('/dashboard/users')
 }

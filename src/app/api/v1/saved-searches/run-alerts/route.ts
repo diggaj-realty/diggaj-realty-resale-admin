@@ -1,4 +1,4 @@
-import { authenticate } from '@/lib/api/auth'
+import { authenticate, hasAnyRole } from '@/lib/api/auth'
 import { ok, withApi } from '@/lib/api/http'
 import { runSavedSearchAlerts } from '@/lib/data/savedSearchAlerts'
 
@@ -7,7 +7,7 @@ import { runSavedSearchAlerts } from '@/lib/data/savedSearchAlerts'
  *  ("check for new matches now"). */
 export const POST = withApi(async (req) => {
   const user = await authenticate(req, ['ADMIN', 'BACKEND', 'BUYER'])
-  const scopeToSelf = user.role === 'BUYER'
+  const scopeToSelf = !hasAnyRole(user, ['ADMIN', 'BACKEND'])
   const result = await runSavedSearchAlerts(scopeToSelf ? user.id : undefined)
   return ok(result)
 })

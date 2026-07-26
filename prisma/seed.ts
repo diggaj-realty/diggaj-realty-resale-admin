@@ -21,18 +21,18 @@ async function main() {
   await prisma.user.deleteMany()
 
   const [seller, buyer, agent, backend, admin] = await Promise.all([
-    prisma.user.create({ data: { name: 'Ananya Rao', email: 'seller@demo.test', phone: '9880011223', passwordHash, role: 'SELLER' } }),
-    prisma.user.create({ data: { name: 'Rohit Sharma', email: 'buyer@demo.test', phone: '9880011224', passwordHash, role: 'BUYER' } }),
-    prisma.user.create({ data: { name: 'Megan Fernandes', email: 'agent@demo.test', phone: '9880011225', passwordHash, role: 'AGENT' } }),
-    prisma.user.create({ data: { name: 'Karan Bedi', email: 'backend@demo.test', phone: '9880011226', passwordHash, role: 'BACKEND' } }),
-    prisma.user.create({ data: { name: 'Priya Nair', email: 'admin@demo.test', phone: '9880011227', passwordHash, role: 'ADMIN' } }),
+    prisma.user.create({ data: { name: 'Ananya Rao', email: 'seller@demo.test', phone: '9880011223', passwordHash, role: 'SELLER', roles: ['SELLER', 'BUYER'] } }),
+    prisma.user.create({ data: { name: 'Rohit Sharma', email: 'buyer@demo.test', phone: '9880011224', passwordHash, role: 'BUYER', roles: ['BUYER'] } }),
+    prisma.user.create({ data: { name: 'Megan Fernandes', email: 'agent@demo.test', phone: '9880011225', passwordHash, role: 'AGENT', roles: ['AGENT'] } }),
+    prisma.user.create({ data: { name: 'Karan Bedi', email: 'backend@demo.test', phone: '9880011226', passwordHash, role: 'BACKEND', roles: ['BACKEND'] } }),
+    prisma.user.create({ data: { name: 'Priya Nair', email: 'admin@demo.test', phone: '9880011227', passwordHash, role: 'ADMIN', roles: ['ADMIN'] } }),
   ])
 
   // A few extra buyers/sellers so admin/backend/agent lists aren't single-user
   const extraUsers = await Promise.all([
-    prisma.user.create({ data: { name: 'Vikram Singh', email: 'seller2@demo.test', passwordHash, role: 'SELLER' } }),
-    prisma.user.create({ data: { name: 'Divya Menon', email: 'buyer2@demo.test', passwordHash, role: 'BUYER' } }),
-    prisma.user.create({ data: { name: 'Arjun Kapoor', email: 'buyer3@demo.test', passwordHash, role: 'BUYER' } }),
+    prisma.user.create({ data: { name: 'Vikram Singh', email: 'seller2@demo.test', passwordHash, role: 'SELLER', roles: ['SELLER'] } }),
+    prisma.user.create({ data: { name: 'Divya Menon', email: 'buyer2@demo.test', passwordHash, role: 'BUYER', roles: ['BUYER'] } }),
+    prisma.user.create({ data: { name: 'Arjun Kapoor', email: 'buyer3@demo.test', passwordHash, role: 'BUYER', roles: ['BUYER'] } }),
   ])
   const [seller2, buyer2, buyer3] = extraUsers
 

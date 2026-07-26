@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma'
-import { authenticate } from '@/lib/api/auth'
+import { authenticate, hasAnyRole } from '@/lib/api/auth'
 import { ok, withApi, readJson, ApiError, parsePagination, paginatedEnvelope } from '@/lib/api/http'
 import { offerDTO } from '@/lib/api/dto'
 import { logOfferEvent } from '@/lib/actions/offerEvents'
@@ -8,17 +8,23 @@ import type { Prisma } from '@prisma/client'
 /** Role-scoped offers — mirrors /dashboard/offers.
  *  SELLER: offers on their properties, excluding PENDING_REVIEW (backend hasn't forwarded yet).
  *  BUYER: their own offers, with a buyer-facing displayStatus that collapses
- *  PENDING_REVIEW/PENDING into a single "PENDING". */
+ *  PENDING_REVIEW/PENDING into a single "PENDING".
+ *  An account holding both roles (e.g. a seller who also buys) picks which
+ *  side to view with `?as=buyer|seller`; defaults to buyer. */
 export const GET = withApi(async (req) => {
   const user = await authenticate(req, ['SELLER', 'BUYER'])
 
   const url = new URL(req.url)
   const { page, pageSize, skip, take } = parsePagination(url)
 
-  const where: Prisma.OfferWhereInput =
-    user.role === 'SELLER'
-      ? { property: { sellerId: user.id }, status: { not: 'PENDING_REVIEW' } }
-      : { buyerId: user.id }
+  const isSeller = hasAnyRole(user, ['SELLER'])
+  const isBuyer = hasAnyRole(user, ['BUYER'])
+  const requestedAs = url.searchParams.get('as')
+  const asSeller = requestedAs ? requestedAs === 'seller' && isSeller : isSeller && !isBuyer
+
+  const where: Prisma.OfferWhereInput = asSeller
+    ? { property: { sellerId: user.id }, status: { not: 'PENDING_REVIEW' } }
+    : { buyerId: user.id }
 
   const [items, total] = await Promise.all([
     prisma.offer.findMany({
@@ -31,7 +37,7 @@ export const GET = withApi(async (req) => {
     prisma.offer.count({ where }),
   ])
 
-  const dto = items.map((o) => offerDTO(o, { forBuyer: user.role === 'BUYER' }))
+  const dto = items.map((o) => offerDTO(o, { forBuyer: !asSeller }))
   return ok(paginatedEnvelope(dto, total, page, pageSize))
 })
 

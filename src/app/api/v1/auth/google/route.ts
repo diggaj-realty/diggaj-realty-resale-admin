@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { signApiToken } from '@/lib/api/jwt'
 import { ok, withApi, readJson, ApiError } from '@/lib/api/http'
 import { userDTO } from '@/lib/api/dto'
+import { hasAnyRole } from '@/lib/api/auth'
 import type { UserRole } from '@/types'
 
 const PUBLIC_ROLES: UserRole[] = ['BUYER', 'SELLER']
@@ -52,10 +53,16 @@ export const POST = withApi(async (req) => {
   let isNewUser = false
 
   if (user) {
-    if (user.role !== 'BUYER' && user.role !== 'SELLER') {
+    if (!hasAnyRole(user, ['BUYER', 'SELLER'])) {
       throw new ApiError('This email is registered as internal staff — sign in through the internal dashboard instead.', 409)
     }
     if (!user.isActive) throw new ApiError('This account has been deactivated', 403)
+    if (!hasAnyRole(user, [requestedRole as UserRole])) {
+      user = await prisma.user.update({
+        where: { id: user.id },
+        data: { roles: { push: requestedRole } },
+      })
+    }
   } else {
     isNewUser = true
     user = await prisma.user.create({
@@ -65,6 +72,7 @@ export const POST = withApi(async (req) => {
         phone: body.phone ? String(body.phone).trim() : null,
         passwordHash: await bcrypt.hash(crypto.randomUUID(), 10), // Google-only account — no password login
         role: requestedRole,
+        roles: [requestedRole],
         avatarUrl: google.picture ?? null,
       },
     })

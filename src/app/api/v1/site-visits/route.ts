@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma'
-import { authenticate } from '@/lib/api/auth'
+import { authenticate, hasAnyRole } from '@/lib/api/auth'
 import { ok, withApi, readJson, ApiError, parsePagination, paginatedEnvelope } from '@/lib/api/http'
 import type { Prisma, SiteVisit } from '@prisma/client'
 
@@ -32,17 +32,25 @@ export function siteVisitDTO(v: SiteVisitWithRelations) {
 /** Role-scoped site visits. BUYER: their own requests. AGENT: visits assigned to
  *  them. SELLER: visits requested on their own properties (read-only — sellers
  *  can't schedule/cancel, only see who's coming and any post-visit feedback).
- *  Optional ?status= filter. */
+ *  An account holding both BUYER and SELLER picks a side with `?as=buyer|seller`
+ *  (defaults to buyer); AGENT never combines with the other two so it's always
+ *  used when held. Optional ?status= filter. */
 export const GET = withApi(async (req) => {
   const user = await authenticate(req, ['BUYER', 'AGENT', 'SELLER'])
   const url = new URL(req.url)
   const { page, pageSize, skip, take } = parsePagination(url)
   const status = url.searchParams.get('status')?.trim()
 
+  const isAgent = hasAnyRole(user, ['AGENT'])
+  const isSeller = hasAnyRole(user, ['SELLER'])
+  const isBuyer = hasAnyRole(user, ['BUYER'])
+  const requestedAs = url.searchParams.get('as')
+  const asSeller = requestedAs ? requestedAs === 'seller' && isSeller : isSeller && !isBuyer
+
   const where: Prisma.SiteVisitWhereInput =
-    user.role === 'BUYER' ? { buyerId: user.id }
-    : user.role === 'AGENT' ? { agentId: user.id }
-    : { property: { sellerId: user.id } }
+    isAgent ? { agentId: user.id }
+    : asSeller ? { property: { sellerId: user.id } }
+    : { buyerId: user.id }
   if (status) where.status = status
 
   const [items, total] = await Promise.all([

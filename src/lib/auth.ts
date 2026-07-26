@@ -74,6 +74,7 @@ export const authOptions: AuthOptions = {
             email: user.email,
             passwordHash: await bcrypt.hash(crypto.randomUUID(), 10), // Google-only account — never used to log in
             role: 'PENDING',
+            roles: [],
             isActive: false,
             avatarUrl: user.image ?? null,
           },

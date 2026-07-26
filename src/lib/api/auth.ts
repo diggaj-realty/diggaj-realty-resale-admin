@@ -18,11 +18,20 @@ export async function authenticate(req: Request, allowedRoles?: UserRole[]): Pro
   const user = await prisma.user.findUnique({ where: { id: payload.id } })
   if (!user || !user.isActive) throw new ApiError('Account not found or deactivated', 401)
 
-  if (allowedRoles && !allowedRoles.includes(user.role as UserRole)) {
+  if (allowedRoles && !hasAnyRole(user, allowedRoles)) {
     throw new ApiError(`Forbidden — requires role: ${allowedRoles.join(' or ')}`, 403)
   }
 
   return user
+}
+
+/** BUYER/SELLER are additive — `user.roles` is the authoritative set once a
+ *  user has more than one. `user.role` is kept as a fallback for any row that
+ *  predates the `roles` column (or wasn't backfilled) so a stale/empty array
+ *  doesn't lock someone out of the role they were created with. */
+export function hasAnyRole(user: Pick<User, 'role' | 'roles'>, allowedRoles: UserRole[]): boolean {
+  if (user.roles.length > 0) return allowedRoles.some((r) => user.roles.includes(r))
+  return allowedRoles.includes(user.role as UserRole)
 }
 
 /** For public routes that behave slightly differently for a logged-in caller

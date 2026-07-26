@@ -8,6 +8,7 @@ export function userDTO(u: User) {
     email: u.email,
     phone: u.phone,
     role: u.role,
+    roles: u.roles.length > 0 ? u.roles : [u.role],
     isActive: u.isActive,
     createdAt: u.createdAt.toISOString(),
     updatedAt: u.updatedAt.toISOString(),
@@ -56,6 +57,7 @@ export function propertyDTO(p: PropertyWithRelations) {
     unitsAvailable: p.unitsAvailable,
     status: p.status,
     plan: p.plan,
+    requestedPlan: p.requestedPlan,
     viewCount: p.viewCount,
     // ── Structured location ──
     city: p.city,

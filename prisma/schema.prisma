@@ -14,7 +14,8 @@ datasource db {
 // ─────────────────────────────────────────────
 // Role: SELLER | BUYER | AGENT | BACKEND | ADMIN
 // KycStatus: PENDING | APPROVED | REJECTED
-// PropertyStatus: DRAFT | PENDING_VERIFICATION | LIVE | CLOSED | REJECTED
+// PropertyStatus: DRAFT | PENDING_VERIFICATION | LIVE | UNDER_CONTRACT | CLOSED | REJECTED
+// SiteVisitOutcome: INTERESTED | NOT_INTERESTED (null = not yet decided)
 // SellerPlan: BASIC | VERIFIED | VERIFIED_PLUS | ELITE
 // OfferStatus: PENDING | ACCEPTED | REJECTED | COUNTERED
 // DealStatus: IN_PROGRESS | CLOSED
@@ -26,7 +27,10 @@ model User {
   email              String   @unique
   phone              String?
   passwordHash       String
-  role               String // Role enum
+  role               String // Role enum — primary role, used for staff dashboard access & display
+  roles              String[] @default([]) // Full set of held roles. BUYER/SELLER are additive on the public API
+                                            // (a seller can also hold BUYER) — AGENT/BACKEND/ADMIN stay single,
+                                            // admin-provisioned roles and are never combined with another.
   isActive           Boolean  @default(true)
   avatarUrl          String?
   emailNotifications Boolean  @default(true)
@@ -84,6 +88,7 @@ model Property {
   unitsAvailable Int       @default(1) // stock: how many identical units of this property are available
   status         String    @default("DRAFT") // PropertyStatus enum
   plan           String    @default("BASIC") // SellerPlan enum
+  requestedPlan  String? // Seller-initiated upgrade awaiting backend approval (and, later, payment) — null when there's no pending request
   verifiedAt     DateTime?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
@@ -218,13 +223,35 @@ model Deal {
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
-  property  Property       @relation(fields: [propertyId], references: [id])
-  buyer     User           @relation("BuyerDeals", fields: [buyerId], references: [id])
-  seller    User           @relation("SellerDeals", fields: [sellerId], references: [id])
-  agent     User?          @relation("AgentDeals", fields: [agentId], references: [id])
-  documents DealDocument[]
+  property   Property       @relation(fields: [propertyId], references: [id])
+  buyer      User           @relation("BuyerDeals", fields: [buyerId], references: [id])
+  seller     User           @relation("SellerDeals", fields: [sellerId], references: [id])
+  agent      User?          @relation("AgentDeals", fields: [agentId], references: [id])
+  documents  DealDocument[]
+  logEntries DealLogEntry[]
+  siteVisit  SiteVisit?
 
   @@map("deals")
+}
+
+// ── Deal progress log — free-text, dated updates on how the paperwork/
+// closing process is going, posted by agent/backend/admin. Distinct from
+// Deal.notes (a single overwritable field) and from DealDocument (structured,
+// per-document checklist) — this is the running "here's what's happening"
+// timeline both buyer and seller can read. ──
+
+model DealLogEntry {
+  id         String   @id @default(cuid())
+  dealId     String
+  authorId   String
+  authorRole String
+  message    String
+  createdAt  DateTime @default(now())
+
+  deal Deal @relation(fields: [dealId], references: [id], onDelete: Cascade)
+
+  @@index([dealId])
+  @@map("deal_log_entries")
 }
 
 // ── Deal closure document checklist ──
@@ -340,9 +367,19 @@ model SiteVisit {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
+  // ── Post-visit outcome — negotiation happens in person on the visit itself,
+  // never online, so this just records what was agreed. outcome/
+  // interestedAmount can be updated repeatedly (further in-person rounds)
+  // right up until a Deal is created from this visit. dealId is set once
+  // converted, so the same visit can't spawn a second Deal.
+  outcome           String? // INTERESTED | NOT_INTERESTED
+  interestedAmount  Float?
+  dealId            String? @unique
+
   property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   buyer    User     @relation("BuyerVisits", fields: [buyerId], references: [id], onDelete: Cascade)
   agent    User?    @relation("AgentVisits", fields: [agentId], references: [id])
+  deal     Deal?    @relation(fields: [dealId], references: [id])
 
   @@index([buyerId])
   @@index([agentId])

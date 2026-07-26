@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma'
-import { authenticate } from '@/lib/api/auth'
+import { authenticate, hasAnyRole } from '@/lib/api/auth'
 import { ok, withApi, readJson, ApiError, parsePagination, paginatedEnvelope } from '@/lib/api/http'
 import { propertyDTO } from '@/lib/api/dto'
 import { buildRichPropertyData, type RichPropertyInput } from '@/lib/data/propertyFields'
@@ -14,9 +14,9 @@ export const GET = withApi(async (req) => {
   const { page, pageSize, skip, take } = parsePagination(url)
 
   const where: Prisma.PropertyWhereInput =
-    user.role === 'SELLER' ? { sellerId: user.id }
-    : user.role === 'AGENT' ? { agentId: user.id }
-    : {}
+    hasAnyRole(user, ['ADMIN', 'BACKEND']) ? {}
+    : hasAnyRole(user, ['SELLER']) ? { sellerId: user.id }
+    : { agentId: user.id }
 
   const [items, total] = await Promise.all([
     prisma.property.findMany({
