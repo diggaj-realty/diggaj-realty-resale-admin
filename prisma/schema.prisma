@@ -56,6 +56,10 @@ model User {
   paymentRequestsCreated      PaymentRequest[]     @relation("PaymentRequestsCreated")
   interestsAsBuyer            PropertyInterest[]   @relation("BuyerInterests")
   interestsAsAgent            PropertyInterest[]   @relation("AgentInterests")
+  negotiationsAsBuyer         NegotiationSession[] @relation("BuyerNegotiations")
+  negotiationsAsSeller        NegotiationSession[] @relation("SellerNegotiations")
+  negotiationsAsAgent         NegotiationSession[] @relation("AgentNegotiations")
+  negotiationEventsRecorded   NegotiationEvent[]   @relation("NegotiationEventsRecorded")
 
   @@map("users")
 }
@@ -149,13 +153,14 @@ model Property {
   seller User  @relation("SellerProperties", fields: [sellerId], references: [id])
   agent  User? @relation("AgentProperties", fields: [agentId], references: [id])
 
-  photos     PropertyPhoto[]
-  offers     Offer[]
-  deal       Deal?
-  shortlists Shortlist[]
-  views      PropertyView[]
-  siteVisits SiteVisit[]
-  interests  PropertyInterest[]
+  photos              PropertyPhoto[]
+  offers              Offer[]
+  deal                Deal?
+  shortlists          Shortlist[]
+  views               PropertyView[]
+  siteVisits          SiteVisit[]
+  interests           PropertyInterest[]
+  negotiationSessions NegotiationSession[]
 
   @@index([city])
   @@index([status])
@@ -237,6 +242,7 @@ model Deal {
   siteVisit           SiteVisit?
   offlineNegotiations OfflineNegotiation[]
   paymentRequests     PaymentRequest[]
+  negotiationSessions NegotiationSession[]
 
   @@map("deals")
 }
@@ -311,7 +317,8 @@ model PropertyInterest {
   buyer    User     @relation("BuyerInterests", fields: [buyerId], references: [id], onDelete: Cascade)
   agent    User?    @relation("AgentInterests", fields: [agentId], references: [id])
 
-  siteVisits SiteVisit[]
+  siteVisits          SiteVisit[]
+  negotiationSessions NegotiationSession[]
 
   @@unique([propertyId, buyerId])
   @@index([propertyId])
@@ -319,6 +326,90 @@ model PropertyInterest {
   @@index([agentId])
   @@index([status])
   @@map("property_interests")
+}
+
+/// An agent-mediated negotiation, usually conducted by phone or in person.
+///
+/// This is the default real-estate path: the agent talks to both sides and
+/// records what each party's position is as it moves. Deliberately separate from
+/// Offer/OfferEvent, which is the platform's own online negotiation — both can
+/// exist for the same property and neither overwrites the other.
+///
+/// Critically, an agent recording "both parties agreed" is NOT agreement. The
+/// buyer and seller each confirm for themselves (buyerConfirmed /
+/// sellerConfirmed), and only both together let this reach AGREED and become a
+/// Deal. See src/lib/data/negotiations.ts.
+model NegotiationSession {
+  id         String  @id @default(cuid())
+  propertyId String
+  interestId String?
+  /// Set once this negotiation has produced a Deal — the link back to it.
+  dealId     String?
+
+  buyerId  String
+  sellerId String
+  agentId  String
+
+  channel String // PHONE | IN_PERSON | ONLINE | OTHER
+
+  status String @default("OPEN")
+  // OPEN | AGREEMENT_PENDING_CONFIRMATION | AGREED | FAILED | CANCELLED
+
+  /// Confirmations are per-party and may only be set by that party. An agent
+  /// cannot tick either of these on someone's behalf.
+  buyerConfirmed  Boolean @default(false)
+  sellerConfirmed Boolean @default(false)
+
+  /// The amount currently on the table for confirmation. Both parties must
+  /// confirm this same figure; changing it resets both confirmations.
+  proposedAmount    Float?
+  /// Locked in once both parties have confirmed.
+  finalAgreedAmount Float?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  property Property          @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  interest PropertyInterest? @relation(fields: [interestId], references: [id])
+  deal     Deal?             @relation(fields: [dealId], references: [id])
+  buyer    User              @relation("BuyerNegotiations", fields: [buyerId], references: [id])
+  seller   User              @relation("SellerNegotiations", fields: [sellerId], references: [id])
+  agent    User              @relation("AgentNegotiations", fields: [agentId], references: [id])
+
+  events NegotiationEvent[]
+
+  @@index([propertyId])
+  @@index([interestId])
+  @@index([dealId])
+  @@index([agentId])
+  @@index([status])
+  @@map("negotiation_sessions")
+}
+
+/// One immutable step in an agent-mediated negotiation — a position, a counter,
+/// a note, a confirmation. Append-only: the history is the point, so nothing
+/// here is ever updated or deleted.
+model NegotiationEvent {
+  id        String @id @default(cuid())
+  sessionId String
+  actorId   String
+  actorRole String // BUYER | SELLER | AGENT | BACKEND | ADMIN
+
+  eventType String
+  // BUYER_POSITION | SELLER_POSITION | AGENT_NOTE | BUYER_COUNTER
+  // SELLER_COUNTER | PRICE_PROPOSED | BUYER_CONFIRMED | SELLER_CONFIRMED
+  // AGREEMENT_REACHED | NEGOTIATION_FAILED | CONFIRMATIONS_RESET
+
+  amount Float?
+  note   String?
+
+  createdAt DateTime @default(now())
+
+  session NegotiationSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  actor   User               @relation("NegotiationEventsRecorded", fields: [actorId], references: [id])
+
+  @@index([sessionId])
+  @@map("negotiation_events")
 }
 
 /// Negotiation that happened off-platform — in person, by phone, or through the
