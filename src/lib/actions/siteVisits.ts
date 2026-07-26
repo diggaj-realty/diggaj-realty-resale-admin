@@ -5,6 +5,8 @@ import { revalidatePath } from 'next/cache'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { notifyUsers } from '@/lib/notify'
+import { recordAudit } from '@/lib/audit'
+import { isTerminalInterestStatus } from '@/lib/data/interests'
 
 async function requireRole(...roles: string[]) {
   const session = await getServerSession(authOptions)
@@ -136,7 +138,7 @@ export async function recordSiteVisitOutcome(formData: FormData) {
   const id = String(formData.get('id') ?? '')
   if (!id) throw new Error('Missing id')
   const outcome = String(formData.get('outcome') ?? '')
-  if (!['INTERESTED', 'NOT_INTERESTED'].includes(outcome)) throw new Error('Invalid outcome')
+  if (!['INTERESTED', 'NOT_INTERESTED', 'FOLLOW_UP_REQUIRED'].includes(outcome)) throw new Error('Invalid outcome')
 
   const visit = await prisma.siteVisit.findUnique({
     where: { id },
@@ -159,14 +161,43 @@ export async function recordSiteVisitOutcome(formData: FormData) {
 
   await prisma.siteVisit.update({ where: { id }, data: { outcome, interestedAmount } })
 
+  // Keep the parent lead in step, unless it has already finished.
+  if (visit.interestId) {
+    const interest = await prisma.propertyInterest.findUnique({
+      where: { id: visit.interestId },
+      select: { status: true },
+    })
+    if (interest && !isTerminalInterestStatus(interest.status)) {
+      await prisma.propertyInterest.update({
+        where: { id: visit.interestId },
+        data: {
+          status:
+            outcome === 'INTERESTED' ? 'INTERESTED'
+            : outcome === 'NOT_INTERESTED' ? 'NOT_INTERESTED'
+            : 'SITE_VISIT_COMPLETED',
+        },
+      })
+    }
+  }
+
+  await recordAudit({
+    action: 'SITE_VISIT_OUTCOME_RECORDED',
+    actorId: session.user.id,
+    entity: 'SiteVisit',
+    entityId: id,
+    meta: { outcome, interestedAmount, interestId: visit.interestId },
+  })
+
   await notifyUsers([
     {
       userId: visit.buyerId,
-      title: outcome === 'INTERESTED' ? 'Great news' : 'Visit outcome recorded',
+      title: outcome === 'NOT_INTERESTED' ? 'Visit outcome recorded' : 'Great news',
       message:
         outcome === 'INTERESTED'
           ? `Your interest in ${visit.property.title} has been noted — paperwork can begin once the price is finalized.`
-          : `Your visit to ${visit.property.title} has been closed out.`,
+          : outcome === 'FOLLOW_UP_REQUIRED'
+            ? `Your agent will follow up with you about ${visit.property.title}.`
+            : `Your visit to ${visit.property.title} has been closed out.`,
     },
   ])
 

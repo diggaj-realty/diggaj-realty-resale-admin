@@ -54,6 +54,8 @@ model User {
   feedbackSubmitted           Feedback[]
   offlineNegotiationsRecorded OfflineNegotiation[] @relation("OfflineNegotiationsRecorded")
   paymentRequestsCreated      PaymentRequest[]     @relation("PaymentRequestsCreated")
+  interestsAsBuyer            PropertyInterest[]   @relation("BuyerInterests")
+  interestsAsAgent            PropertyInterest[]   @relation("AgentInterests")
 
   @@map("users")
 }
@@ -153,6 +155,7 @@ model Property {
   shortlists Shortlist[]
   views      PropertyView[]
   siteVisits SiteVisit[]
+  interests  PropertyInterest[]
 
   @@index([city])
   @@index([status])
@@ -276,6 +279,46 @@ model DealDocument {
 
   @@index([dealId])
   @@map("deal_documents")
+}
+
+/// A genuine buyer lead on a property — the early-stage object that exists
+/// *before* any formal Offer. Saving/shortlisting a property, asking to be
+/// contacted, or requesting a visit are all interest, not offers, and must not
+/// create an Offer or Deal. Shortlist stays what it is (a bookmark); this is the
+/// operational lead the agent works.
+model PropertyInterest {
+  id         String  @id @default(cuid())
+  propertyId String
+  buyerId    String
+  /// The agent actually responsible for THIS buyer lead. Seeded from
+  /// Property.agentId when one exists, but tracked separately because the same
+  /// property can have many buyer interests with different owners.
+  agentId    String?
+
+  status String @default("NEW")
+  // NEW | CONTACT_REQUESTED | AGENT_ASSIGNED | CONTACT_IN_PROGRESS
+  // SITE_VISIT_REQUESTED | SITE_VISIT_SCHEDULED | SITE_VISIT_COMPLETED
+  // INTERESTED | NOT_INTERESTED | NEGOTIATION_IN_PROGRESS
+  // CONVERTED_TO_DEAL | CLOSED | CANCELLED
+
+  source    String? // SHORTLIST | CONTACT_REQUEST | SITE_VISIT_REQUEST | GENERAL_INTEREST | OTHER
+  buyerNote String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  buyer    User     @relation("BuyerInterests", fields: [buyerId], references: [id], onDelete: Cascade)
+  agent    User?    @relation("AgentInterests", fields: [agentId], references: [id])
+
+  siteVisits SiteVisit[]
+
+  @@unique([propertyId, buyerId])
+  @@index([propertyId])
+  @@index([buyerId])
+  @@index([agentId])
+  @@index([status])
+  @@map("property_interests")
 }
 
 /// Negotiation that happened off-platform — in person, by phone, or through the
@@ -425,18 +468,25 @@ model SiteVisit {
   // interestedAmount can be updated repeatedly (further in-person rounds)
   // right up until a Deal is created from this visit. dealId is set once
   // converted, so the same visit can't spawn a second Deal.
-  outcome          String? // INTERESTED | NOT_INTERESTED
+  outcome          String? // INTERESTED | NOT_INTERESTED | FOLLOW_UP_REQUIRED
   interestedAmount Float?
   dealId           String? @unique
 
-  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-  buyer    User     @relation("BuyerVisits", fields: [buyerId], references: [id], onDelete: Cascade)
-  agent    User?    @relation("AgentVisits", fields: [agentId], references: [id])
-  deal     Deal?    @relation(fields: [dealId], references: [id])
+  /// The lead this visit belongs to. Nullable for backward compatibility —
+  /// visits created before interests existed (and the direct buyer-requests-a-
+  /// visit path) have none, and must keep working.
+  interestId String?
+
+  property Property          @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  buyer    User              @relation("BuyerVisits", fields: [buyerId], references: [id], onDelete: Cascade)
+  agent    User?             @relation("AgentVisits", fields: [agentId], references: [id])
+  deal     Deal?             @relation(fields: [dealId], references: [id])
+  interest PropertyInterest? @relation(fields: [interestId], references: [id])
 
   @@index([buyerId])
   @@index([agentId])
   @@index([status])
+  @@index([interestId])
   @@map("site_visits")
 }
 

@@ -2,15 +2,42 @@ import { prisma } from '@/lib/prisma'
 import { authenticate } from '@/lib/api/auth'
 import { ok, withApi, readJson, ApiError } from '@/lib/api/http'
 import { notifyUsers } from '@/lib/notify'
+import { recordAudit } from '@/lib/audit'
+import { isTerminalInterestStatus } from '@/lib/data/interests'
 import { siteVisitDTO } from '../route'
 
+const VISIT_OUTCOMES = ['INTERESTED', 'NOT_INTERESTED', 'FOLLOW_UP_REQUIRED'] as const
+
+/** Keeps the parent lead's status in step with its visit, so the operational
+ *  queue reflects reality without staff updating two records by hand. Skipped
+ *  for visits with no lead (the pre-interest backward-compatible path) and for
+ *  leads that have already finished — a cancelled visit shouldn't drag a lead
+ *  that's since converted to a deal back to CANCELLED. */
+async function syncInterestStatus(interestId: string | null, status: string) {
+  if (!interestId) return
+  const interest = await prisma.propertyInterest.findUnique({
+    where: { id: interestId },
+    select: { status: true },
+  })
+  if (!interest || isTerminalInterestStatus(interest.status)) return
+  await prisma.propertyInterest.update({ where: { id: interestId }, data: { status } })
+}
+
 /** Transition a site visit.
- *  AGENT: action=schedule (needs scheduledDate) | complete (optional feedback) | cancel.
- *  BUYER: action=cancel (own visits only). */
+ *  AGENT (assigned): schedule (needs scheduledDate) | complete (optional feedback)
+ *    | recordOutcome (INTERESTED | NOT_INTERESTED | FOLLOW_UP_REQUIRED, only once
+ *    completed) | cancel.
+ *  BUYER: cancel (own visits only). */
 export const PATCH = withApi(async (req, { params }) => {
   const user = await authenticate(req, ['BUYER', 'AGENT'])
   const { id } = await params
-  const body = await readJson<{ action?: string; scheduledDate?: string; feedback?: string }>(req)
+  const body = await readJson<{
+    action?: string
+    scheduledDate?: string
+    feedback?: string
+    outcome?: string
+    interestedAmount?: number
+  }>(req)
   const action = String(body.action ?? '')
 
   const visit = await prisma.siteVisit.findUnique({
@@ -26,6 +53,14 @@ export const PATCH = withApi(async (req, { params }) => {
     if (!isBuyerOwner && !isAgentOwner) throw new ApiError('Forbidden', 403)
     if (visit.status === 'COMPLETED' || visit.status === 'CANCELLED') throw new ApiError('Visit already closed', 400)
     const updated = await prisma.siteVisit.update({ where: { id }, data: { status: 'CANCELLED' } })
+    await syncInterestStatus(visit.interestId, 'CANCELLED')
+    await recordAudit({
+      action: 'SITE_VISIT_CANCELLED',
+      actorId: user.id,
+      entity: 'SiteVisit',
+      entityId: id,
+      meta: { cancelledBy: isBuyerOwner ? 'BUYER' : 'AGENT' },
+    })
     const notifyId = isBuyerOwner ? visit.agentId : visit.buyerId
     if (notifyId) {
       await notifyUsers([{ userId: notifyId, title: 'Site visit cancelled', message: `The visit to ${visit.property.title} was cancelled.` }])
@@ -43,17 +78,65 @@ export const PATCH = withApi(async (req, { params }) => {
       where: { id },
       data: { status: 'SCHEDULED', scheduledDate, agentId: user.id },
     })
+    await syncInterestStatus(visit.interestId, 'SITE_VISIT_SCHEDULED')
+    await recordAudit({
+      action: 'SITE_VISIT_SCHEDULED',
+      actorId: user.id,
+      entity: 'SiteVisit',
+      entityId: id,
+      meta: { scheduledDate: scheduledDate.toISOString() },
+    })
     await notifyUsers([{ userId: visit.buyerId, title: 'Site visit scheduled', message: `Your visit to ${visit.property.title} is confirmed.` }])
     return ok(siteVisitDTO(updated))
   }
 
   if (action === 'complete') {
-    if (!isAgentOwner) throw new ApiError('Forbidden', 403)
     const feedback = typeof body.feedback === 'string' && body.feedback.trim() ? body.feedback.trim() : null
     const updated = await prisma.siteVisit.update({ where: { id }, data: { status: 'COMPLETED', feedback } })
+    await syncInterestStatus(visit.interestId, 'SITE_VISIT_COMPLETED')
+    await recordAudit({ action: 'SITE_VISIT_COMPLETED', actorId: user.id, entity: 'SiteVisit', entityId: id })
     await notifyUsers([{ userId: visit.buyerId, title: 'Site visit completed', message: `Your visit to ${visit.property.title} was marked complete.` }])
     return ok(siteVisitDTO(updated))
   }
 
-  throw new ApiError('Unknown action — expected schedule, complete, or cancel', 400)
+  // ── Post-visit outcome ──
+  // Only after the visit actually happened: an outcome on a visit that was never
+  // conducted would be a fabricated record of a conversation.
+  if (action === 'recordOutcome') {
+    if (visit.status !== 'COMPLETED') {
+      throw new ApiError('Mark the visit completed before recording its outcome', 400)
+    }
+    const outcome = String(body.outcome || '').trim().toUpperCase()
+    if (!VISIT_OUTCOMES.includes(outcome as (typeof VISIT_OUTCOMES)[number])) {
+      throw new ApiError(`outcome must be one of: ${VISIT_OUTCOMES.join(', ')}`, 400)
+    }
+    const interestedAmount = body.interestedAmount != null ? Number(body.interestedAmount) : null
+    if (interestedAmount != null && (!Number.isFinite(interestedAmount) || interestedAmount <= 0)) {
+      throw new ApiError('interestedAmount must be a positive number', 400)
+    }
+    // Recording that the buyer is interested does NOT create a deal — it opens
+    // the door to a negotiation, which both parties must then confirm.
+    const updated = await prisma.siteVisit.update({
+      where: { id },
+      data: {
+        outcome,
+        interestedAmount,
+        feedback: typeof body.feedback === 'string' && body.feedback.trim() ? body.feedback.trim() : visit.feedback,
+      },
+    })
+    await syncInterestStatus(
+      visit.interestId,
+      outcome === 'INTERESTED' ? 'INTERESTED' : outcome === 'NOT_INTERESTED' ? 'NOT_INTERESTED' : 'SITE_VISIT_COMPLETED'
+    )
+    await recordAudit({
+      action: 'SITE_VISIT_OUTCOME_RECORDED',
+      actorId: user.id,
+      entity: 'SiteVisit',
+      entityId: id,
+      meta: { outcome, interestedAmount },
+    })
+    return ok(siteVisitDTO(updated))
+  }
+
+  throw new ApiError('Unknown action — expected schedule, complete, cancel, or recordOutcome', 400)
 })

@@ -1,6 +1,9 @@
 import { prisma } from '@/lib/prisma'
 import { authenticate, hasAnyRole } from '@/lib/api/auth'
 import { ok, withApi, readJson, ApiError, parsePagination, paginatedEnvelope } from '@/lib/api/http'
+import { createOrUpdateInterest } from '@/lib/data/interests'
+import { recordAudit } from '@/lib/audit'
+import { notifyUsers } from '@/lib/notify'
 import type { Prisma, SiteVisit } from '@prisma/client'
 
 type SiteVisitWithRelations = SiteVisit & {
@@ -20,6 +23,10 @@ export function siteVisitDTO(v: SiteVisitWithRelations) {
     scheduledDate: v.scheduledDate ? v.scheduledDate.toISOString() : null,
     buyerNote: v.buyerNote,
     feedback: v.feedback,
+    outcome: v.outcome,
+    interestedAmount: v.interestedAmount,
+    interestId: v.interestId,
+    dealId: v.dealId,
     createdAt: v.createdAt.toISOString(),
     updatedAt: v.updatedAt.toISOString(),
     propertyTitle: v.property?.title,
@@ -71,7 +78,17 @@ export const GET = withApi(async (req) => {
   return ok(paginatedEnvelope(items.map(siteVisitDTO), total, page, pageSize))
 })
 
-/** Buyer requests a site visit. Auto-routes to the property's assigned agent. */
+/** Buyer requests a site visit.
+ *
+ *  A visit now belongs to a buyer lead (PropertyInterest): requesting one is
+ *  itself an expression of interest, so this creates or updates the lead and
+ *  hangs the visit off it. The visit inherits the *lead's* agent rather than
+ *  re-reading Property.agentId, since the lead is where operational ownership
+ *  lives once it's been assigned or reassigned.
+ *
+ *  A visit can still exist without an agent (nothing to route it to yet) — staff
+ *  get told to assign one, and assigning the lead's agent later cascades onto
+ *  the visit. */
 export const POST = withApi(async (req) => {
   const user = await authenticate(req, ['BUYER'])
 
@@ -83,20 +100,50 @@ export const POST = withApi(async (req) => {
   if (!propertyId) throw new ApiError('propertyId is required', 400)
   const requestedDate = new Date(String(body.requestedDate ?? ''))
   if (Number.isNaN(requestedDate.getTime())) throw new ApiError('requestedDate must be a valid date', 400)
+  const buyerNote = typeof body.buyerNote === 'string' && body.buyerNote.trim() ? body.buyerNote.trim() : null
 
-  const property = await prisma.property.findUnique({ where: { id: propertyId }, select: { agentId: true } })
-  if (!property) throw new ApiError('Property not found', 404)
+  const interestResult = await createOrUpdateInterest({
+    propertyId,
+    buyerId: user.id,
+    buyerName: user.name,
+    source: 'SITE_VISIT_REQUEST',
+    buyerNote,
+  })
+  if ('error' in interestResult) {
+    if (interestResult.error === 'PROPERTY_NOT_FOUND') throw new ApiError('Property not found', 404)
+    throw new ApiError('This property is no longer available', 400)
+  }
+  const { interest } = interestResult
 
   const visit = await prisma.siteVisit.create({
     data: {
       propertyId,
       buyerId: user.id,
-      agentId: property.agentId,
+      agentId: interest.agentId,
+      interestId: interest.id,
       requestedDate,
-      buyerNote: typeof body.buyerNote === 'string' && body.buyerNote.trim() ? body.buyerNote.trim() : null,
+      buyerNote,
       status: 'REQUESTED',
     },
   })
+
+  await recordAudit({
+    action: 'SITE_VISIT_REQUESTED',
+    actorId: user.id,
+    entity: 'SiteVisit',
+    entityId: visit.id,
+    meta: { propertyId, interestId: interest.id, agentId: interest.agentId },
+  })
+
+  if (interest.agentId) {
+    await notifyUsers([
+      {
+        userId: interest.agentId,
+        title: 'New site-visit request',
+        message: `${user.name} has requested a site visit. Confirm a date with them.`,
+      },
+    ])
+  }
 
   return ok(siteVisitDTO(visit), 201)
 })
