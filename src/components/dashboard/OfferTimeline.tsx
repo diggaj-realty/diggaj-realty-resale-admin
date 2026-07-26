@@ -13,10 +13,12 @@ const TYPE_LABELS: Record<string, string> = {
   FORWARDED: 'Forwarded to seller',
   COUNTERED_BACKEND: 'Countered by backend',
   COUNTERED_SELLER: 'Countered by seller',
+  COUNTERED_BUYER: 'Countered by buyer',
   ACCEPTED: 'Offer accepted',
   REJECTED: 'Offer rejected',
   COUNTER_ACCEPTED: 'Counter accepted',
   COUNTER_REJECTED: 'Counter rejected',
+  CLOSED: 'Negotiation closed',
 }
 
 export default function OfferTimeline({ events }: { events: OfferTimelineEvent[] }) {

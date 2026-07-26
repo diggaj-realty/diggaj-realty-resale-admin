@@ -86,6 +86,10 @@ export async function assignAgent(formData: FormData) {
     include: { property: { select: { title: true } } },
   })
 
+  // Mirror onto the property so both assignment entry points (All Listings and
+  // Accepted Offers / Deals) converge on the same agent rather than drifting.
+  await prisma.property.update({ where: { id: deal.propertyId }, data: { agentId } })
+
   await notifyUsers([
     {
       userId: agentId,
@@ -95,6 +99,8 @@ export async function assignAgent(formData: FormData) {
   ])
 
   revalidatePath('/dashboard/deals')
+  revalidatePath('/dashboard/listings')
+  revalidatePath('/dashboard/accepted-offers')
   revalidatePath('/dashboard')
 }
 
@@ -115,6 +121,11 @@ export async function assignAgentToProperty(formData: FormData) {
     select: { title: true },
   })
 
+  // Keep the deal in sync. The agent's "Assigned Deals" list queries
+  // Deal.agentId, so assigning only on the property left an in-progress deal
+  // invisible to the very agent who was just put on it.
+  await prisma.deal.updateMany({ where: { propertyId }, data: { agentId } })
+
   await notifyUsers([
     {
       userId: agentId,
@@ -125,5 +136,7 @@ export async function assignAgentToProperty(formData: FormData) {
 
   revalidatePath('/dashboard/listings')
   revalidatePath(`/dashboard/listings/${propertyId}`)
+  revalidatePath('/dashboard/deals')
+  revalidatePath('/dashboard/accepted-offers')
   revalidatePath('/dashboard')
 }

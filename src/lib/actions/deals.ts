@@ -128,6 +128,7 @@ export async function addDealDocument(formData: FormData) {
   const dealId = String(formData.get('dealId'))
   const docType = String(formData.get('docType') || '').trim()
   const requiredFrom = String(formData.get('requiredFrom') || '').toUpperCase()
+  const remarks = String(formData.get('remarks') || '').trim()
   if (!docType) throw new Error('Document name is required')
   if (!REQUIRED_FROM.includes(requiredFrom as (typeof REQUIRED_FROM)[number])) {
     throw new Error(`requiredFrom must be one of: ${REQUIRED_FROM.join(', ')}`)
@@ -136,7 +137,7 @@ export async function addDealDocument(formData: FormData) {
   const deal = await requireDealStaff(dealId, session)
 
   await prisma.dealDocument.create({
-    data: { dealId, docType, requiredFrom, status: 'PENDING' },
+    data: { dealId, docType, requiredFrom, status: 'PENDING', remarks: remarks || null },
   })
 
   const recipients =
@@ -150,6 +151,61 @@ export async function addDealDocument(formData: FormData) {
   )
 
   revalidatePath(`/dashboard/deals/${dealId}`)
+}
+
+/** Corrects a document requirement that was raised wrong — misspelled name,
+ *  asked of the wrong party, or missing instructions. Editing the requirement
+ *  deliberately does not touch an upload that already happened; use the review
+ *  action to reject that if it's no longer the right file. */
+export async function updateDealDocumentRequest(formData: FormData) {
+  const session = await getServerSession(authOptions)
+  if (!session) throw new Error('Unauthorized')
+
+  const dealId = String(formData.get('dealId'))
+  const docId = String(formData.get('docId'))
+  const docType = String(formData.get('docType') || '').trim()
+  const requiredFrom = String(formData.get('requiredFrom') || '').toUpperCase()
+  const remarks = String(formData.get('remarks') || '').trim()
+
+  if (!docType) throw new Error('Document name is required')
+  if (!REQUIRED_FROM.includes(requiredFrom as (typeof REQUIRED_FROM)[number])) {
+    throw new Error(`requiredFrom must be one of: ${REQUIRED_FROM.join(', ')}`)
+  }
+
+  await requireDealStaff(dealId, session)
+
+  const document = await prisma.dealDocument.findUnique({ where: { id: docId } })
+  if (!document || document.dealId !== dealId) throw new Error('Document not found')
+
+  await prisma.dealDocument.update({
+    where: { id: docId },
+    data: { docType, requiredFrom, remarks: remarks || null },
+  })
+
+  revalidatePath(`/dashboard/deals/${dealId}`)
+  revalidatePath(`/dashboard/accepted-offers/${dealId}`)
+}
+
+/** Removes a requirement raised in error. Only while nothing has been uploaded
+ *  against it — once a party has supplied a file, reject it instead so the
+ *  audit trail of what was asked and answered stays intact. */
+export async function deleteDealDocumentRequest(formData: FormData) {
+  const session = await getServerSession(authOptions)
+  if (!session) throw new Error('Unauthorized')
+
+  const dealId = String(formData.get('dealId'))
+  const docId = String(formData.get('docId'))
+
+  await requireDealStaff(dealId, session)
+
+  const document = await prisma.dealDocument.findUnique({ where: { id: docId } })
+  if (!document || document.dealId !== dealId) throw new Error('Document not found')
+  if (document.fileUrl) throw new Error('This document has already been uploaded — reject it instead of deleting it')
+
+  await prisma.dealDocument.delete({ where: { id: docId } })
+
+  revalidatePath(`/dashboard/deals/${dealId}`)
+  revalidatePath(`/dashboard/accepted-offers/${dealId}`)
 }
 
 /** Staff review of an uploaded document. Neither buyer nor seller can

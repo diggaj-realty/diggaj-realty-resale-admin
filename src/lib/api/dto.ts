@@ -1,4 +1,16 @@
-import type { User, Property, PropertyPhoto, Offer, OfferEvent, Deal, DealDocument, SellerKyc, Notification } from '@prisma/client'
+import type {
+  User,
+  Property,
+  PropertyPhoto,
+  Offer,
+  OfferEvent,
+  Deal,
+  DealDocument,
+  SellerKyc,
+  Notification,
+  OfflineNegotiation,
+  PaymentRequest,
+} from '@prisma/client'
 import { buyerFacingOfferStatus } from '@/lib/data/dashboard'
 
 export function userDTO(u: User) {
@@ -203,6 +215,48 @@ export function dealDocumentDTO(d: DealDocument) {
     uploadedBy: d.uploadedBy,
     createdAt: d.createdAt.toISOString(),
     updatedAt: d.updatedAt.toISOString(),
+  }
+}
+
+type OfflineNegotiationWithRelations = OfflineNegotiation & {
+  recordedBy?: { name: string } | null
+}
+
+export function offlineNegotiationDTO(n: OfflineNegotiationWithRelations) {
+  return {
+    id: n.id,
+    dealId: n.dealId,
+    agreedAmount: n.agreedAmount,
+    buyerConfirmed: n.buyerConfirmed,
+    sellerConfirmed: n.sellerConfirmed,
+    notes: n.notes,
+    recordedById: n.recordedById,
+    recordedByName: n.recordedBy?.name,
+    createdAt: n.createdAt.toISOString(),
+    updatedAt: n.updatedAt.toISOString(),
+  }
+}
+
+type PaymentRequestWithRelations = PaymentRequest & {
+  createdBy?: { name: string } | null
+}
+
+export function paymentRequestDTO(r: PaymentRequestWithRelations) {
+  return {
+    id: r.id,
+    dealId: r.dealId,
+    recipient: r.recipient,
+    amount: r.amount,
+    title: r.title,
+    description: r.description,
+    dueDate: r.dueDate ? r.dueDate.toISOString() : null,
+    status: r.status,
+    paidAt: r.paidAt ? r.paidAt.toISOString() : null,
+    paymentRef: r.paymentRef,
+    createdById: r.createdById,
+    createdByName: r.createdBy?.name,
+    createdAt: r.createdAt.toISOString(),
+    updatedAt: r.updatedAt.toISOString(),
   }
 }
 

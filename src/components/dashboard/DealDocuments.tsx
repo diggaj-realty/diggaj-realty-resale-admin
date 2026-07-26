@@ -1,8 +1,13 @@
 'use client'
 
 import { useRef, useState, useTransition } from 'react'
-import { FileText, CheckCircle2, XCircle, Clock } from 'lucide-react'
-import { addDealDocument, reviewDealDocument } from '@/lib/actions/deals'
+import { FileText, CheckCircle2, XCircle, Clock, Pencil, Trash2 } from 'lucide-react'
+import {
+  addDealDocument,
+  reviewDealDocument,
+  updateDealDocumentRequest,
+  deleteDealDocumentRequest,
+} from '@/lib/actions/deals'
 
 const REQUIRED_FROM_LABEL: Record<string, string> = {
   BUYER: 'Buyer',
@@ -41,6 +46,7 @@ export default function DealDocuments({
 }) {
   const [pending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
   const formRef = useRef<HTMLFormElement>(null)
 
   function review(docId: string, status: 'APPROVED' | 'REJECTED') {
@@ -54,6 +60,20 @@ export default function DealDocuments({
         await reviewDealDocument(fd)
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to review document')
+      }
+    })
+  }
+
+  function removeRequest(docId: string) {
+    setError(null)
+    startTransition(async () => {
+      try {
+        const fd = new FormData()
+        fd.set('dealId', dealId)
+        fd.set('docId', docId)
+        await deleteDealDocumentRequest(fd)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to remove request')
       }
     })
   }
@@ -104,6 +124,15 @@ export default function DealDocuments({
               <option value="SELLER">Seller</option>
               <option value="EITHER">Either</option>
             </select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[11px] font-medium" style={{ color: 'var(--text-3)' }}>Instructions (optional)</label>
+            <input
+              name="remarks"
+              placeholder="e.g. Latest signed copy required"
+              className="w-64 rounded-lg border px-3 py-2 text-sm outline-none"
+              style={{ borderColor: 'var(--line)', color: 'var(--text-1)' }}
+            />
           </div>
           <button type="submit" disabled={pending} className="btn-accent rounded-lg px-4 py-2 text-xs font-semibold disabled:opacity-70">
             {pending ? 'Adding...' : 'Request document'}
@@ -161,6 +190,86 @@ export default function DealDocuments({
                       Reject
                     </button>
                   </div>
+                )}
+
+                {canManage && editingId !== d.id && (
+                  <div className="mt-2 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => { setEditingId(d.id); setError(null) }}
+                      className="flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold"
+                      style={{ background: 'var(--surface)', color: 'var(--text-3)' }}
+                    >
+                      <Pencil size={11} /> Edit request
+                    </button>
+                    {!d.fileUrl && (
+                      <button
+                        type="button"
+                        disabled={pending}
+                        onClick={() => removeRequest(d.id)}
+                        className="flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold disabled:opacity-50"
+                        style={{ background: 'var(--surface)', color: 'var(--red-700)' }}
+                      >
+                        <Trash2 size={11} /> Remove
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {canManage && editingId === d.id && (
+                  <form
+                    action={(formData) => {
+                      setError(null)
+                      formData.set('dealId', dealId)
+                      formData.set('docId', d.id)
+                      startTransition(async () => {
+                        try {
+                          await updateDealDocumentRequest(formData)
+                          setEditingId(null)
+                        } catch (err) {
+                          setError(err instanceof Error ? err.message : 'Failed to update request')
+                        }
+                      })
+                    }}
+                    className="mt-2 flex flex-wrap items-end gap-2 border-t pt-2"
+                    style={{ borderColor: 'var(--line)' }}
+                  >
+                    <input
+                      name="docType"
+                      defaultValue={d.docType}
+                      required
+                      className="w-40 rounded-lg border px-2.5 py-1.5 text-xs outline-none"
+                      style={{ borderColor: 'var(--line)', color: 'var(--text-1)' }}
+                    />
+                    <select
+                      name="requiredFrom"
+                      defaultValue={d.requiredFrom}
+                      className="rounded-lg border px-2 py-1.5 text-xs outline-none"
+                      style={{ borderColor: 'var(--line)', color: 'var(--text-1)', background: 'var(--surface)' }}
+                    >
+                      <option value="BUYER">Buyer</option>
+                      <option value="SELLER">Seller</option>
+                      <option value="EITHER">Either</option>
+                    </select>
+                    <input
+                      name="remarks"
+                      defaultValue={d.remarks ?? ''}
+                      placeholder="Instructions"
+                      className="w-48 rounded-lg border px-2.5 py-1.5 text-xs outline-none"
+                      style={{ borderColor: 'var(--line)', color: 'var(--text-1)' }}
+                    />
+                    <button type="submit" disabled={pending} className="btn-accent rounded-lg px-2.5 py-1.5 text-[11px] font-semibold disabled:opacity-60">
+                      Save
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditingId(null)}
+                      className="rounded-lg px-2.5 py-1.5 text-[11px] font-semibold"
+                      style={{ background: 'var(--surface)', color: 'var(--text-3)' }}
+                    >
+                      Cancel
+                    </button>
+                  </form>
                 )}
               </li>
             )

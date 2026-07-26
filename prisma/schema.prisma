@@ -29,8 +29,8 @@ model User {
   passwordHash       String
   role               String // Role enum — primary role, used for staff dashboard access & display
   roles              String[] @default([]) // Full set of held roles. BUYER/SELLER are additive on the public API
-                                            // (a seller can also hold BUYER) — AGENT/BACKEND/ADMIN stay single,
-                                            // admin-provisioned roles and are never combined with another.
+  // (a seller can also hold BUYER) — AGENT/BACKEND/ADMIN stay single,
+  // admin-provisioned roles and are never combined with another.
   isActive           Boolean  @default(true)
   avatarUrl          String?
   emailNotifications Boolean  @default(true)
@@ -38,20 +38,22 @@ model User {
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
-  sellerKyc          SellerKyc?
-  propertiesAsSeller Property[]     @relation("SellerProperties")
-  propertiesAsAgent  Property[]     @relation("AgentProperties")
-  offersAsBuyer      Offer[]        @relation("BuyerOffers")
-  dealsAsBuyer       Deal[]         @relation("BuyerDeals")
-  dealsAsSeller      Deal[]         @relation("SellerDeals")
-  dealsAsAgent       Deal[]         @relation("AgentDeals")
-  notifications      Notification[]
-  shortlists         Shortlist[]
-  savedSearches      SavedSearch[]
-  propertyViews      PropertyView[]
-  visitsAsBuyer      SiteVisit[]    @relation("BuyerVisits")
-  visitsAsAgent      SiteVisit[]    @relation("AgentVisits")
-  feedbackSubmitted  Feedback[]
+  sellerKyc                   SellerKyc?
+  propertiesAsSeller          Property[]           @relation("SellerProperties")
+  propertiesAsAgent           Property[]           @relation("AgentProperties")
+  offersAsBuyer               Offer[]              @relation("BuyerOffers")
+  dealsAsBuyer                Deal[]               @relation("BuyerDeals")
+  dealsAsSeller               Deal[]               @relation("SellerDeals")
+  dealsAsAgent                Deal[]               @relation("AgentDeals")
+  notifications               Notification[]
+  shortlists                  Shortlist[]
+  savedSearches               SavedSearch[]
+  propertyViews               PropertyView[]
+  visitsAsBuyer               SiteVisit[]          @relation("BuyerVisits")
+  visitsAsAgent               SiteVisit[]          @relation("AgentVisits")
+  feedbackSubmitted           Feedback[]
+  offlineNegotiationsRecorded OfflineNegotiation[] @relation("OfflineNegotiationsRecorded")
+  paymentRequestsCreated      PaymentRequest[]     @relation("PaymentRequestsCreated")
 
   @@map("users")
 }
@@ -223,13 +225,15 @@ model Deal {
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
-  property   Property       @relation(fields: [propertyId], references: [id])
-  buyer      User           @relation("BuyerDeals", fields: [buyerId], references: [id])
-  seller     User           @relation("SellerDeals", fields: [sellerId], references: [id])
-  agent      User?          @relation("AgentDeals", fields: [agentId], references: [id])
-  documents  DealDocument[]
-  logEntries DealLogEntry[]
-  siteVisit  SiteVisit?
+  property            Property             @relation(fields: [propertyId], references: [id])
+  buyer               User                 @relation("BuyerDeals", fields: [buyerId], references: [id])
+  seller              User                 @relation("SellerDeals", fields: [sellerId], references: [id])
+  agent               User?                @relation("AgentDeals", fields: [agentId], references: [id])
+  documents           DealDocument[]
+  logEntries          DealLogEntry[]
+  siteVisit           SiteVisit?
+  offlineNegotiations OfflineNegotiation[]
+  paymentRequests     PaymentRequest[]
 
   @@map("deals")
 }
@@ -272,6 +276,55 @@ model DealDocument {
 
   @@index([dealId])
   @@map("deal_documents")
+}
+
+/// Negotiation that happened off-platform — in person, by phone, or through the
+/// agent — recorded after the fact by the assigned agent. Deliberately separate
+/// from Offer/OfferEvent: that timeline is the platform's own negotiation record
+/// and must stay intact, while this captures what was agreed in the real world.
+model OfflineNegotiation {
+  id              String   @id @default(cuid())
+  dealId          String
+  agreedAmount    Float
+  buyerConfirmed  Boolean  @default(false)
+  sellerConfirmed Boolean  @default(false)
+  notes           String?
+  recordedById    String // the agent (or staff member) who recorded it
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  deal       Deal @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  recordedBy User @relation("OfflineNegotiationsRecorded", fields: [recordedById], references: [id])
+
+  @@index([dealId])
+  @@map("offline_negotiations")
+}
+
+/// A request for money that surfaces on the buyer's or seller's own dashboard
+/// with a "Pay Now" action. Separate from Deal.tokenAmount/finalAmount, which are
+/// staff-recorded records of payments that already happened elsewhere.
+model PaymentRequest {
+  id          String    @id @default(cuid())
+  dealId      String
+  recipient   String // BUYER | SELLER — who owes this
+  amount      Float
+  title       String?
+  description String?
+  dueDate     DateTime?
+  // PENDING | PAYMENT_INITIATED | PAID | FAILED | CANCELLED. The backend is the
+  // only thing that may set PAID — a frontend success screen is not proof.
+  status      String    @default("PENDING")
+  paidAt      DateTime?
+  paymentRef  String? // gateway reference, populated once Razorpay is wired up
+  createdById String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  deal      Deal @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  createdBy User @relation("PaymentRequestsCreated", fields: [createdById], references: [id])
+
+  @@index([dealId])
+  @@map("payment_requests")
 }
 
 model Notification {
@@ -372,9 +425,9 @@ model SiteVisit {
   // interestedAmount can be updated repeatedly (further in-person rounds)
   // right up until a Deal is created from this visit. dealId is set once
   // converted, so the same visit can't spawn a second Deal.
-  outcome           String? // INTERESTED | NOT_INTERESTED
-  interestedAmount  Float?
-  dealId            String? @unique
+  outcome          String? // INTERESTED | NOT_INTERESTED
+  interestedAmount Float?
+  dealId           String? @unique
 
   property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   buyer    User     @relation("BuyerVisits", fields: [buyerId], references: [id], onDelete: Cascade)

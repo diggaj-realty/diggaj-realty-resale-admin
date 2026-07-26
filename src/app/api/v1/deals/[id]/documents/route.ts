@@ -38,16 +38,17 @@ export const POST = withApi(async (req, ctx) => {
   if (!deal) throw new ApiError('Deal not found', 404)
   if (user.role === 'AGENT' && deal.agentId !== user.id) throw new ApiError('Forbidden', 403)
 
-  const body = await readJson<{ docType?: string; requiredFrom?: string }>(req)
+  const body = await readJson<{ docType?: string; requiredFrom?: string; remarks?: string }>(req)
   const docType = String(body.docType || '').trim()
   const requiredFrom = String(body.requiredFrom || '').toUpperCase()
+  const remarks = body.remarks ? String(body.remarks).trim() : ''
   if (!docType) throw new ApiError('docType is required', 400)
   if (!REQUIRED_FROM.includes(requiredFrom as (typeof REQUIRED_FROM)[number])) {
     throw new ApiError(`requiredFrom must be one of: ${REQUIRED_FROM.join(', ')}`, 400)
   }
 
   const document = await prisma.dealDocument.create({
-    data: { dealId, docType, requiredFrom, status: 'PENDING' },
+    data: { dealId, docType, requiredFrom, status: 'PENDING', remarks: remarks || null },
   })
 
   const recipients =

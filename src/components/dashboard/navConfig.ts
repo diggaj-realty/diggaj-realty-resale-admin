@@ -19,6 +19,7 @@ import {
   MessageSquare,
   LifeBuoy,
   Globe,
+  FileCheck2,
 } from 'lucide-react'
 import type { UserRole } from '@/types'
 
@@ -45,6 +46,10 @@ export function getNavIcons(role: UserRole): NavIcon[] {
   const settings: NavIcon = { key: 'settings', label: 'Settings', icon: Settings, href: '/dashboard/settings', secondary: true }
   const publicListings: NavIcon = { key: 'public-listings', label: 'Public Listings', icon: Globe, href: '/dashboard/public-listings' }
   const siteVisitsQueue: NavIcon = { key: 'site-visits-queue', label: 'Site Visits', icon: CalendarCheck, href: '/dashboard/site-visits-queue' }
+  // Acceptance is the start of the operational deal process, not the end — this
+  // is where post-acceptance work (agent, visits, offline negotiation, docs,
+  // payments, closure) is driven from.
+  const acceptedOffers: NavIcon = { key: 'accepted-offers', label: 'Accepted Offers', icon: FileCheck2, href: '/dashboard/accepted-offers' }
 
   // SELLER is intentionally absent — SELLER sessions never reach any page
   // this nav renders for (see dashboard/layout.tsx redirect).
@@ -70,6 +75,7 @@ export function getNavIcons(role: UserRole): NavIcon[] {
         { key: 'site-visits', label: 'Site Visits', icon: CalendarCheck, href: '/dashboard/site-visits' },
         { key: 'offers', label: 'Offers Received', icon: HandCoins, href: '/dashboard/offers' },
         { key: 'deals', label: 'Assigned Deals', icon: Briefcase, href: '/dashboard/deals' },
+        acceptedOffers,
         performance,
         feedback,
         help,
@@ -83,6 +89,7 @@ export function getNavIcons(role: UserRole): NavIcon[] {
         { key: 'listings', label: 'All Listings', icon: Building2, href: '/dashboard/listings' },
         publicListings,
         { key: 'negotiations', label: 'Negotiations', icon: Scale, href: '/dashboard/negotiations' },
+        acceptedOffers,
         siteVisitsQueue,
         { key: 'clients', label: 'Clients', icon: Contact, href: '/dashboard/clients' },
         performance,
@@ -97,6 +104,7 @@ export function getNavIcons(role: UserRole): NavIcon[] {
         { key: 'clients', label: 'Clients', icon: Contact, href: '/dashboard/clients' },
         { key: 'listings', label: 'All Listings', icon: Building2, href: '/dashboard/listings' },
         publicListings,
+        acceptedOffers,
         siteVisitsQueue,
         { key: 'amenities', label: 'Amenities', icon: ListChecks, href: '/dashboard/amenities' },
         performance,
