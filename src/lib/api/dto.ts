@@ -129,6 +129,13 @@ function offerEventDTO(e: OfferEvent) {
 }
 
 export function offerDTO(o: OfferWithRelations, opts?: { forBuyer?: boolean }) {
+  // Negotiation can go back and forth indefinitely (no round limit) — these
+  // two derived fields tell the client whose move it is and what number is
+  // currently on the table, without reimplementing the turn logic from
+  // src/app/api/v1/offers/[id]/route.ts. Only meaningful while PENDING/COUNTERED.
+  const isActive = o.status === 'PENDING' || o.status === 'COUNTERED'
+  const turn = isActive ? (o.status === 'PENDING' ? 'SELLER' : o.counterBy === 'BUYER' ? 'SELLER' : 'BUYER') : null
+
   return {
     id: o.id,
     propertyId: o.propertyId,
@@ -139,6 +146,8 @@ export function offerDTO(o: OfferWithRelations, opts?: { forBuyer?: boolean }) {
     displayStatus: opts?.forBuyer ? buyerFacingOfferStatus(o.status) : o.status,
     counterAmount: o.counterAmount,
     counterBy: o.counterBy,
+    currentAmount: o.counterAmount ?? o.amount,
+    turn,
     reviewedBy: o.reviewedBy,
     createdAt: o.createdAt.toISOString(),
     updatedAt: o.updatedAt.toISOString(),

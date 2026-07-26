@@ -23,7 +23,7 @@ function offerStatusTone(status: string): string {
   if (s === 'ACCEPTED') return 'green'
   if (s === 'PENDING' || s === 'PENDING_REVIEW') return 'gold'
   if (s === 'COUNTERED') return 'blue'
-  if (s === 'REJECTED') return 'red'
+  if (s === 'REJECTED' || s === 'NEGOTIATION_CLOSED') return 'red'
   return 'purple'
 }
 

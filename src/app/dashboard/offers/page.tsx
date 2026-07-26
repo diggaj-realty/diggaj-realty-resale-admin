@@ -52,6 +52,7 @@ export default async function OffersPage() {
                 amount={o.amount}
                 status={o.status}
                 counterAmount={o.counterAmount}
+                counterBy={o.counterBy}
                 createdAt={o.createdAt}
                 events={o.events}
               />
@@ -87,6 +88,7 @@ export default async function OffersPage() {
               amount={o.amount}
               displayStatus={buyerFacingOfferStatus(o.status)}
               counterAmount={o.counterAmount}
+              counterBy={o.counterBy}
               message={o.message}
               createdAt={o.createdAt}
             />

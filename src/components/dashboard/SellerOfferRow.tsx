@@ -1,9 +1,9 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { Check, ChevronDown, Scale, X } from 'lucide-react'
+import { Check, ChevronDown, Scale, X, XCircle } from 'lucide-react'
 import { formatINR, formatRelativeTime } from '@/lib/format'
-import { acceptOffer, rejectOffer, counterOffer } from '@/lib/actions/offers'
+import { acceptOffer, rejectOffer, counterOffer, closeNegotiation } from '@/lib/actions/offers'
 import OfferStatusPill from '@/components/dashboard/OfferStatusPill'
 import OfferTimeline, { type OfferTimelineEvent } from '@/components/dashboard/OfferTimeline'
 
@@ -18,6 +18,7 @@ export default function SellerOfferRow({
   amount,
   status,
   counterAmount,
+  counterBy,
   createdAt,
   events,
 }: {
@@ -31,15 +32,23 @@ export default function SellerOfferRow({
   amount: number
   status: string
   counterAmount: number | null
+  counterBy: string | null
   createdAt: Date | string
   events: OfferTimelineEvent[]
 }) {
   const [counterOpen, setCounterOpen] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
-  const [amountInput, setAmountInput] = useState(String(amount))
+  const [amountInput, setAmountInput] = useState(String(counterAmount ?? amount))
   const [pending, startTransition] = useTransition()
+  const [error, setError] = useState<string | null>(null)
 
-  const actionable = status === 'PENDING'
+  // No round limit — it's the seller's turn either right after the buyer's
+  // original offer (never countered yet), or any time the buyer has just
+  // countered back. Between those, it's the buyer's turn and this row is
+  // read-only except for "Close negotiation," which works regardless of
+  // whose turn it is.
+  const myTurn = status === 'PENDING' || (status === 'COUNTERED' && counterBy === 'BUYER')
+  const closable = status === 'PENDING' || status === 'COUNTERED'
 
   function withOfferId(extra?: Record<string, string>) {
     const fd = new FormData()
@@ -63,7 +72,9 @@ export default function SellerOfferRow({
         <div className="text-right">
           <span className="block whitespace-nowrap text-sm font-bold" style={{ color: 'var(--accent-700)' }}>{formatINR(amount)}</span>
           {counterAmount != null && (
-            <span className="block whitespace-nowrap text-xs" style={{ color: 'var(--text-3)' }}>Countered: {formatINR(counterAmount)}</span>
+            <span className="block whitespace-nowrap text-xs" style={{ color: 'var(--text-3)' }}>
+              {counterBy === 'BUYER' ? 'Buyer countered: ' : 'Countered: '}{formatINR(counterAmount)}
+            </span>
           )}
         </div>
         <OfferStatusPill status={status} />
@@ -75,12 +86,21 @@ export default function SellerOfferRow({
         >
           <ChevronDown size={13} style={{ transform: historyOpen ? 'rotate(180deg)' : undefined }} /> History
         </button>
-        {actionable && (
+        {myTurn && (
           <div className="flex items-center gap-2">
             <button
               type="button"
               disabled={pending}
-              onClick={() => startTransition(() => acceptOffer(withOfferId()))}
+              onClick={() => {
+                setError(null)
+                startTransition(async () => {
+                  try {
+                    await acceptOffer(withOfferId())
+                  } catch (err) {
+                    setError(err instanceof Error ? err.message : 'Failed to accept')
+                  }
+                })
+              }}
               className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold disabled:opacity-60"
               style={{ background: 'var(--green-50)', color: 'var(--green-700)' }}
             >
@@ -98,7 +118,16 @@ export default function SellerOfferRow({
             <button
               type="button"
               disabled={pending}
-              onClick={() => startTransition(() => rejectOffer(withOfferId()))}
+              onClick={() => {
+                setError(null)
+                startTransition(async () => {
+                  try {
+                    await rejectOffer(withOfferId())
+                  } catch (err) {
+                    setError(err instanceof Error ? err.message : 'Failed to reject')
+                  }
+                })
+              }}
               className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold disabled:opacity-60"
               style={{ background: 'var(--red-50)', color: 'var(--red-700)' }}
             >
@@ -106,7 +135,30 @@ export default function SellerOfferRow({
             </button>
           </div>
         )}
+        {closable && (
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => {
+              setError(null)
+              startTransition(async () => {
+                try {
+                  await closeNegotiation(withOfferId())
+                } catch (err) {
+                  setError(err instanceof Error ? err.message : 'Failed to close negotiation')
+                }
+              })
+            }}
+            className="flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold disabled:opacity-60"
+            style={{ background: 'var(--surface-2)', color: 'var(--text-3)' }}
+            title="End this negotiation without an agreement"
+          >
+            <XCircle size={13} /> Close
+          </button>
+        )}
       </div>
+
+      {error && <p className="mt-2 text-xs" style={{ color: 'var(--red-700)' }}>{error}</p>}
 
       {historyOpen && (
         <div className="mt-3 pl-0.5">
@@ -114,12 +166,17 @@ export default function SellerOfferRow({
         </div>
       )}
 
-      {counterOpen && actionable && (
+      {counterOpen && myTurn && (
         <form
           action={(formData) => {
+            setError(null)
             startTransition(async () => {
-              await counterOffer(formData)
-              setCounterOpen(false)
+              try {
+                await counterOffer(formData)
+                setCounterOpen(false)
+              } catch (err) {
+                setError(err instanceof Error ? err.message : 'Failed to send counter')
+              }
             })
           }}
           className="mt-3 flex items-center gap-2"

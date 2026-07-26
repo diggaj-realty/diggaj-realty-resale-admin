@@ -8,6 +8,7 @@ import DashboardEntrance from '@/components/dashboard/DashboardEntrance'
 import NegotiationRow from '@/components/dashboard/NegotiationRow'
 import OfferStatusPill from '@/components/dashboard/OfferStatusPill'
 import OfferTimeline from '@/components/dashboard/OfferTimeline'
+import CloseNegotiationButton from '@/components/dashboard/CloseNegotiationButton'
 import { formatINR, formatRelativeTime } from '@/lib/format'
 
 const OFFER_INCLUDE = {
@@ -80,6 +81,7 @@ export default async function NegotiationsPage() {
                   <span className="whitespace-nowrap text-sm font-bold" style={{ color: 'var(--accent-700)' }}>{formatINR(o.amount)}</span>
                   <OfferStatusPill status={o.status} />
                   <span className="whitespace-nowrap text-xs" style={{ color: 'var(--text-3)' }}>{formatRelativeTime(o.updatedAt)}</span>
+                  {(o.status === 'PENDING' || o.status === 'COUNTERED') && <CloseNegotiationButton offerId={o.id} />}
                 </summary>
                 <div className="mt-3 pl-0.5">
                   <OfferTimeline events={o.events} />

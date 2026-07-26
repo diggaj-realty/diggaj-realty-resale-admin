@@ -110,19 +110,33 @@ async function finalizeAcceptance(offerId: string, agreedPrice: number, actorId:
   return newDeal
 }
 
-type Action = 'accept' | 'reject' | 'counter' | 'acceptCounter' | 'rejectCounter'
-const SELLER_ACTIONS: Action[] = ['accept', 'reject', 'counter']
-const BUYER_ACTIONS: Action[] = ['acceptCounter', 'rejectCounter']
+type Action = 'accept' | 'reject' | 'counter' | 'close'
+const ACTIONS: Action[] = ['accept', 'reject', 'counter', 'close']
+
+/** Whose turn it is to respond, and what amount is currently on the table.
+ *  Only meaningful while status is PENDING or COUNTERED — negotiation is a
+ *  simple back-and-forth: whoever DIDN'T make the most recent proposal is
+ *  up next. No round limit — this can go on as many rounds as the two
+ *  sides want, unlike the old model which only allowed a single counter. */
+function currentTurn(offer: { status: string; counterBy: string | null }): 'BUYER' | 'SELLER' {
+  if (offer.status === 'PENDING') return 'SELLER' // original amount still stands, seller/backend hasn't responded yet
+  // COUNTERED: whoever proposed the current counterAmount is waiting on the other side
+  return offer.counterBy === 'BUYER' ? 'SELLER' : 'BUYER'
+}
+
+function currentAmount(offer: { amount: number; counterAmount: number | null }): number {
+  return offer.counterAmount ?? offer.amount
+}
 
 export const PATCH = withApi(async (req, ctx) => {
-  const user = await authenticate(req, ['SELLER', 'BUYER'])
+  const user = await authenticate(req, ['SELLER', 'BUYER', 'BACKEND'])
   const { id: offerId } = await ctx.params
 
   const body = await readJson<{ action?: string; counterAmount?: number }>(req)
   const action = String(body.action || '') as Action
 
-  if (!SELLER_ACTIONS.includes(action) && !BUYER_ACTIONS.includes(action)) {
-    throw new ApiError(`action must be one of: ${[...SELLER_ACTIONS, ...BUYER_ACTIONS].join(', ')}`, 400)
+  if (!ACTIONS.includes(action)) {
+    throw new ApiError(`action must be one of: ${ACTIONS.join(', ')}`, 400)
   }
 
   const offer = await prisma.offer.findUnique({
@@ -131,53 +145,77 @@ export const PATCH = withApi(async (req, ctx) => {
   })
   if (!offer) throw new ApiError('Offer not found', 404)
 
-  if (action === 'accept' || action === 'reject' || action === 'counter') {
-    if (offer.property.sellerId !== user.id) throw new ApiError('Unauthorized', 403)
-    if (offer.status !== 'PENDING') throw new ApiError('Offer is not awaiting seller action', 400)
-  } else {
-    if (offer.buyerId !== user.id) throw new ApiError('Unauthorized', 403)
-    if (offer.status !== 'COUNTERED') throw new ApiError('Offer is not in a countered state', 400)
+  const isBuyer = offer.buyerId === user.id
+  const isSeller = offer.property.sellerId === user.id
+  const isBackend = user.role === 'BACKEND'
+  if (!isBuyer && !isSeller && !isBackend) throw new ApiError('Unauthorized', 403)
+
+  if (offer.status !== 'PENDING' && offer.status !== 'COUNTERED') {
+    throw new ApiError('This negotiation is no longer active', 400)
   }
 
-  switch (action) {
-    case 'accept': {
-      await finalizeAcceptance(offerId, offer.amount, user.id, user.role)
-      break
+  if (action === 'close') {
+    // Any party can end a stalled negotiation at any point — no turn
+    // restriction, since the whole point is "this isn't going anywhere."
+    const notifyIds = new Set([offer.buyerId, offer.property.sellerId].filter((id) => id !== user.id))
+    await prisma.offer.update({ where: { id: offerId }, data: { status: 'NEGOTIATION_CLOSED' } })
+    await logOfferEvent({ offerId, type: 'CLOSED', actorId: user.id, actorRole: user.role })
+    if (notifyIds.size > 0) {
+      await prisma.notification.createMany({
+        data: Array.from(notifyIds).map((userId) => ({
+          userId,
+          title: 'Negotiation closed',
+          message: `The negotiation on ${offer.property.title} was closed without an agreement.`,
+        })),
+      })
     }
-    case 'reject': {
+  } else {
+    // accept/reject/counter are turn-based — BACKEND cannot act as either
+    // party mid-negotiation, only close it (see NegotiationRow — backend's
+    // own counter/reject powers are limited to pre-forward triage).
+    const turn = currentTurn(offer)
+    const actingAs = turn === 'BUYER' ? (isBuyer ? 'BUYER' : null) : isSeller ? 'SELLER' : null
+    if (!actingAs) {
+      throw new ApiError(
+        isBackend ? 'Only the buyer or seller can respond mid-negotiation — use close to end it instead.' : "It's not your turn — waiting on the other party.",
+        403
+      )
+    }
+
+    if (action === 'accept') {
+      await finalizeAcceptance(offerId, currentAmount(offer), user.id, user.role)
+    } else if (action === 'reject') {
       await prisma.offer.update({ where: { id: offerId }, data: { status: 'REJECTED' } })
       await logOfferEvent({ offerId, type: 'REJECTED', actorId: user.id, actorRole: user.role })
+      const recipientId = actingAs === 'BUYER' ? offer.property.sellerId : offer.buyerId
       await prisma.notification.create({
-        data: { userId: offer.buyerId, title: 'Offer rejected', message: `Your offer on ${offer.property.title} was rejected.` },
+        data: {
+          userId: recipientId,
+          title: 'Offer rejected',
+          message:
+            actingAs === 'BUYER'
+              ? `The buyer rejected the counter offer on ${offer.property.title}.`
+              : `Your offer on ${offer.property.title} was rejected.`,
+        },
       })
-      break
-    }
-    case 'counter': {
+    } else {
       const counterAmount = Number(body.counterAmount)
       if (!Number.isFinite(counterAmount) || counterAmount <= 0) throw new ApiError('Invalid counter amount', 400)
       await prisma.offer.update({
         where: { id: offerId },
-        data: { status: 'COUNTERED', counterAmount, counterBy: 'SELLER' },
+        data: { status: 'COUNTERED', counterAmount, counterBy: actingAs },
       })
-      await logOfferEvent({ offerId, type: 'COUNTERED_SELLER', amount: counterAmount, actorId: user.id, actorRole: user.role })
+      await logOfferEvent({
+        offerId,
+        type: actingAs === 'BUYER' ? 'COUNTERED_BUYER' : 'COUNTERED_SELLER',
+        amount: counterAmount,
+        actorId: user.id,
+        actorRole: user.role,
+      })
+      const recipientId = actingAs === 'BUYER' ? offer.property.sellerId : offer.buyerId
       await prisma.notification.create({
-        data: { userId: offer.buyerId, title: 'Offer countered', message: `Your offer on ${offer.property.title} received a counter of ${counterAmount}.` },
+        data: { userId: recipientId, title: 'Offer countered', message: `${actingAs === 'BUYER' ? 'The buyer countered' : 'You received a counter'} on ${offer.property.title} — ${counterAmount}.` },
       })
-      break
-    }
-    case 'acceptCounter': {
-      if (offer.counterAmount == null) throw new ApiError('Missing counter amount', 400)
-      await logOfferEvent({ offerId, type: 'COUNTER_ACCEPTED', amount: offer.counterAmount, actorId: user.id, actorRole: user.role })
-      await finalizeAcceptance(offerId, offer.counterAmount, user.id, user.role)
-      break
-    }
-    case 'rejectCounter': {
-      await prisma.offer.update({ where: { id: offerId }, data: { status: 'REJECTED' } })
-      await logOfferEvent({ offerId, type: 'COUNTER_REJECTED', actorId: user.id, actorRole: user.role })
-      await prisma.notification.create({
-        data: { userId: offer.property.sellerId, title: 'Offer rejected', message: `The buyer rejected the counter offer on ${offer.property.title}.` },
-      })
-      break
     }
   }
 

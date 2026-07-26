@@ -5,10 +5,12 @@ export type OfferEventType =
   | 'FORWARDED'
   | 'COUNTERED_BACKEND'
   | 'COUNTERED_SELLER'
+  | 'COUNTERED_BUYER'
   | 'ACCEPTED'
   | 'REJECTED'
   | 'COUNTER_ACCEPTED'
   | 'COUNTER_REJECTED'
+  | 'CLOSED'
 
 interface LogOfferEventInput {
   offerId: string
