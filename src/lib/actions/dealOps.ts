@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { notifyUsers } from '@/lib/notify'
+import { recordAudit } from '@/lib/audit'
 
 /** Post-acceptance deal operations: recording negotiations that happened off
  *  the platform, and raising payment requests that surface on the buyer's or
@@ -12,6 +13,15 @@ import { notifyUsers } from '@/lib/notify'
  *  are recipients here, never the authors. */
 
 const RECIPIENTS = ['BUYER', 'SELLER'] as const
+const PURPOSES = [
+  'TOKEN',
+  'REGISTRATION',
+  'STAMP_DUTY',
+  'DOCUMENTATION',
+  'FINAL_SETTLEMENT',
+  'COMMISSION',
+  'OTHER',
+] as const
 
 /** The assigned agent, or backend/admin. Mirrors requireDealStaff in deals.ts —
  *  paperwork and negotiation recording are day-to-day ops work, not admin-only. */
@@ -90,6 +100,7 @@ export async function createPaymentRequest(formData: FormData) {
   const dealId = String(formData.get('dealId'))
   const amount = Number(formData.get('amount'))
   const recipient = String(formData.get('recipient') || '').toUpperCase()
+  const purposeRaw = String(formData.get('purpose') || '').trim().toUpperCase()
   const title = String(formData.get('title') || '').trim()
   const description = String(formData.get('description') || '').trim()
   const dueDateRaw = String(formData.get('dueDate') || '').trim()
@@ -98,6 +109,10 @@ export async function createPaymentRequest(formData: FormData) {
   if (!RECIPIENTS.includes(recipient as (typeof RECIPIENTS)[number])) {
     throw new Error(`recipient must be one of: ${RECIPIENTS.join(', ')}`)
   }
+  if (purposeRaw && !PURPOSES.includes(purposeRaw as (typeof PURPOSES)[number])) {
+    throw new Error(`purpose must be one of: ${PURPOSES.join(', ')}`)
+  }
+  const purpose = purposeRaw || null
 
   const { deal, userId } = await requireDealStaff(dealId)
 
@@ -106,12 +121,21 @@ export async function createPaymentRequest(formData: FormData) {
       dealId,
       recipient,
       amount,
+      purpose,
       title: title || null,
       description: description || null,
       dueDate: dueDateRaw ? new Date(dueDateRaw) : null,
       status: 'PENDING',
       createdById: userId,
     },
+  })
+
+  await recordAudit({
+    action: 'PAYMENT_REQUESTED',
+    actorId: userId,
+    entity: 'PaymentRequest',
+    entityId: dealId,
+    meta: { amount, recipient, purpose },
   })
 
   await notifyUsers([
@@ -133,7 +157,7 @@ export async function markPaymentRequestPaid(formData: FormData) {
   const paymentRequestId = String(formData.get('paymentRequestId'))
   const paymentRef = String(formData.get('paymentRef') || '').trim()
 
-  const { deal } = await requireDealStaff(dealId)
+  const { deal, userId } = await requireDealStaff(dealId)
 
   const request = await prisma.paymentRequest.findUnique({ where: { id: paymentRequestId } })
   if (!request || request.dealId !== dealId) throw new Error('Payment request not found')
@@ -143,6 +167,16 @@ export async function markPaymentRequestPaid(formData: FormData) {
   await prisma.paymentRequest.update({
     where: { id: paymentRequestId },
     data: { status: 'PAID', paidAt: new Date(), paymentRef: paymentRef || null },
+  })
+
+  // Money moving is exactly the kind of privileged action that must be
+  // reconstructable later.
+  await recordAudit({
+    action: 'PAYMENT_CONFIRMED',
+    actorId: userId,
+    entity: 'PaymentRequest',
+    entityId: paymentRequestId,
+    meta: { amount: request.amount, recipient: request.recipient, paymentRef: paymentRef || null },
   })
 
   await notifyUsers([

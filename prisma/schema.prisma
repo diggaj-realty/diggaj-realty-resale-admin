@@ -39,33 +39,35 @@ model User {
   updatedAt          DateTime @updatedAt
 
   sellerKyc                   SellerKyc?
-  propertiesAsSeller          Property[]            @relation("SellerProperties")
-  propertiesAsAgent           Property[]            @relation("AgentProperties")
-  offersAsBuyer               Offer[]               @relation("BuyerOffers")
-  dealsAsBuyer                Deal[]                @relation("BuyerDeals")
-  dealsAsSeller               Deal[]                @relation("SellerDeals")
-  dealsAsAgent                Deal[]                @relation("AgentDeals")
+  propertiesAsSeller          Property[]                 @relation("SellerProperties")
+  propertiesAsAgent           Property[]                 @relation("AgentProperties")
+  offersAsBuyer               Offer[]                    @relation("BuyerOffers")
+  dealsAsBuyer                Deal[]                     @relation("BuyerDeals")
+  dealsAsSeller               Deal[]                     @relation("SellerDeals")
+  dealsAsAgent                Deal[]                     @relation("AgentDeals")
   notifications               Notification[]
   shortlists                  Shortlist[]
   savedSearches               SavedSearch[]
   propertyViews               PropertyView[]
-  visitsAsBuyer               SiteVisit[]           @relation("BuyerVisits")
-  visitsAsAgent               SiteVisit[]           @relation("AgentVisits")
+  visitsAsBuyer               SiteVisit[]                @relation("BuyerVisits")
+  visitsAsAgent               SiteVisit[]                @relation("AgentVisits")
   feedbackSubmitted           Feedback[]
-  offlineNegotiationsRecorded OfflineNegotiation[]  @relation("OfflineNegotiationsRecorded")
-  paymentRequestsCreated      PaymentRequest[]      @relation("PaymentRequestsCreated")
-  interestsAsBuyer            PropertyInterest[]    @relation("BuyerInterests")
-  interestsAsAgent            PropertyInterest[]    @relation("AgentInterests")
-  negotiationsAsBuyer         NegotiationSession[]  @relation("BuyerNegotiations")
-  negotiationsAsSeller        NegotiationSession[]  @relation("SellerNegotiations")
-  negotiationsAsAgent         NegotiationSession[]  @relation("AgentNegotiations")
-  negotiationEventsRecorded   NegotiationEvent[]    @relation("NegotiationEventsRecorded")
-  documentRequestsMade        DocumentRequest[]     @relation("DocumentRequestsMade")
-  documentRequestsReceived    DocumentRequest[]     @relation("DocumentRequestsReceived")
-  documentRequestsReviewed    DocumentRequest[]     @relation("DocumentRequestsReviewed")
-  documentAccessReceived      DocumentAccessGrant[] @relation("DocumentAccessReceived")
-  documentAccessGranted       DocumentAccessGrant[] @relation("DocumentAccessGranted")
-  documentsOwned              DealDocument[]        @relation("DocumentsOwned")
+  offlineNegotiationsRecorded OfflineNegotiation[]       @relation("OfflineNegotiationsRecorded")
+  paymentRequestsCreated      PaymentRequest[]           @relation("PaymentRequestsCreated")
+  interestsAsBuyer            PropertyInterest[]         @relation("BuyerInterests")
+  interestsAsAgent            PropertyInterest[]         @relation("AgentInterests")
+  negotiationsAsBuyer         NegotiationSession[]       @relation("BuyerNegotiations")
+  negotiationsAsSeller        NegotiationSession[]       @relation("SellerNegotiations")
+  negotiationsAsAgent         NegotiationSession[]       @relation("AgentNegotiations")
+  negotiationEventsRecorded   NegotiationEvent[]         @relation("NegotiationEventsRecorded")
+  documentRequestsMade        DocumentRequest[]          @relation("DocumentRequestsMade")
+  documentRequestsReceived    DocumentRequest[]          @relation("DocumentRequestsReceived")
+  documentRequestsReviewed    DocumentRequest[]          @relation("DocumentRequestsReviewed")
+  documentAccessReceived      DocumentAccessGrant[]      @relation("DocumentAccessReceived")
+  documentAccessGranted       DocumentAccessGrant[]      @relation("DocumentAccessGranted")
+  documentsOwned              DealDocument[]             @relation("DocumentsOwned")
+  identityVerifications       DealIdentityVerification[] @relation("IdentityVerifications")
+  dealSignatures              DealSignature[]            @relation("DealSignatures")
 
   @@map("users")
 }
@@ -239,18 +241,20 @@ model Deal {
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
-  property             Property              @relation(fields: [propertyId], references: [id])
-  buyer                User                  @relation("BuyerDeals", fields: [buyerId], references: [id])
-  seller               User                  @relation("SellerDeals", fields: [sellerId], references: [id])
-  agent                User?                 @relation("AgentDeals", fields: [agentId], references: [id])
-  documents            DealDocument[]
-  logEntries           DealLogEntry[]
-  siteVisit            SiteVisit?
-  offlineNegotiations  OfflineNegotiation[]
-  paymentRequests      PaymentRequest[]
-  negotiationSessions  NegotiationSession[]
-  documentRequests     DocumentRequest[]
-  documentAccessGrants DocumentAccessGrant[]
+  property              Property                   @relation(fields: [propertyId], references: [id])
+  buyer                 User                       @relation("BuyerDeals", fields: [buyerId], references: [id])
+  seller                User                       @relation("SellerDeals", fields: [sellerId], references: [id])
+  agent                 User?                      @relation("AgentDeals", fields: [agentId], references: [id])
+  documents             DealDocument[]
+  logEntries            DealLogEntry[]
+  siteVisit             SiteVisit?
+  offlineNegotiations   OfflineNegotiation[]
+  paymentRequests       PaymentRequest[]
+  negotiationSessions   NegotiationSession[]
+  documentRequests      DocumentRequest[]
+  documentAccessGrants  DocumentAccessGrant[]
+  identityVerifications DealIdentityVerification[]
+  agreements            DealAgreement[]
 
   @@map("deals")
 }
@@ -459,6 +463,10 @@ model PaymentRequest {
   dealId      String
   recipient   String // BUYER | SELLER — who owes this
   amount      Float
+  /// What this money is for. Structured so payments can be reconciled and
+  /// reported on, rather than a wall of "Payment: ₹5,00,000" rows that nobody
+  /// can interpret later. Free-text title/description still carry the detail.
+  purpose     String? // TOKEN | REGISTRATION | STAMP_DUTY | DOCUMENTATION | FINAL_SETTLEMENT | COMMISSION | OTHER
   title       String?
   description String?
   dueDate     DateTime?
@@ -476,6 +484,102 @@ model PaymentRequest {
 
   @@index([dealId])
   @@map("payment_requests")
+}
+
+/// Per-party identity verification for a transaction.
+///
+/// Deliberately distinct from SellerKyc and from uploading an ID document.
+/// Uploading a scan of an Aadhaar card is not verification of identity, and
+/// neither is being verified the same as having signed anything. Each is its own
+/// state with its own evidence, and this one is per-deal because verification is
+/// scoped to the transaction, not to the account forever.
+model DealIdentityVerification {
+  id     String @id @default(cuid())
+  dealId String
+  userId String
+
+  method String // KYC_PROVIDER | AADHAAR_OTP | OTHER_COMPLIANT_METHOD
+
+  status String @default("PENDING")
+  // PENDING | INITIATED | VERIFIED | FAILED | EXPIRED
+
+  /// The external provider's own reference, so a VERIFIED claim can be traced
+  /// back to evidence outside this system.
+  providerReference String?
+  remarks           String?
+  verifiedAt        DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  deal Deal @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  user User @relation("IdentityVerifications", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([dealId, userId])
+  @@index([dealId])
+  @@map("deal_identity_verifications")
+}
+
+/// The generated agreement for a deal, versioned.
+///
+/// A signed agreement is never overwritten: changing the terms means a new
+/// version and a fresh signature round, so the executed document that the
+/// parties actually signed stays exactly as it was.
+model DealAgreement {
+  id      String @id @default(cuid())
+  dealId  String
+  version Int    @default(1)
+
+  status String @default("DRAFT")
+  // DRAFT | READY_FOR_SIGNATURE | SIGNING_IN_PROGRESS
+  // PARTIALLY_SIGNED | FULLY_EXECUTED | EXPIRED | CANCELLED
+
+  documentUrl String?
+  /// Hash of the document as generated, so what gets signed can be proven to be
+  /// what was presented.
+  checksum    String?
+
+  agreedAmount Float?
+
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  deal       Deal            @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  signatures DealSignature[]
+
+  @@unique([dealId, version])
+  @@index([dealId])
+  @@map("deal_agreements")
+}
+
+/// One party's signature on one agreement version.
+///
+/// Only a verified provider callback may move this to SIGNED. An agent may
+/// initiate and chase signing but must never be able to mark it done — "the user
+/// clicked sign" is not evidence that a legally binding signature exists.
+model DealSignature {
+  id          String @id @default(cuid())
+  agreementId String
+  userId      String
+  role        String // BUYER | SELLER
+
+  status String @default("PENDING")
+  // PENDING | INITIATED | SIGNED | FAILED | EXPIRED
+
+  provider          String?
+  providerReference String?
+  signedAt          DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  agreement DealAgreement @relation(fields: [agreementId], references: [id], onDelete: Cascade)
+  user      User          @relation("DealSignatures", fields: [userId], references: [id])
+
+  @@unique([agreementId, userId])
+  @@index([agreementId])
+  @@map("deal_signatures")
 }
 
 /// A request from one party for a document held by the other — "I need to see
@@ -583,6 +687,17 @@ model AppConfig {
   // ── Feature toggles ──
   siteVisitsEnabled Boolean @default(true)
   savedSearchAlerts Boolean @default(true)
+
+  // ── Deal closure requirements ──
+  // What must be true before a deal can close. Configurable rather than
+  // hard-coded because the legal/commercial bar differs by deal type and
+  // jurisdiction, and because identity verification and e-signing are being
+  // rolled out — forcing them on every in-flight deal would strand the ones
+  // already mid-paperwork. Document approval defaults on (it always applied).
+  closureRequiresDocuments Boolean @default(true)
+  closureRequiresIdentity  Boolean @default(false)
+  closureRequiresAgreement Boolean @default(false)
+  closureRequiresPayments  Boolean @default(false)
 
   @@map("app_config")
 }

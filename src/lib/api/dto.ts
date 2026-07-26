@@ -247,6 +247,7 @@ export function paymentRequestDTO(r: PaymentRequestWithRelations) {
     dealId: r.dealId,
     recipient: r.recipient,
     amount: r.amount,
+    purpose: r.purpose,
     title: r.title,
     description: r.description,
     dueDate: r.dueDate ? r.dueDate.toISOString() : null,

@@ -12,6 +12,8 @@ export type DealStage =
   | 'NEGOTIATION_RECORDED'
   | 'DOCUMENTATION_IN_PROGRESS'
   | 'DOCUMENTATION_COMPLETE'
+  | 'IDENTITY_VERIFICATION'
+  | 'AGREEMENT_SIGNING'
   | 'PAYMENT_IN_PROGRESS'
   | 'PAYMENT_COMPLETE'
   | 'DEAL_CLOSED'
@@ -19,10 +21,16 @@ export type DealStage =
 export interface DealProgressInput {
   status: string
   agentId: string | null
+  buyerId?: string
+  sellerId?: string
   siteVisit?: { status: string; outcome: string | null } | null
   documents: { status: string }[]
   offlineNegotiations: unknown[]
   paymentRequests: { status: string; amount: number }[]
+  /** Optional so existing callers that don't select these keep working — the
+   *  identity and signing stages simply don't apply if they aren't loaded. */
+  identityVerifications?: { userId: string; status: string }[]
+  agreements?: { status: string; version: number }[]
 }
 
 export interface DealProgress {
@@ -40,6 +48,8 @@ const STAGE_LABELS: Record<DealStage, string> = {
   NEGOTIATION_RECORDED: 'Negotiation recorded',
   DOCUMENTATION_IN_PROGRESS: 'Documentation in progress',
   DOCUMENTATION_COMPLETE: 'Documentation complete',
+  IDENTITY_VERIFICATION: 'Identity verification',
+  AGREEMENT_SIGNING: 'Agreement signing',
   PAYMENT_IN_PROGRESS: 'Payment in progress',
   PAYMENT_COMPLETE: 'Payment complete',
   DEAL_CLOSED: 'Deal closed',
@@ -70,6 +80,21 @@ export function computeDealProgress(deal: DealProgressInput): DealProgress {
     if (livePayments.length > 0) {
       return paymentsPaid === livePayments.length ? 'PAYMENT_COMPLETE' : 'PAYMENT_IN_PROGRESS'
     }
+
+    // Between documentation and payment sit identity verification and signing.
+    // These only report when the records exist — a deal predating them shouldn't
+    // appear stalled at a stage it was never subject to.
+    const agreements = deal.agreements ?? []
+    const latestAgreement = agreements[0]
+    if (latestAgreement && latestAgreement.status !== 'FULLY_EXECUTED') return 'AGREEMENT_SIGNING'
+
+    const verifications = deal.identityVerifications ?? []
+    if (verifications.length > 0 && !latestAgreement) {
+      const buyerOk = verifications.some((v) => v.userId === deal.buyerId && v.status === 'VERIFIED')
+      const sellerOk = verifications.some((v) => v.userId === deal.sellerId && v.status === 'VERIFIED')
+      if (!buyerOk || !sellerOk) return 'IDENTITY_VERIFICATION'
+    }
+
     if (docsTotal > 0) return 'DOCUMENTATION_COMPLETE'
     if (deal.offlineNegotiations.length > 0) return 'NEGOTIATION_RECORDED'
     if (deal.siteVisit?.status === 'COMPLETED') return 'SITE_VISIT_COMPLETED'

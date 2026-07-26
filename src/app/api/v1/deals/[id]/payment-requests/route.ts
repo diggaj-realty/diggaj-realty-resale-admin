@@ -5,6 +5,15 @@ import { paymentRequestDTO } from '@/lib/api/dto'
 import { notifyUsers } from '@/lib/notify'
 
 const RECIPIENTS = ['BUYER', 'SELLER'] as const
+const PURPOSES = [
+  'TOKEN',
+  'REGISTRATION',
+  'STAMP_DUTY',
+  'DOCUMENTATION',
+  'FINAL_SETTLEMENT',
+  'COMMISSION',
+  'OTHER',
+] as const
 
 /** Payment requests on a deal.
  *
@@ -57,6 +66,7 @@ export const POST = withApi(async (req, ctx) => {
   const body = await readJson<{
     amount?: number
     recipient?: string
+    purpose?: string
     title?: string
     description?: string
     dueDate?: string
@@ -67,6 +77,11 @@ export const POST = withApi(async (req, ctx) => {
   if (!Number.isFinite(amount) || amount <= 0) throw new ApiError('amount must be a positive number', 400)
   if (!RECIPIENTS.includes(recipient as (typeof RECIPIENTS)[number])) {
     throw new ApiError(`recipient must be one of: ${RECIPIENTS.join(', ')}`, 400)
+  }
+
+  const purpose = body.purpose ? String(body.purpose).trim().toUpperCase() : null
+  if (purpose && !PURPOSES.includes(purpose as (typeof PURPOSES)[number])) {
+    throw new ApiError(`purpose must be one of: ${PURPOSES.join(', ')}`, 400)
   }
 
   let dueDate: Date | null = null
@@ -80,6 +95,7 @@ export const POST = withApi(async (req, ctx) => {
       dealId,
       recipient,
       amount,
+      purpose,
       title: body.title ? String(body.title).trim() || null : null,
       description: body.description ? String(body.description).trim() || null : null,
       dueDate,

@@ -6,6 +6,8 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { notifyUsers } from '@/lib/notify'
 import { getAppConfig } from '@/lib/actions/appConfig'
+import { recordAudit } from '@/lib/audit'
+import { evaluateClosureGate } from '@/lib/data/closureGate'
 
 /** Paperwork/closing work is done by the assigned agent OR backend ops —
  *  not agent-only. Backend previously had no way to touch a deal at all. */
@@ -263,12 +265,13 @@ export async function closeDeal(formData: FormData) {
 
   const dealId = String(formData.get('dealId'))
   const deal = await requireDealStaff(dealId, session)
-  if (!deal.finalPaymentDate) throw new Error('Record the final payment before closing the deal')
+  if (deal.status === 'CLOSED') throw new Error('This deal is already closed')
 
-  const unresolvedDocs = await prisma.dealDocument.count({ where: { dealId, status: { not: 'APPROVED' } } })
-  if (unresolvedDocs > 0) {
-    throw new Error(`${unresolvedDocs} required document(s) are not yet approved — closing is blocked until they are`)
-  }
+  // Every configured requirement, evaluated together so staff get the whole
+  // remaining checklist rather than one blocker at a time.
+  const gate = await evaluateClosureGate(dealId)
+  if (!gate) throw new Error('Deal not found')
+  if (!gate.canClose) throw new Error(gate.blockers.join('; '))
 
   const { commissionPercent } = await getAppConfig()
   const settlementAmount = deal.finalAmount ?? deal.agreedPrice
@@ -278,6 +281,14 @@ export async function closeDeal(formData: FormData) {
     prisma.deal.update({ where: { id: dealId }, data: { status: 'CLOSED', commissionAmount } }),
     prisma.property.update({ where: { id: deal.propertyId }, data: { status: 'CLOSED' } }),
   ])
+
+  await recordAudit({
+    action: 'DEAL_CLOSED',
+    actorId: session.user.id,
+    entity: 'Deal',
+    entityId: dealId,
+    meta: { commissionAmount, settlementAmount, requirements: gate.requirements },
+  })
 
   await notifyUsers([
     { userId: deal.buyerId, title: 'Deal closed', message: 'Your deal has been marked closed.' },
