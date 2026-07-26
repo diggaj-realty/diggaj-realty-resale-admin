@@ -39,36 +39,71 @@ export async function makeOffer(formData: FormData) {
 
 /** Shared by acceptOffer and acceptCounter: creates the Deal, auto-rejects sibling
  *  non-terminal offers on the same property, notifies the buyer and (if not already
- *  involved) the seller. Not exported — internal helper only. */
+ *  involved) the seller. Not exported — internal helper only.
+ *
+ *  Wrapped in a transaction: two near-simultaneous accepts on the same
+ *  property could otherwise both pass the LIVE/existingDeal checks before
+ *  either write landed — the loser's Offer.status still flipped to ACCEPTED,
+ *  then crashed on the Deal.propertyId unique constraint with a raw error
+ *  instead of the friendly message this function is supposed to give. */
 async function finalizeAcceptance(offerId: string, agreedPrice: number, actorId: string, actorRole: string) {
-  const offer = await prisma.offer.findUnique({
-    where: { id: offerId },
-    include: { property: { select: { id: true, title: true, sellerId: true, agentId: true } } },
-  })
-  if (!offer) throw new Error('Offer not found')
+  let result
+  try {
+    result = await prisma.$transaction(async (tx) => {
+      const offer = await tx.offer.findUnique({
+        where: { id: offerId },
+        include: { property: { select: { id: true, title: true, sellerId: true, agentId: true, status: true } } },
+      })
+      if (!offer) throw new Error('Offer not found')
 
-  await prisma.offer.update({ where: { id: offerId }, data: { status: 'ACCEPTED' } })
+      // Defense in depth against double-selling: Deal.propertyId is @unique so a
+      // second deal on the same property can never actually be created, but
+      // relying on that alone means the seller/agent sees a raw DB-constraint
+      // crash instead of a clear message. Check first.
+      if (offer.property.status !== 'LIVE') {
+        throw new Error('This property is no longer live — it may already be under contract with another buyer.')
+      }
+      const existingDeal = await tx.deal.findUnique({ where: { propertyId: offer.property.id } })
+      if (existingDeal) throw new Error('This property already has a deal in progress.')
+
+      await tx.offer.update({ where: { id: offerId }, data: { status: 'ACCEPTED' } })
+
+      await tx.deal.create({
+        data: {
+          propertyId: offer.property.id,
+          buyerId: offer.buyerId,
+          sellerId: offer.property.sellerId,
+          agentId: offer.property.agentId,
+          agreedPrice,
+          status: 'IN_PROGRESS',
+        },
+      })
+
+      // Lock the property out of search/new-offers the moment a deal starts —
+      // previously it stayed LIVE the whole way through paperwork/payment,
+      // so a second buyer could make (and even have accepted) a competing offer.
+      await tx.property.update({ where: { id: offer.property.id }, data: { status: 'UNDER_CONTRACT' } })
+
+      await tx.offer.updateMany({
+        where: {
+          propertyId: offer.property.id,
+          id: { not: offerId },
+          status: { in: ['PENDING_REVIEW', 'PENDING', 'COUNTERED'] },
+        },
+        data: { status: 'REJECTED' },
+      })
+
+      return offer
+    })
+  } catch (err) {
+    if (err && typeof err === 'object' && 'code' in err && err.code === 'P2002') {
+      throw new Error('This property already has a deal in progress.')
+    }
+    throw err
+  }
+
+  const offer = result
   await logOfferEvent({ offerId, type: 'ACCEPTED', amount: agreedPrice, actorId, actorRole })
-
-  await prisma.deal.create({
-    data: {
-      propertyId: offer.property.id,
-      buyerId: offer.buyerId,
-      sellerId: offer.property.sellerId,
-      agentId: offer.property.agentId,
-      agreedPrice,
-      status: 'IN_PROGRESS',
-    },
-  })
-
-  await prisma.offer.updateMany({
-    where: {
-      propertyId: offer.property.id,
-      id: { not: offerId },
-      status: { in: ['PENDING_REVIEW', 'PENDING', 'COUNTERED'] },
-    },
-    data: { status: 'REJECTED' },
-  })
 
   await notifyUsers([
     {

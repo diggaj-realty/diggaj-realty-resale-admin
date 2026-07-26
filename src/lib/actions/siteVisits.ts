@@ -78,6 +78,8 @@ export async function scheduleSiteVisit(formData: FormData) {
     include: { property: { select: { title: true } } },
   })
   if (!visit) throw new Error('Visit not found')
+  if (visit.agentId && visit.agentId !== session.user.id) throw new Error('Unauthorized')
+  if (visit.status !== 'REQUESTED') throw new Error('Only a requested visit can be scheduled')
 
   await prisma.siteVisit.update({
     where: { id },
@@ -97,7 +99,7 @@ export async function scheduleSiteVisit(formData: FormData) {
 
 /** Agent marks a visit COMPLETED and records post-visit feedback. */
 export async function completeSiteVisit(formData: FormData) {
-  await requireRole('AGENT')
+  const session = await requireRole('AGENT')
   const id = String(formData.get('id') ?? '')
   if (!id) throw new Error('Missing id')
   const feedback = String(formData.get('feedback') ?? '').trim() || null
@@ -107,6 +109,8 @@ export async function completeSiteVisit(formData: FormData) {
     include: { property: { select: { title: true } } },
   })
   if (!visit) throw new Error('Visit not found')
+  if (visit.agentId !== session.user.id) throw new Error('Unauthorized')
+  if (visit.status !== 'SCHEDULED') throw new Error('Only a scheduled visit can be marked complete')
 
   await prisma.siteVisit.update({ where: { id }, data: { status: 'COMPLETED', feedback } })
 
@@ -119,6 +123,105 @@ export async function completeSiteVisit(formData: FormData) {
   ])
 
   revalidate()
+}
+
+/** Agent records what happened after a COMPLETED visit — the negotiation
+ *  itself happens in person, never online, so this just logs the outcome.
+ *  Callable repeatedly (further in-person rounds can update the amount)
+ *  right up until a Deal is created from this visit — see
+ *  createDealFromSiteVisit. Defaults the amount to the property's asking
+ *  price the first time "interested" is recorded with no amount given. */
+export async function recordSiteVisitOutcome(formData: FormData) {
+  const session = await requireRole('AGENT')
+  const id = String(formData.get('id') ?? '')
+  if (!id) throw new Error('Missing id')
+  const outcome = String(formData.get('outcome') ?? '')
+  if (!['INTERESTED', 'NOT_INTERESTED'].includes(outcome)) throw new Error('Invalid outcome')
+
+  const visit = await prisma.siteVisit.findUnique({
+    where: { id },
+    include: { property: { select: { title: true, askingPrice: true } } },
+  })
+  if (!visit) throw new Error('Visit not found')
+  if (visit.agentId !== session.user.id) throw new Error('Unauthorized')
+  if (visit.status !== 'COMPLETED') throw new Error('Log the visit as completed before recording an outcome')
+  if (visit.dealId) throw new Error('A deal has already been created from this visit')
+
+  const amountRaw = formData.get('interestedAmount')
+  const interestedAmount =
+    outcome === 'INTERESTED'
+      ? amountRaw && String(amountRaw).trim() ? Number(amountRaw) : (visit.interestedAmount ?? visit.property.askingPrice)
+      : null
+
+  if (outcome === 'INTERESTED' && (!interestedAmount || interestedAmount <= 0)) {
+    throw new Error('Enter a valid amount')
+  }
+
+  await prisma.siteVisit.update({ where: { id }, data: { outcome, interestedAmount } })
+
+  await notifyUsers([
+    {
+      userId: visit.buyerId,
+      title: outcome === 'INTERESTED' ? 'Great news' : 'Visit outcome recorded',
+      message:
+        outcome === 'INTERESTED'
+          ? `Your interest in ${visit.property.title} has been noted — paperwork can begin once the price is finalized.`
+          : `Your visit to ${visit.property.title} has been closed out.`,
+    },
+  ])
+
+  revalidate()
+  revalidatePath('/dashboard/site-visits-queue')
+}
+
+/** Agent (or staff) creates the Deal directly once a price is agreed —
+ *  skips the online offer/counter-offer flow entirely, since the negotiation
+ *  already happened in person during the visit. Locks the property out of
+ *  search/new offers the same as the online-offer path (finalizeAcceptance
+ *  in src/lib/actions/offers.ts) — same guard against double-selling. */
+export async function createDealFromSiteVisit(formData: FormData) {
+  const session = await requireRole('AGENT', 'BACKEND', 'ADMIN')
+  const id = String(formData.get('id') ?? '')
+  if (!id) throw new Error('Missing id')
+
+  const visit = await prisma.siteVisit.findUnique({
+    where: { id },
+    include: { property: { select: { id: true, title: true, sellerId: true, agentId: true, status: true } } },
+  })
+  if (!visit) throw new Error('Visit not found')
+  if (session.user.role === 'AGENT' && visit.agentId !== session.user.id) throw new Error('Unauthorized')
+  if (visit.outcome !== 'INTERESTED' || !visit.interestedAmount) throw new Error('Record an interested outcome with an amount first')
+  if (visit.dealId) throw new Error('A deal has already been created from this visit')
+  if (visit.property.status !== 'LIVE') {
+    throw new Error('This property is no longer live — it may already be under contract with another buyer.')
+  }
+  const existingDeal = await prisma.deal.findUnique({ where: { propertyId: visit.property.id } })
+  if (existingDeal) throw new Error('This property already has a deal in progress.')
+
+  const deal = await prisma.deal.create({
+    data: {
+      propertyId: visit.property.id,
+      buyerId: visit.buyerId,
+      sellerId: visit.property.sellerId,
+      agentId: visit.agentId ?? visit.property.agentId,
+      agreedPrice: visit.interestedAmount,
+      status: 'IN_PROGRESS',
+    },
+  })
+
+  await prisma.$transaction([
+    prisma.property.update({ where: { id: visit.property.id }, data: { status: 'UNDER_CONTRACT' } }),
+    prisma.siteVisit.update({ where: { id }, data: { dealId: deal.id } }),
+  ])
+
+  await notifyUsers([
+    { userId: visit.buyerId, title: 'Deal started', message: `Your deal on ${visit.property.title} has begun — paperwork is next.` },
+    { userId: visit.property.sellerId, title: 'Deal started', message: `A deal on ${visit.property.title} has begun.` },
+  ])
+
+  revalidate()
+  revalidatePath('/dashboard/site-visits-queue')
+  revalidatePath('/dashboard/deals')
 }
 
 /** Staff assigns (or reassigns) an agent to a visit — the fix for visits

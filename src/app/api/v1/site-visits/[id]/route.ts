@@ -19,14 +19,14 @@ export const PATCH = withApi(async (req, { params }) => {
   })
   if (!visit) throw new ApiError('Visit not found', 404)
 
-  const isBuyerOwner = user.role === 'BUYER' && visit.buyerId === user.id
-  const isAgentOwner = user.role === 'AGENT' && visit.agentId === user.id
+  const isBuyerOwner = visit.buyerId === user.id
+  const isAgentOwner = visit.agentId === user.id
 
   if (action === 'cancel') {
     if (!isBuyerOwner && !isAgentOwner) throw new ApiError('Forbidden', 403)
     if (visit.status === 'COMPLETED' || visit.status === 'CANCELLED') throw new ApiError('Visit already closed', 400)
     const updated = await prisma.siteVisit.update({ where: { id }, data: { status: 'CANCELLED' } })
-    const notifyId = user.role === 'BUYER' ? visit.agentId : visit.buyerId
+    const notifyId = isBuyerOwner ? visit.agentId : visit.buyerId
     if (notifyId) {
       await notifyUsers([{ userId: notifyId, title: 'Site visit cancelled', message: `The visit to ${visit.property.title} was cancelled.` }])
     }
@@ -34,7 +34,7 @@ export const PATCH = withApi(async (req, { params }) => {
   }
 
   // Remaining actions are agent-only.
-  if (user.role !== 'AGENT') throw new ApiError('Forbidden — agents only', 403)
+  if (!isAgentOwner) throw new ApiError('Forbidden — agents only', 403)
 
   if (action === 'schedule') {
     const scheduledDate = new Date(String(body.scheduledDate ?? ''))
