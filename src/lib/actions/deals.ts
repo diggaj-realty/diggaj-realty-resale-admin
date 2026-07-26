@@ -7,16 +7,20 @@ import { prisma } from '@/lib/prisma'
 import { notifyUsers } from '@/lib/notify'
 import { getAppConfig } from '@/lib/actions/appConfig'
 
-async function requireAssignedAgent(dealId: string, userId: string) {
+/** Paperwork/closing work is done by the assigned agent OR backend ops —
+ *  not agent-only. Backend previously had no way to touch a deal at all. */
+async function requireDealStaff(dealId: string, session: { user: { id: string; role: string } }) {
   const deal = await prisma.deal.findUnique({ where: { id: dealId } })
   if (!deal) throw new Error('Deal not found')
-  if (deal.agentId !== userId) throw new Error('Unauthorized')
+  const isAssignedAgent = session.user.role === 'AGENT' && deal.agentId === session.user.id
+  const isBackendOrAdmin = session.user.role === 'BACKEND' || session.user.role === 'ADMIN'
+  if (!isAssignedAgent && !isBackendOrAdmin) throw new Error('Unauthorized')
   return deal
 }
 
 export async function recordTokenPayment(formData: FormData) {
   const session = await getServerSession(authOptions)
-  if (!session || session.user.role !== 'AGENT') throw new Error('Unauthorized')
+  if (!session) throw new Error('Unauthorized')
 
   const dealId = String(formData.get('dealId'))
   const tokenAmount = Number(formData.get('tokenAmount'))
@@ -24,7 +28,7 @@ export async function recordTokenPayment(formData: FormData) {
   if (!tokenAmount || tokenAmount <= 0) throw new Error('Enter a valid token amount')
   if (!tokenDateRaw) throw new Error('Token date is required')
 
-  await requireAssignedAgent(dealId, session.user.id)
+  await requireDealStaff(dealId, session)
 
   await prisma.deal.update({
     where: { id: dealId },
@@ -38,7 +42,7 @@ export async function recordTokenPayment(formData: FormData) {
 
 export async function recordFinalPayment(formData: FormData) {
   const session = await getServerSession(authOptions)
-  if (!session || session.user.role !== 'AGENT') throw new Error('Unauthorized')
+  if (!session) throw new Error('Unauthorized')
 
   const dealId = String(formData.get('dealId'))
   const finalAmount = Number(formData.get('finalAmount'))
@@ -50,7 +54,7 @@ export async function recordFinalPayment(formData: FormData) {
   if (!finalPaymentDateRaw) throw new Error('Final payment date is required')
   if (!['BANK_TRANSFER', 'CHEQUE', 'OTHER'].includes(paymentMode)) throw new Error('Invalid payment mode')
 
-  await requireAssignedAgent(dealId, session.user.id)
+  await requireDealStaff(dealId, session)
 
   await prisma.deal.update({
     where: { id: dealId },
@@ -69,12 +73,12 @@ export async function recordFinalPayment(formData: FormData) {
 
 export async function updateDealNotes(formData: FormData) {
   const session = await getServerSession(authOptions)
-  if (!session || session.user.role !== 'AGENT') throw new Error('Unauthorized')
+  if (!session) throw new Error('Unauthorized')
 
   const dealId = String(formData.get('dealId'))
   const notes = String(formData.get('notes') || '').trim()
 
-  await requireAssignedAgent(dealId, session.user.id)
+  await requireDealStaff(dealId, session)
 
   await prisma.deal.update({
     where: { id: dealId },
@@ -85,13 +89,110 @@ export async function updateDealNotes(formData: FormData) {
   revalidatePath('/dashboard/deals')
 }
 
-export async function closeDeal(formData: FormData) {
+/** Free-text, dated progress-log entry ("Sale deed drafting in progress",
+ *  "Waiting on seller's NOC") — distinct from the single overwritable
+ *  `notes` field and from the structured DealDocument checklist. Both buyer
+ *  and seller can read the log on the deal detail page; only staff post to it. */
+export async function addDealLogEntry(formData: FormData) {
   const session = await getServerSession(authOptions)
-  if (!session || session.user.role !== 'AGENT') throw new Error('Unauthorized')
+  if (!session) throw new Error('Unauthorized')
 
   const dealId = String(formData.get('dealId'))
+  const message = String(formData.get('message') || '').trim()
+  if (!message) throw new Error('Enter an update before posting')
 
-  const deal = await requireAssignedAgent(dealId, session.user.id)
+  const deal = await requireDealStaff(dealId, session)
+
+  await prisma.dealLogEntry.create({
+    data: { dealId, authorId: session.user.id, authorRole: session.user.role, message },
+  })
+
+  await notifyUsers([
+    { userId: deal.buyerId, title: 'Deal update', message },
+    { userId: deal.sellerId, title: 'Deal update', message },
+  ])
+
+  revalidatePath(`/dashboard/deals/${dealId}`)
+}
+
+const REQUIRED_FROM = ['BUYER', 'SELLER', 'EITHER'] as const
+
+/** Adds a checklist item to the deal's document requirements — e.g. "Sale
+ *  deed", "NOC" — and notifies whoever it's required from. Buyers/sellers
+ *  fulfill these from the public API on their own frontend (this internal
+ *  dashboard is staff/agent-only); staff only defines and reviews them. */
+export async function addDealDocument(formData: FormData) {
+  const session = await getServerSession(authOptions)
+  if (!session) throw new Error('Unauthorized')
+
+  const dealId = String(formData.get('dealId'))
+  const docType = String(formData.get('docType') || '').trim()
+  const requiredFrom = String(formData.get('requiredFrom') || '').toUpperCase()
+  if (!docType) throw new Error('Document name is required')
+  if (!REQUIRED_FROM.includes(requiredFrom as (typeof REQUIRED_FROM)[number])) {
+    throw new Error(`requiredFrom must be one of: ${REQUIRED_FROM.join(', ')}`)
+  }
+
+  const deal = await requireDealStaff(dealId, session)
+
+  await prisma.dealDocument.create({
+    data: { dealId, docType, requiredFrom, status: 'PENDING' },
+  })
+
+  const recipients =
+    requiredFrom === 'BUYER' ? [deal.buyerId] : requiredFrom === 'SELLER' ? [deal.sellerId] : [deal.buyerId, deal.sellerId]
+  await notifyUsers(
+    recipients.map((userId) => ({
+      userId,
+      title: 'Document required',
+      message: `"${docType}" is needed to close your deal — upload it when ready.`,
+    }))
+  )
+
+  revalidatePath(`/dashboard/deals/${dealId}`)
+}
+
+/** Staff review of an uploaded document. Neither buyer nor seller can
+ *  approve their own upload — review is staff/agent-only, same trust
+ *  boundary as every other verification step on this platform. */
+export async function reviewDealDocument(formData: FormData) {
+  const session = await getServerSession(authOptions)
+  if (!session) throw new Error('Unauthorized')
+
+  const dealId = String(formData.get('dealId'))
+  const docId = String(formData.get('docId'))
+  const status = String(formData.get('status') || '').toUpperCase()
+  const remarks = String(formData.get('remarks') || '').trim()
+  if (!['APPROVED', 'REJECTED'].includes(status)) throw new Error('Invalid review status')
+
+  const deal = await requireDealStaff(dealId, session)
+
+  const document = await prisma.dealDocument.findUnique({ where: { id: docId } })
+  if (!document || document.dealId !== dealId) throw new Error('Document not found')
+  if (document.status !== 'UPLOADED') throw new Error('Document must be uploaded before it can be reviewed')
+
+  await prisma.dealDocument.update({
+    where: { id: docId },
+    data: { status, remarks: remarks || null },
+  })
+
+  await notifyUsers([
+    {
+      userId: document.uploadedBy ?? (document.requiredFrom === 'SELLER' ? deal.sellerId : deal.buyerId),
+      title: status === 'APPROVED' ? 'Document approved' : 'Document rejected',
+      message: `"${document.docType}" was ${status === 'APPROVED' ? 'approved' : 'rejected — please re-upload'}.`,
+    },
+  ])
+
+  revalidatePath(`/dashboard/deals/${dealId}`)
+}
+
+export async function closeDeal(formData: FormData) {
+  const session = await getServerSession(authOptions)
+  if (!session) throw new Error('Unauthorized')
+
+  const dealId = String(formData.get('dealId'))
+  const deal = await requireDealStaff(dealId, session)
   if (!deal.finalPaymentDate) throw new Error('Record the final payment before closing the deal')
 
   const unresolvedDocs = await prisma.dealDocument.count({ where: { dealId, status: { not: 'APPROVED' } } })

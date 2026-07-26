@@ -7,6 +7,8 @@ import PageHeader from '@/components/dashboard/PageHeader'
 import StatusPill from '@/components/dashboard/StatusPill'
 import DashboardEntrance from '@/components/dashboard/DashboardEntrance'
 import DealPaymentForms from '@/components/dashboard/DealPaymentForms'
+import DealLog from '@/components/dashboard/DealLog'
+import DealDocuments from '@/components/dashboard/DealDocuments'
 
 function formatDate(date: Date | null) {
   if (!date) return '—'
@@ -27,13 +29,20 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
       buyer: { select: { id: true, name: true, email: true } },
       seller: { select: { id: true, name: true, email: true } },
       agent: { select: { id: true, name: true, email: true } },
+      logEntries: { orderBy: { createdAt: 'desc' } },
+      documents: { orderBy: { createdAt: 'asc' } },
     },
   })
 
   if (!deal) redirect('/dashboard/deals')
 
+  // BACKEND now sees (and can work) every deal, same as ADMIN — they run
+  // paperwork/closing day to day and were previously locked out of this
+  // page entirely (see commissionAmount's role check below, which already
+  // expected BACKEND to be here — it just could never be reached).
+  const isStaff = role === 'ADMIN' || role === 'BACKEND'
   const isRelated =
-    role === 'ADMIN' ||
+    isStaff ||
     deal.buyer.id === userId ||
     deal.seller.id === userId ||
     (role === 'AGENT' && deal.agent?.id === userId)
@@ -41,6 +50,7 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
   if (!isRelated) redirect('/dashboard')
 
   const isAssignedAgent = role === 'AGENT' && deal.agent?.id === userId
+  const canManage = isAssignedAgent || isStaff
 
   return (
     <DashboardEntrance>
@@ -64,12 +74,12 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
             <div className="flex justify-between"><dt style={{ color: 'var(--text-3)' }}>Final Payment Date</dt><dd style={{ color: 'var(--text-1)' }}>{formatDate(deal.finalPaymentDate)}</dd></div>
             <div className="flex justify-between"><dt style={{ color: 'var(--text-3)' }}>Payment Mode</dt><dd style={{ color: 'var(--text-1)' }}>{deal.paymentMode ?? '—'}</dd></div>
             <div className="flex justify-between"><dt style={{ color: 'var(--text-3)' }}>Transaction Ref</dt><dd style={{ color: 'var(--text-1)' }}>{deal.transactionRef ?? '—'}</dd></div>
-            {deal.commissionAmount != null && (role === 'ADMIN' || role === 'AGENT' || role === 'BACKEND') && (
+            {deal.commissionAmount != null && isStaff && (
               <div className="flex justify-between"><dt style={{ color: 'var(--text-3)' }}>Commission</dt><dd style={{ color: 'var(--text-1)' }}>{formatINR(deal.commissionAmount)}</dd></div>
             )}
             <div className="flex justify-between"><dt style={{ color: 'var(--text-3)' }}>Status</dt><dd><StatusPill status={deal.status} /></dd></div>
           </dl>
-          {deal.notes && !isAssignedAgent && (
+          {deal.notes && !canManage && (
             <div className="mt-5">
               <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-3)' }}>Notes</h4>
               <p className="text-sm" style={{ color: 'var(--text-1)' }}>{deal.notes}</p>
@@ -77,7 +87,7 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
           )}
         </div>
 
-        {isAssignedAgent && deal.status !== 'CLOSED' ? (
+        {canManage && deal.status !== 'CLOSED' ? (
           <DealPaymentForms
             dealId={deal.id}
             tokenAmount={deal.tokenAmount}
@@ -91,9 +101,37 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
           />
         ) : (
           <div className="card flex items-center justify-center p-6 text-sm" style={{ color: 'var(--text-3)' }} data-animate="fade-up">
-            {deal.status === 'CLOSED' ? 'This deal is closed.' : 'Read-only view — only the assigned agent can update this deal.'}
+            {deal.status === 'CLOSED' ? 'This deal is closed.' : 'Read-only view — only the assigned agent or staff can update this deal.'}
           </div>
         )}
+      </div>
+
+      <div className="mt-6">
+        <DealLog
+          dealId={deal.id}
+          canPost={canManage}
+          entries={deal.logEntries.map((e) => ({
+            id: e.id,
+            message: e.message,
+            authorRole: e.authorRole,
+            createdAt: e.createdAt.toISOString(),
+          }))}
+        />
+      </div>
+
+      <div className="mt-6">
+        <DealDocuments
+          dealId={deal.id}
+          canManage={canManage}
+          documents={deal.documents.map((d) => ({
+            id: d.id,
+            docType: d.docType,
+            requiredFrom: d.requiredFrom,
+            status: d.status,
+            fileUrl: d.fileUrl,
+            remarks: d.remarks,
+          }))}
+        />
       </div>
     </DashboardEntrance>
   )

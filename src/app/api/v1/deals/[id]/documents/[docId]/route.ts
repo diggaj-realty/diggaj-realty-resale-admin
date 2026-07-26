@@ -41,7 +41,7 @@ export const PATCH = withApi(async (req, ctx) => {
     })
     await notifyUsers([
       {
-        userId: document.requiredFrom === 'SELLER' ? deal.sellerId : deal.buyerId,
+        userId: document.uploadedBy ?? (document.requiredFrom === 'SELLER' ? deal.sellerId : deal.buyerId),
         title: status === 'APPROVED' ? 'Document approved' : 'Document rejected',
         message: `"${document.docType}" was ${status === 'APPROVED' ? 'approved' : 'rejected — please re-upload'}.`,
       },
