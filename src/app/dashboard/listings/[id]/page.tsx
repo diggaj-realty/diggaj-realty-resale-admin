@@ -238,7 +238,7 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
           {canAssignAgent && (
             <div className="card p-6">
               <h2 className="mb-4 text-sm font-semibold" style={{ color: 'var(--text-1)' }}>Listing Plan</h2>
-              <PropertyPlanForm propertyId={property.id} currentPlan={property.plan} />
+              <PropertyPlanForm propertyId={property.id} currentPlan={property.plan} requestedPlan={property.requestedPlan} />
             </div>
           )}
         </div>

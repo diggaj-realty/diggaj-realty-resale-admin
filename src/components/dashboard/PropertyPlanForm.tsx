@@ -1,15 +1,58 @@
 'use client'
 
 import { useTransition } from 'react'
-import { updatePropertyPlan } from '@/lib/actions/backend'
+import { updatePropertyPlan, reviewPlanRequest } from '@/lib/actions/backend'
 
 const PLANS = [
   { value: 'BASIC', label: 'Basic' },
   { value: 'ELITE', label: 'Elite' },
 ]
 
-export default function PropertyPlanForm({ propertyId, currentPlan }: { propertyId: string; currentPlan: string }) {
+export default function PropertyPlanForm({
+  propertyId,
+  currentPlan,
+  requestedPlan,
+}: {
+  propertyId: string
+  currentPlan: string
+  requestedPlan?: string | null
+}) {
   const [pending, startTransition] = useTransition()
+
+  function review(decision: 'APPROVE' | 'REJECT') {
+    const fd = new FormData()
+    fd.set('propertyId', propertyId)
+    fd.set('decision', decision)
+    startTransition(() => reviewPlanRequest(fd))
+  }
+
+  if (requestedPlan) {
+    return (
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="rounded-lg px-2.5 py-1.5 text-xs font-semibold" style={{ background: 'var(--amber-50)', color: 'var(--amber-700)' }}>
+          Seller requested {requestedPlan.charAt(0) + requestedPlan.slice(1).toLowerCase()} (currently {currentPlan.charAt(0) + currentPlan.slice(1).toLowerCase()})
+        </span>
+        <button
+          type="button"
+          disabled={pending}
+          onClick={() => review('APPROVE')}
+          className="rounded-lg px-2.5 py-1.5 text-xs font-semibold disabled:opacity-50"
+          style={{ background: 'var(--green-50)', color: 'var(--green-700)' }}
+        >
+          Approve
+        </button>
+        <button
+          type="button"
+          disabled={pending}
+          onClick={() => review('REJECT')}
+          className="rounded-lg px-2.5 py-1.5 text-xs font-semibold disabled:opacity-50"
+          style={{ background: 'var(--red-50)', color: 'var(--red-700)' }}
+        >
+          Decline
+        </button>
+      </div>
+    )
+  }
 
   return (
     <form

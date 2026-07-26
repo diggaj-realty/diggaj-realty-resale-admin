@@ -209,6 +209,22 @@ export default async function ListingsPage({
                         videoUrl: p.videoUrl,
                       })}
                     />
+                    {p.plan === 'ELITE' && (
+                      <span
+                        className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                        style={{ background: 'var(--amber-50)', color: 'var(--amber-700)' }}
+                      >
+                        <Tag size={11} /> Elite
+                      </span>
+                    )}
+                    {p.requestedPlan && (
+                      <span
+                        className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                        style={{ background: 'var(--amber-50)', color: 'var(--amber-700)' }}
+                      >
+                        <Tag size={11} /> {p.requestedPlan} requested
+                      </span>
+                    )}
                     {sellerName && (
                       <span
                         className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold"

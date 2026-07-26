@@ -38,7 +38,7 @@ Content-Type: application/json
 → 200 (existing account) or 201 (new account) { "data": { "token": "<jwt>", "user": {...}, "isNewUser": true } }
 ```
 - `idToken` is the ID token Google Identity Services returns on the frontend after the user signs in with Google — send it here, don't decode/trust it client-side. This endpoint verifies it server-side against Google's own tokeninfo endpoint (audience must match this app's `GOOGLE_CLIENT_ID`, email must be verified).
-- `role` (optional, default `"BUYER"`) only applies the first time this Google email signs in — same `"BUYER"`/`"SELLER"` restriction as `/auth/register`. Ignored for a returning user (their existing role is used).
+- `role` (optional, default `"BUYER"`) — same `"BUYER"`/`"SELLER"` restriction as `/auth/register`. For a brand-new email this sets their only role. For a **returning** user, if they don't already hold this role it's now automatically added to their account (see "Multiple roles on one account" below) instead of being silently ignored — e.g. a seller signing in with `role: "BUYER"` becomes a dual-role account on the spot.
 - If the email is already registered as internal staff (AGENT/BACKEND/ADMIN), this returns `409` — those accounts sign in only through the internal dashboard.
 - Same response shape as `/auth/register`/`/auth/login` — log the user in with the returned token immediately, no second request needed. `isNewUser` tells you whether to show a "complete your profile" step.
 
@@ -48,7 +48,24 @@ Authorization: Bearer <jwt>
 ```
 Tokens are valid 30 days. `GET /api/v1/auth/me` returns the current user (validates the token and that the account is still active).
 
-Demo accounts (password `password123` for all, public-API-usable): `seller@demo.test`, `buyer@demo.test`.
+### Multiple roles on one account
+
+A SELLER account can also act as a BUYER on the same login (and vice versa) — no need for two accounts/emails.
+
+```
+POST /api/v1/auth/roles
+{ "role": "BUYER" }
+```
+Requires a `BUYER`/`SELLER` bearer token. Adds the given role to the caller's account if they don't already hold it (no-op, 200, if they do). Returns the updated `user` object, whose `roles` array is now authoritative — `userDTO.roles` always reflects the full set (e.g. `["SELLER", "BUYER"]`); `role` stays as the account's original/primary role for display purposes only, don't gate UI on it once `roles` has more than one entry.
+
+Once an account holds both roles:
+- `GET /offers` and `GET /site-visits` accept `?as=buyer` or `?as=seller` to pick which side to view (defaults to buyer if both are held and `as` is omitted).
+- `GET /deals` needs no `?as=` — it just returns the union of deals where the account is buyer, seller, or (if AGENT) assigned agent, since a single deal always has distinct buyer/seller parties.
+- Everywhere else (offer accept/reject, document upload, site-visit cancel, etc.) authorization is by identity on the specific record (are you *this offer's* buyer/seller), not by global role, so dual-role accounts just work without any extra param.
+
+`AGENT`/`BACKEND`/`ADMIN` are not self-addable here — those stay single, internally-provisioned roles.
+
+Demo accounts (password `password123` for all, public-API-usable): `seller@demo.test` (dual-role — also holds `BUYER`), `buyer@demo.test`.
 
 ## Response envelope
 
@@ -268,7 +285,8 @@ Exact objects as returned inside `data` / `data.items`. All timestamps are ISO-8
   "photos": [ { "id": "cmk…", "url": "https://…supabase.co/storage/v1/object/public/property-media/…", "order": 0 } ]
 }
 ```
-- `type`: `RESIDENTIAL | PLOT | COMMERCIAL` · `status`: `DRAFT | PENDING_VERIFICATION | LIVE | REJECTED | CLOSED` · `plan`: `BASIC | ELITE`.
+- `type`: `RESIDENTIAL | PLOT | COMMERCIAL` · `status`: `DRAFT | PENDING_VERIFICATION | LIVE | UNDER_CONTRACT | REJECTED | CLOSED` · `plan`: `BASIC | ELITE`.
+- `UNDER_CONTRACT` is set automatically the instant an offer is accepted (or a site visit converts straight to a deal) — it locks the property out of `/properties` search and blocks new offers, so a second buyer can never accept a competing offer on a property that's already gone to deal. It's distinct from `LIVE` (still on the market) and `CLOSED` (registration complete).
 - `city` is always normalized to one of the canonical spellings below (e.g. `"Bangalore"`, not `"Bengaluru"`) — both on write and when filtering with `?city=` on `GET /properties`:
   `Bangalore, Mumbai, Delhi, Pune, Hyderabad, Chennai, Kolkata, Ahmedabad, Noida, Gurgaon, Jaipur, Chandigarh, Kochi, Coimbatore, Lucknow, Indore, Nagpur, Surat, Thane, Navi Mumbai`.
   Common alternates (`Bengaluru`, `Gurugram`, `Bombay`, `Cochin`, `Madras`, `Calcutta`, `New Delhi`, etc.) are recognized and mapped to the canonical name automatically; a city outside this list is stored/matched as typed.

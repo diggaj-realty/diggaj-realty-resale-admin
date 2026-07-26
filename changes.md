@@ -118,3 +118,37 @@ DELETE /api/v1/properties/:id    (seller, owns it)
 **Item 5 — Phone-number reveal.** Not built. DTOs still only expose `sellerName`/`agentName`, no phone field, on purpose — this needs a privacy/consent call: raw reveal, a masked number, or a call-relay service. Tell us which model you want and we'll add the field/endpoint to match.
 
 Everything else in `BUYER_SELLER_SPEC.md` not mentioned above or in section 1–2 of this doc is unchanged.
+
+---
+
+## 4. Accounts can now hold both BUYER and SELLER — new endpoint
+
+**`POST /api/v1/auth/roles`** `{ "role": "BUYER" }` — lets an existing SELLER add BUYER to the same account (or vice versa), instead of needing a second signup. See "Multiple roles on one account" in `API.md` for the full contract, including the new `?as=buyer|seller` param on `GET /offers` and `GET /site-visits` for picking which side to view once an account holds both. `userDTO` now includes a `roles` array — use that instead of the single `role` field once you support this, since `role` no longer tells the whole story for a dual-role account.
+
+`POST /api/v1/auth/google` also now auto-grants the requested `role` to a returning user who doesn't already have it, instead of silently ignoring it — same dual-role mechanism, just via Google sign-in.
+
+## 5. Property status gained `UNDER_CONTRACT` — locks out double-selling
+
+`Property.status` now includes `UNDER_CONTRACT`, set automatically the moment an offer is accepted (or a site visit converts to a deal). A property in this state is excluded from `/properties` search and rejects new offers — previously a property stayed `LIVE` through the entire paperwork/payment process, so a second buyer could make (and even have accepted) a competing offer on something already sold. If your UI branches on property status, add this as a distinct state from `LIVE`/`CLOSED` (e.g. "Sale in progress" rather than "For sale" or "Sold").
+
+## 6. Seller-initiated plan upgrade requests (Elite) — new, no payment yet
+
+Sellers can now request to promote a specific one of their own properties to Elite, instead of only staff being able to set it:
+
+```
+POST /api/v1/listings/:id/request-plan
+{ "plan": "ELITE" }
+```
+Seller-only, must own the property. Does **not** change `plan` immediately — it sets `requestedPlan` and notifies staff, who approve (plan becomes Elite) or decline (stays as-is) from the internal dashboard. `propertyDTO` now includes `requestedPlan` (`null` when there's no pending request) so your UI can show a "pending approval" state per-property. Scoped per-property — requesting Elite on one listing has no effect on a seller's other properties.
+
+**No payment is collected yet.** When billing is wired up, it slots in right at the seller's request step (`POST .../request-plan`) — charge first, then either set `requestedPlan` for staff approval as today, or skip approval and set `plan` directly once payment itself is the gate. Nothing about the approval side needs to change either way.
+
+## 7. Deal document checklist — buyer/seller upload contract (backend-only until now, confirming it's stable)
+
+Staff request specific documents against a deal (`POST /deals/:id/documents`); your app is the one that should render the upload UI for whichever party the doc is `requiredFrom`:
+
+```
+PATCH /api/v1/deals/:id/documents/:docId
+{ "fileUrl": "https://..." }
+```
+Requires a bearer token for the buyer or seller the document is `requiredFrom` (or `EITHER`, either party). Sets status to `UPLOADED` and notifies the assigned agent for review. You'll need your own file upload (to whatever storage you use) to get a `fileUrl` first — this endpoint only records the link, it doesn't accept multipart uploads. `GET /deals/:id/documents` lists the full checklist so you can show progress (`PENDING`/`UPLOADED`/`APPROVED`/`REJECTED`) per item. This has existed on the backend for a while but nothing was rendering it — flagging now since the internal dashboard just wired up its own staff-side view, which surfaced that the frontend side was never built either.

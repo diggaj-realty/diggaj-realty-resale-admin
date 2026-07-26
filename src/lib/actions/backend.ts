@@ -91,6 +91,46 @@ export async function updatePropertyPlan(formData: FormData) {
   revalidatePath('/dashboard')
 }
 
+/** Approves or rejects a seller-initiated plan upgrade request (set via
+ *  POST /api/v1/listings/:id/request-plan on the public API). Approving
+ *  moves `plan` to the requested tier; rejecting just clears the request
+ *  and the property stays on its current plan. No payment is collected
+ *  yet — once billing exists, this is where a real charge would need to
+ *  succeed before approval is allowed. */
+export async function reviewPlanRequest(formData: FormData) {
+  const session = await getServerSession(authOptions)
+  if (!session || (session.user.role !== 'BACKEND' && session.user.role !== 'ADMIN')) throw new Error('Unauthorized')
+
+  const propertyId = String(formData.get('propertyId'))
+  const decision = String(formData.get('decision')) as 'APPROVE' | 'REJECT'
+  if (!['APPROVE', 'REJECT'].includes(decision)) throw new Error('Invalid decision')
+
+  const property = await prisma.property.findUnique({ where: { id: propertyId } })
+  if (!property) throw new Error('Property not found')
+  if (!property.requestedPlan) throw new Error('This property has no pending plan request')
+
+  const requestedPlan = property.requestedPlan
+  const updated = await prisma.property.update({
+    where: { id: propertyId },
+    data: decision === 'APPROVE' ? { plan: requestedPlan, requestedPlan: null } : { requestedPlan: null },
+  })
+
+  await notifyUsers([
+    {
+      userId: updated.sellerId,
+      title: decision === 'APPROVE' ? 'Plan upgrade approved' : 'Plan upgrade declined',
+      message:
+        decision === 'APPROVE'
+          ? `${updated.title} is now on the ${requestedPlan} plan.`
+          : `Your request to move ${updated.title} to ${requestedPlan} wasn't approved — it stays on ${updated.plan}.`,
+    },
+  ])
+
+  revalidatePath('/dashboard/listings')
+  revalidatePath(`/dashboard/listings/${propertyId}`)
+  revalidatePath('/dashboard')
+}
+
 async function requirePendingReviewOffer(offerId: string) {
   const offer = await prisma.offer.findUnique({
     where: { id: offerId },
