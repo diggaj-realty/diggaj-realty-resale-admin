@@ -34,6 +34,8 @@ export const PATCH = withApi(async (req, { params }) => {
   const body = await readJson<{
     action?: string
     scheduledDate?: string
+    proposedDate?: string
+    reason?: string
     feedback?: string
     outcome?: string
     interestedAmount?: number
@@ -48,6 +50,112 @@ export const PATCH = withApi(async (req, { params }) => {
 
   const isBuyerOwner = visit.buyerId === user.id
   const isAgentOwner = visit.agentId === user.id
+
+  // ── Mutual date agreement ──
+  // Either side can put a time forward; the other accepts, declines, or suggests
+  // a different one. A booked visit dropping back to REQUESTED while a new time
+  // is discussed is deliberate — nobody should be left believing the old slot
+  // still stands.
+  if (action === 'propose' || action === 'accept' || action === 'decline') {
+    if (!isBuyerOwner && !isAgentOwner) throw new ApiError('Forbidden', 403)
+    if (visit.status === 'COMPLETED' || visit.status === 'CANCELLED') {
+      throw new ApiError('This visit is already closed', 400)
+    }
+    const side = isBuyerOwner ? 'BUYER' : 'AGENT'
+    const otherPartyId = isBuyerOwner ? visit.agentId : visit.buyerId
+
+    if (action === 'propose') {
+      const proposedDate = new Date(String(body.proposedDate ?? body.scheduledDate ?? ''))
+      if (Number.isNaN(proposedDate.getTime())) {
+        throw new ApiError('proposedDate must be a valid date', 400)
+      }
+      const updated = await prisma.siteVisit.update({
+        where: { id },
+        data: { status: 'REQUESTED', proposedDate, proposedBy: side, scheduledDate: null },
+      })
+      await syncInterestStatus(visit.interestId, 'SITE_VISIT_REQUESTED')
+      await recordAudit({
+        action: 'SITE_VISIT_REQUESTED',
+        actorId: user.id,
+        entity: 'SiteVisit',
+        entityId: id,
+        meta: { proposedBy: side, proposedDate: proposedDate.toISOString() },
+      })
+      if (otherPartyId) {
+        await notifyUsers([
+          {
+            userId: otherPartyId,
+            title: 'New time proposed',
+            message: `A new time for the visit to ${visit.property.title} has been proposed: ${proposedDate.toLocaleString('en-IN')}.`,
+          },
+        ])
+      }
+      return ok(siteVisitDTO(updated))
+    }
+
+    if (action === 'accept') {
+      if (visit.status !== 'REQUESTED') throw new ApiError('This visit is not awaiting a decision', 400)
+      if (!visit.proposedDate || !visit.proposedBy) {
+        throw new ApiError('There is no proposed time to accept', 400)
+      }
+      // Accepting your own proposal would make the exchange decorative — one
+      // side could book the other's diary by proposing and agreeing with itself.
+      if (visit.proposedBy === side) {
+        throw new ApiError('You proposed this time — the other party needs to accept it', 400)
+      }
+      const updated = await prisma.siteVisit.update({
+        where: { id },
+        data: {
+          status: 'SCHEDULED',
+          scheduledDate: visit.proposedDate,
+          proposedDate: null,
+          proposedBy: null,
+        },
+      })
+      await syncInterestStatus(visit.interestId, 'SITE_VISIT_SCHEDULED')
+      await recordAudit({
+        action: 'SITE_VISIT_SCHEDULED',
+        actorId: user.id,
+        entity: 'SiteVisit',
+        entityId: id,
+        meta: { acceptedBy: side, scheduledDate: visit.proposedDate.toISOString() },
+      })
+      if (otherPartyId) {
+        await notifyUsers([
+          {
+            userId: otherPartyId,
+            title: 'Site visit confirmed',
+            message: `The visit to ${visit.property.title} is confirmed for ${visit.proposedDate.toLocaleString('en-IN')}.`,
+          },
+        ])
+      }
+      return ok(siteVisitDTO(updated))
+    }
+
+    // decline — "not happening", as distinct from "not then"
+    const reason = typeof body.reason === 'string' && body.reason.trim() ? body.reason.trim() : null
+    const updated = await prisma.siteVisit.update({
+      where: { id },
+      data: { status: 'CANCELLED', proposedDate: null, proposedBy: null, feedback: reason ?? visit.feedback },
+    })
+    await recordAudit({
+      action: 'SITE_VISIT_CANCELLED',
+      actorId: user.id,
+      entity: 'SiteVisit',
+      entityId: id,
+      meta: { declinedBy: side, reason },
+    })
+    if (otherPartyId) {
+      await notifyUsers([
+        {
+          userId: otherPartyId,
+          title: 'Site visit declined',
+          message: `The visit to ${visit.property.title} won't be going ahead.${reason ? ` Reason: ${reason}` : ''}`,
+        },
+      ])
+    }
+    return ok(siteVisitDTO(updated))
+  }
 
   if (action === 'cancel') {
     if (!isBuyerOwner && !isAgentOwner) throw new ApiError('Forbidden', 403)

@@ -6,6 +6,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { logOfferEvent } from '@/lib/actions/offerEvents'
 import { notifyUsers } from '@/lib/notify'
+import { acceptOfferAndOpenDeal, canActOnOffer } from '@/lib/data/offerAcceptance'
 
 async function requireBackend() {
   const session = await getServerSession(authOptions)
@@ -224,4 +225,133 @@ export async function rejectOfferAsBackend(formData: FormData) {
 
   revalidatePath('/dashboard/negotiations')
   revalidatePath('/dashboard')
+}
+
+// ── Mid-negotiation backend actions ────────────────────────────────────────
+//
+// The triage actions above only apply while an offer is PENDING_REVIEW. Once
+// backend has countered on the seller's behalf the offer is COUNTERED, and when
+// the buyer counters back it's the seller's turn again — but the seller was
+// deliberately never brought into this negotiation, so without these the
+// conversation dead-ends with nobody able to move. Backend continues to act on
+// the seller's side of the table.
+
+/** The offer, if it's genuinely backend's move. */
+async function requireBackendTurn(offerId: string) {
+  const session = await requireBackend()
+  const offer = await prisma.offer.findUnique({
+    where: { id: offerId },
+    include: { property: { select: { id: true, title: true, sellerId: true, agentId: true } } },
+  })
+  if (!offer) throw new Error('Offer not found')
+
+  if (offer.status !== 'PENDING' && offer.status !== 'COUNTERED') {
+    throw new Error('This negotiation is no longer active')
+  }
+  const actingAs = canActOnOffer({
+    offer,
+    userId: session.user.id,
+    role: session.user.role,
+  })
+  if (actingAs !== 'SELLER') throw new Error("It's not your turn — waiting on the buyer.")
+
+  return { offer, session }
+}
+
+function revalidateNegotiations() {
+  revalidatePath('/dashboard/negotiations')
+  revalidatePath('/dashboard/offers')
+  revalidatePath('/dashboard')
+}
+
+/** Counter the buyer again, mid-negotiation. Unlimited rounds. */
+export async function backendCounterOffer(formData: FormData) {
+  const offerId = String(formData.get('offerId'))
+  const counterAmount = Number(formData.get('counterAmount'))
+  if (!Number.isFinite(counterAmount) || counterAmount <= 0) throw new Error('Enter a valid counter amount')
+
+  const { offer, session } = await requireBackendTurn(offerId)
+
+  await prisma.offer.update({
+    where: { id: offerId },
+    // 'BACKEND' rather than 'SELLER', matching the triage counter — the turn
+    // logic treats any non-BUYER value as "buyer owes a response", so this only
+    // affects how the timeline reads, and it should read truthfully.
+    data: { status: 'COUNTERED', counterAmount, counterBy: 'BACKEND', reviewedBy: session.user.id },
+  })
+  await logOfferEvent({
+    offerId,
+    type: 'COUNTERED_BACKEND',
+    amount: counterAmount,
+    actorId: session.user.id,
+    actorRole: 'BACKEND',
+  })
+
+  // Buyer-facing copy never reveals that backend, rather than the seller,
+  // is on the other side — consistent with the triage counter.
+  await notifyUsers([
+    {
+      userId: offer.buyerId,
+      title: 'Offer countered',
+      message: `Your offer on ${offer.property.title} received a counter of ${counterAmount}.`,
+    },
+  ])
+
+  revalidateNegotiations()
+}
+
+/** Accept the buyer's current number and open the deal. */
+export async function backendAcceptOffer(formData: FormData) {
+  const offerId = String(formData.get('offerId'))
+  const { offer, session } = await requireBackendTurn(offerId)
+
+  // Whatever is on the table right now: the buyer's counter if they made one,
+  // otherwise their original amount.
+  const agreedPrice = offer.counterBy === 'BUYER' && offer.counterAmount != null ? offer.counterAmount : offer.amount
+
+  const deal = await acceptOfferAndOpenDeal({
+    offerId,
+    agreedPrice,
+    actorId: session.user.id,
+    actorRole: 'BACKEND',
+  })
+
+  await notifyUsers([
+    {
+      userId: deal.buyerId,
+      title: 'Offer accepted',
+      message: `Your offer on ${deal.propertyTitle} was accepted.`,
+    },
+    {
+      userId: deal.sellerId,
+      title: 'Deal started',
+      message: `An offer on ${deal.propertyTitle} was accepted and a deal has started.`,
+    },
+  ])
+
+  revalidateNegotiations()
+  revalidatePath('/dashboard/deals')
+  revalidatePath('/dashboard/accepted-offers')
+}
+
+/** Reject the buyer's current number, ending the negotiation. */
+export async function backendRejectOffer(formData: FormData) {
+  const offerId = String(formData.get('offerId'))
+  const { offer, session } = await requireBackendTurn(offerId)
+
+  await prisma.offer.update({
+    where: { id: offerId },
+    data: { status: 'REJECTED', reviewedBy: session.user.id },
+  })
+  await logOfferEvent({ offerId, type: 'REJECTED', actorId: session.user.id, actorRole: 'BACKEND' })
+
+  await notifyUsers([
+    {
+      userId: offer.buyerId,
+      title: 'Offer rejected',
+      message: `Your offer on ${offer.property.title} was rejected.`,
+    },
+  ])
+
+  revalidateNegotiations()
 }

@@ -3,7 +3,8 @@ import { redirect } from 'next/navigation'
 import { MapPin, CalendarClock } from 'lucide-react'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { scheduleSiteVisit, completeSiteVisit, cancelSiteVisit } from '@/lib/actions/siteVisits'
+import { completeSiteVisit, cancelSiteVisit } from '@/lib/actions/siteVisits'
+import SiteVisitScheduler from '@/components/dashboard/SiteVisitScheduler'
 import PageHeader from '@/components/dashboard/PageHeader'
 import DashboardEntrance from '@/components/dashboard/DashboardEntrance'
 import SiteVisitOutcomePanel from '@/components/dashboard/SiteVisitOutcomePanel'
@@ -83,22 +84,22 @@ export default async function SiteVisitsPage() {
                   </div>
                 </div>
 
+                {/* Agreeing a date — either side proposes, the other decides. */}
+                {role === 'AGENT' && active && (
+                  <SiteVisitScheduler
+                    visitId={v.id}
+                    status={v.status}
+                    scheduledDate={v.scheduledDate?.toISOString() ?? null}
+                    requestedDate={v.requestedDate?.toISOString() ?? null}
+                    proposedDate={v.proposedDate?.toISOString() ?? null}
+                    proposedBy={v.proposedBy}
+                    canAct
+                  />
+                )}
+
                 {/* Agent actions */}
                 {role === 'AGENT' && active && (
                   <div className="mt-3 flex flex-wrap items-center gap-2 border-t pt-3" style={{ borderColor: 'var(--line)' }}>
-                    {v.status === 'REQUESTED' && (
-                      <form action={scheduleSiteVisit} className="flex flex-wrap items-center gap-2">
-                        <input type="hidden" name="id" value={v.id} />
-                        <input
-                          type="datetime-local"
-                          name="scheduledDate"
-                          required
-                          className="rounded-lg border px-2.5 py-2 text-xs outline-none"
-                          style={{ borderColor: 'var(--line)', color: 'var(--text-1)', background: 'var(--surface)' }}
-                        />
-                        <button type="submit" className="btn-accent rounded-lg px-3 py-2 text-xs font-semibold">Schedule</button>
-                      </form>
-                    )}
                     {v.status === 'SCHEDULED' && (
                       <form action={completeSiteVisit} className="flex flex-wrap items-center gap-2">
                         <input type="hidden" name="id" value={v.id} />

@@ -8,6 +8,7 @@ import DashboardEntrance from '@/components/dashboard/DashboardEntrance'
 import AgingBadge from '@/components/dashboard/AgingBadge'
 import AssignSiteVisitAgentForm from '@/components/dashboard/AssignSiteVisitAgentForm'
 import SiteVisitOutcomePanel from '@/components/dashboard/SiteVisitOutcomePanel'
+import SiteVisitScheduler from '@/components/dashboard/SiteVisitScheduler'
 
 const STATUS_STYLE: Record<string, { bg: string; fg: string; label: string }> = {
   REQUESTED: { bg: 'rgba(234,179,8,0.14)', fg: '#a16207', label: 'Requested' },
@@ -105,6 +106,20 @@ export default async function SiteVisitsQueuePage() {
 
                 {(v.status === 'REQUESTED' || v.status === 'SCHEDULED') && (
                   <AssignSiteVisitAgentForm visitId={v.id} agentId={v.agentId} agents={agents} />
+                )}
+
+                {/* Backend can settle a date too — otherwise an unassigned visit
+                    with a buyer's proposal sitting on it has nobody to answer it. */}
+                {(v.status === 'REQUESTED' || v.status === 'SCHEDULED') && (
+                  <SiteVisitScheduler
+                    visitId={v.id}
+                    status={v.status}
+                    scheduledDate={v.scheduledDate?.toISOString() ?? null}
+                    requestedDate={v.requestedDate?.toISOString() ?? null}
+                    proposedDate={v.proposedDate?.toISOString() ?? null}
+                    proposedBy={v.proposedBy}
+                    canAct
+                  />
                 )}
 
                 {v.status === 'COMPLETED' && (

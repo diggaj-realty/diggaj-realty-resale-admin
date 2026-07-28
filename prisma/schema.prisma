@@ -776,6 +776,15 @@ model SiteVisit {
   /// visit path) have none, and must keep working.
   interestId String?
 
+  /// A date put forward but not yet agreed, and who put it forward. Either side
+  /// can propose: the buyer asking for a slot, or the agent offering one. The
+  /// other party then accepts, declines, or proposes a different time, so
+  /// `proposedBy` is effectively "whose move it isn't" — the same turn-taking
+  /// shape as negotiation confirmations. Cleared once a date is agreed
+  /// (scheduledDate) so a stale proposal can't linger next to a live booking.
+  proposedDate DateTime?
+  proposedBy   String? // BUYER | AGENT
+
   property Property          @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   buyer    User              @relation("BuyerVisits", fields: [buyerId], references: [id], onDelete: Cascade)
   agent    User?             @relation("AgentVisits", fields: [agentId], references: [id])

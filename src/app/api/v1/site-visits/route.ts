@@ -21,6 +21,15 @@ export function siteVisitDTO(v: SiteVisitWithRelations) {
     status: v.status,
     requestedDate: v.requestedDate.toISOString(),
     scheduledDate: v.scheduledDate ? v.scheduledDate.toISOString() : null,
+    // A time put forward but not yet agreed, and by whom. The frontend needs both
+    // to know whether to show accept/decline (the other side proposed) or a
+    // "waiting on them" state (we proposed) — without proposedBy it can't tell
+    // those apart and would offer the proposer a button to accept themselves.
+    proposedDate: v.proposedDate ? v.proposedDate.toISOString() : null,
+    proposedBy: v.proposedBy,
+    /** Whose response the visit is waiting on, so the client doesn't re-derive it. */
+    awaitingResponseFrom:
+      v.status === 'REQUESTED' && v.proposedBy ? (v.proposedBy === 'BUYER' ? 'AGENT' : 'BUYER') : null,
     buyerNote: v.buyerNote,
     feedback: v.feedback,
     outcome: v.outcome,

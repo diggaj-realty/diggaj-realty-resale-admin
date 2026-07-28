@@ -170,16 +170,23 @@ export const PATCH = withApi(async (req, ctx) => {
       })
     }
   } else {
-    // accept/reject/counter are turn-based — BACKEND cannot act as either
-    // party mid-negotiation, only close it (see NegotiationRow — backend's
-    // own counter/reject powers are limited to pre-forward triage).
+    // accept/reject/counter are turn-based. Backend acts *as the seller* on the
+    // seller's side of the table: the triage flow lets backend counter on the
+    // seller's behalf (deliberately without involving them), so if backend then
+    // couldn't respond when the buyer counters back, the negotiation would
+    // dead-end with nobody able to move — the seller was never brought in, and
+    // the buyer is waiting on a side that has no one acting for it.
     const turn = currentTurn(offer)
-    const actingAs = turn === 'BUYER' ? (isBuyer ? 'BUYER' : null) : isSeller ? 'SELLER' : null
+    const actingAs =
+      turn === 'BUYER'
+        ? isBuyer
+          ? 'BUYER'
+          : null
+        : isSeller || isBackend
+          ? 'SELLER'
+          : null
     if (!actingAs) {
-      throw new ApiError(
-        isBackend ? 'Only the buyer or seller can respond mid-negotiation — use close to end it instead.' : "It's not your turn — waiting on the other party.",
-        403
-      )
+      throw new ApiError("It's not your turn — waiting on the other party.", 403)
     }
 
     if (action === 'accept') {
@@ -207,7 +214,16 @@ export const PATCH = withApi(async (req, ctx) => {
       })
       await logOfferEvent({
         offerId,
-        type: actingAs === 'BUYER' ? 'COUNTERED_BUYER' : 'COUNTERED_SELLER',
+        // Attribute to who actually acted, not just which side they acted for —
+        // backend countering for the seller reads as COUNTERED_BACKEND, matching
+        // how the triage counter is recorded. The buyer-facing *notification*
+        // still says nothing about backend; only the audit trail is candid.
+        type:
+          actingAs === 'BUYER'
+            ? 'COUNTERED_BUYER'
+            : isBackend && !isSeller
+              ? 'COUNTERED_BACKEND'
+              : 'COUNTERED_SELLER',
         amount: counterAmount,
         actorId: user.id,
         actorRole: user.role,

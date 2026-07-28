@@ -79,6 +79,9 @@ export function getNavIcons(role: UserRole): NavIcon[] {
         { key: 'offers', label: 'Offers Received', icon: HandCoins, href: '/dashboard/offers' },
         { key: 'deals', label: 'Assigned Deals', icon: Briefcase, href: '/dashboard/deals' },
         leads,
+        // Agent-assisted negotiations they're personally running — previously only
+        // reachable by opening individual leads one at a time.
+        { key: 'negotiations', label: 'My Negotiations', icon: Scale, href: '/dashboard/negotiations' },
         acceptedOffers,
         performance,
         feedback,
@@ -109,6 +112,7 @@ export function getNavIcons(role: UserRole): NavIcon[] {
         { key: 'clients', label: 'Clients', icon: Contact, href: '/dashboard/clients' },
         { key: 'listings', label: 'All Listings', icon: Building2, href: '/dashboard/listings' },
         publicListings,
+        { key: 'negotiations', label: 'Negotiations', icon: Scale, href: '/dashboard/negotiations' },
         leads,
         acceptedOffers,
         siteVisitsQueue,

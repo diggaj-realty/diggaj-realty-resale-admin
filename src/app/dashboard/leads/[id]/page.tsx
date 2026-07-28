@@ -10,6 +10,8 @@ import StatusPill from '@/components/dashboard/StatusPill'
 import NegotiationPanel from '@/components/dashboard/NegotiationPanel'
 import AssignLeadAgentForm from '@/components/dashboard/AssignLeadAgentForm'
 import LeadStatusForm from '@/components/dashboard/LeadStatusForm'
+import ProposeSiteVisitForm from '@/components/dashboard/ProposeSiteVisitForm'
+import SiteVisitScheduler from '@/components/dashboard/SiteVisitScheduler'
 import { ArrowLeft, Building2, UserRound, CalendarCheck } from 'lucide-react'
 
 /** One buyer lead, end to end: who wants what, who owns it, the visit, and the
@@ -46,6 +48,9 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
   // details, so this is a hard 404 rather than a read-only view.
   if (!isStaff && !isOwnAgent) notFound()
   const canManage = isStaff || isOwnAgent
+  // One live visit at a time — two open invitations for the same buyer and
+  // property would just confuse which slot is real.
+  const hasOpenVisit = lead.siteVisits.some((v) => v.status === 'REQUESTED' || v.status === 'SCHEDULED')
 
   const seller = await prisma.user.findUnique({
     where: { id: lead.property.sellerId },
@@ -179,7 +184,28 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
                 Open the visit queue →
               </Link>
             </p>
-          ) : (
+          ) : null}
+
+          {/* The agent working this lead can open a visit themselves rather than
+              waiting for the buyer to ask. Only the assigned agent: the action
+              enforces that too, so the UI shouldn't offer what it would refuse. */}
+          {isOwnAgent && (
+            <div className={lead.siteVisits.length === 0 ? 'mt-3' : 'mt-4 border-t pt-4'} style={{ borderColor: 'var(--line)' }}>
+              <ProposeSiteVisitForm
+                interestId={lead.id}
+                buyerName={lead.buyer.name}
+                disabledReason={
+                  hasOpenVisit
+                    ? 'A visit is already in progress on this lead.'
+                    : lead.property.status !== 'LIVE'
+                      ? 'This property is no longer available to visit.'
+                      : null
+                }
+              />
+            </div>
+          )}
+
+          {lead.siteVisits.length > 0 && (
             <ul className="flex flex-col gap-2">
               {lead.siteVisits.map((v) => (
                 <li key={v.id} className="flex flex-wrap items-center gap-3 rounded-lg p-3" style={{ background: 'var(--surface-2)' }}>
@@ -210,6 +236,23 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
                   {v.feedback && (
                     <span className="w-full text-xs italic" style={{ color: 'var(--text-3)' }}>{v.feedback}</span>
                   )}
+                  {v.proposedDate && v.proposedBy && (
+                    <span className="w-full text-xs font-semibold" style={{ color: 'var(--blue-700)' }}>
+                      {v.proposedBy === 'BUYER' ? 'Buyer proposed' : 'We proposed'}{' '}
+                      {v.proposedDate.toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}
+                    </span>
+                  )}
+                  <div className="w-full">
+                    <SiteVisitScheduler
+                      visitId={v.id}
+                      status={v.status}
+                      scheduledDate={v.scheduledDate?.toISOString() ?? null}
+                      requestedDate={v.requestedDate.toISOString()}
+                      proposedDate={v.proposedDate?.toISOString() ?? null}
+                      proposedBy={v.proposedBy}
+                      canAct={canManage}
+                    />
+                  </div>
                 </li>
               ))}
             </ul>

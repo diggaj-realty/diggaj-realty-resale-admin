@@ -69,6 +69,12 @@ export async function requestSiteVisit(formData: FormData) {
 }
 
 /** Agent schedules a REQUESTED visit — claims it and sets the confirmed date. */
+/** Agent confirms a date outright, booking the visit.
+ *
+ *  Use this when the buyer's requested slot works, or when the buyer has already
+ *  proposed a time and the agent is accepting it. If the agent wants a *different*
+ *  time than the buyer asked for, `proposeSiteVisitDate` is the honest action —
+ *  it asks rather than tells. */
 export async function scheduleSiteVisit(formData: FormData) {
   const session = await requireRole('AGENT')
   const id = String(formData.get('id') ?? '')
@@ -85,7 +91,24 @@ export async function scheduleSiteVisit(formData: FormData) {
 
   await prisma.siteVisit.update({
     where: { id },
-    data: { status: 'SCHEDULED', scheduledDate, agentId: session.user.id },
+    // Clear any open proposal — a booked date shouldn't sit next to a stale
+    // "awaiting a reply" one.
+    data: {
+      status: 'SCHEDULED',
+      scheduledDate,
+      agentId: session.user.id,
+      proposedDate: null,
+      proposedBy: null,
+    },
+  })
+
+  await syncInterest(visit.interestId, 'SITE_VISIT_SCHEDULED')
+  await recordAudit({
+    action: 'SITE_VISIT_SCHEDULED',
+    actorId: session.user.id,
+    entity: 'SiteVisit',
+    entityId: id,
+    meta: { scheduledDate: scheduledDate.toISOString() },
   })
 
   await notifyUsers([
@@ -97,6 +120,268 @@ export async function scheduleSiteVisit(formData: FormData) {
   ])
 
   revalidate()
+}
+
+/** Keeps the parent lead in step, skipping leads that have already finished. */
+async function syncInterest(interestId: string | null, status: string) {
+  if (!interestId) return
+  const interest = await prisma.propertyInterest.findUnique({
+    where: { id: interestId },
+    select: { status: true },
+  })
+  if (!interest || isTerminalInterestStatus(interest.status)) return
+  await prisma.propertyInterest.update({ where: { id: interestId }, data: { status } })
+}
+
+/** Agent creates a visit off their own bat, for a buyer they're already working.
+ *
+ *  Until now only a buyer could start a visit, which meant an agent who'd just
+ *  got off the phone had no way to put a slot forward. The visit opens with a
+ *  proposed date awaiting the buyer's agreement rather than a booked one — the
+ *  agent is offering a time, not imposing one on someone's diary. */
+export async function agentProposeSiteVisit(formData: FormData) {
+  const session = await requireRole('AGENT')
+  const interestId = String(formData.get('interestId') ?? '')
+  if (!interestId) throw new Error('Missing lead')
+  const proposedDate = parseDate(formData.get('proposedDate'), 'date')
+  const note = String(formData.get('note') ?? '').trim() || null
+
+  const interest = await prisma.propertyInterest.findUnique({
+    where: { id: interestId },
+    include: { property: { select: { id: true, title: true, status: true } }, buyer: { select: { name: true } } },
+  })
+  if (!interest) throw new Error('Lead not found')
+  if (interest.agentId !== session.user.id) throw new Error('This lead is assigned to another agent')
+  if (interest.property.status !== 'LIVE') throw new Error('This property is no longer available to visit')
+
+  // One live visit per lead — two open invitations for the same buyer and
+  // property would just confuse everyone about which slot is real.
+  const open = await prisma.siteVisit.findFirst({
+    where: { interestId, status: { in: ['REQUESTED', 'SCHEDULED'] } },
+  })
+  if (open) throw new Error('This lead already has a visit in progress')
+
+  const visit = await prisma.siteVisit.create({
+    data: {
+      propertyId: interest.propertyId,
+      buyerId: interest.buyerId,
+      agentId: session.user.id,
+      interestId,
+      status: 'REQUESTED',
+      // requestedDate is the buyer's ask elsewhere; here the agent is the one
+      // asking, so it mirrors the proposal.
+      requestedDate: proposedDate,
+      proposedDate,
+      proposedBy: 'AGENT',
+      buyerNote: note,
+    },
+  })
+
+  await syncInterest(interestId, 'SITE_VISIT_REQUESTED')
+  await recordAudit({
+    action: 'SITE_VISIT_REQUESTED',
+    actorId: session.user.id,
+    entity: 'SiteVisit',
+    entityId: visit.id,
+    meta: { proposedBy: 'AGENT', proposedDate: proposedDate.toISOString(), interestId },
+  })
+
+  await notifyUsers([
+    {
+      userId: interest.buyerId,
+      title: 'Site visit proposed',
+      message: `Your agent has proposed a visit to ${interest.property.title} on ${proposedDate.toLocaleString('en-IN')}. Accept, decline, or suggest another time.`,
+    },
+  ])
+
+  revalidate()
+  revalidatePath(`/dashboard/leads/${interestId}`)
+}
+
+/** Puts a different date forward, from either side.
+ *
+ *  This is the "reschedule" path and it's deliberately symmetric: whoever
+ *  proposes hands the decision to the other party rather than moving a confirmed
+ *  booking unilaterally. A visit already scheduled drops back to REQUESTED while
+ *  the new time is under discussion, so nobody is left believing the old slot
+ *  still stands. */
+export async function proposeSiteVisitDate(formData: FormData) {
+  const session = await getServerSession(authOptions)
+  if (!session) throw new Error('Unauthorized')
+  const id = String(formData.get('id') ?? '')
+  if (!id) throw new Error('Missing id')
+  const proposedDate = parseDate(formData.get('proposedDate'), 'date')
+
+  const visit = await prisma.siteVisit.findUnique({
+    where: { id },
+    include: { property: { select: { title: true } } },
+  })
+  if (!visit) throw new Error('Visit not found')
+  if (visit.status === 'COMPLETED' || visit.status === 'CANCELLED') {
+    throw new Error('This visit is already closed')
+  }
+
+  const { id: userId, role } = session.user
+  const isAgentSide = visit.agentId === userId || role === 'BACKEND' || role === 'ADMIN'
+  const isBuyer = visit.buyerId === userId
+  if (!isAgentSide && !isBuyer) throw new Error('Unauthorized')
+  const proposedBy = isBuyer ? 'BUYER' : 'AGENT'
+
+  await prisma.siteVisit.update({
+    where: { id },
+    data: {
+      status: 'REQUESTED',
+      proposedDate,
+      proposedBy,
+      // The old booking is no longer agreed once someone asks to move it.
+      scheduledDate: null,
+    },
+  })
+
+  await syncInterest(visit.interestId, 'SITE_VISIT_REQUESTED')
+  await recordAudit({
+    action: 'SITE_VISIT_REQUESTED',
+    actorId: userId,
+    entity: 'SiteVisit',
+    entityId: id,
+    meta: { proposedBy, proposedDate: proposedDate.toISOString(), reschedule: true },
+  })
+
+  const recipient = isBuyer ? visit.agentId : visit.buyerId
+  if (recipient) {
+    await notifyUsers([
+      {
+        userId: recipient,
+        title: 'New time proposed',
+        message: `A new time for the visit to ${visit.property.title} has been proposed: ${proposedDate.toLocaleString('en-IN')}.`,
+      },
+    ])
+  }
+
+  revalidate()
+  if (visit.interestId) revalidatePath(`/dashboard/leads/${visit.interestId}`)
+}
+
+/** Accepts the date the other side proposed, booking the visit.
+ *
+ *  Guarded so you can't accept your own proposal — that would make the whole
+ *  back-and-forth decorative, letting one side book the other's diary by
+ *  proposing and immediately agreeing with itself. */
+export async function acceptSiteVisitProposal(formData: FormData) {
+  const session = await getServerSession(authOptions)
+  if (!session) throw new Error('Unauthorized')
+  const id = String(formData.get('id') ?? '')
+  if (!id) throw new Error('Missing id')
+
+  const visit = await prisma.siteVisit.findUnique({
+    where: { id },
+    include: { property: { select: { title: true } } },
+  })
+  if (!visit) throw new Error('Visit not found')
+  if (visit.status !== 'REQUESTED') throw new Error('This visit is not awaiting a decision')
+  if (!visit.proposedDate || !visit.proposedBy) throw new Error('There is no proposed time to accept')
+
+  const { id: userId, role } = session.user
+  const isAgentSide = visit.agentId === userId || role === 'BACKEND' || role === 'ADMIN'
+  const isBuyer = visit.buyerId === userId
+  if (!isAgentSide && !isBuyer) throw new Error('Unauthorized')
+
+  const side = isBuyer ? 'BUYER' : 'AGENT'
+  if (visit.proposedBy === side) {
+    throw new Error('You proposed this time — the other party needs to accept it')
+  }
+
+  await prisma.siteVisit.update({
+    where: { id },
+    data: {
+      status: 'SCHEDULED',
+      scheduledDate: visit.proposedDate,
+      proposedDate: null,
+      proposedBy: null,
+      // An agent accepting a buyer's proposal also claims the visit, so it's
+      // clear who's turning up.
+      ...(isAgentSide && !visit.agentId && role === 'AGENT' ? { agentId: userId } : {}),
+    },
+  })
+
+  await syncInterest(visit.interestId, 'SITE_VISIT_SCHEDULED')
+  await recordAudit({
+    action: 'SITE_VISIT_SCHEDULED',
+    actorId: userId,
+    entity: 'SiteVisit',
+    entityId: id,
+    meta: { acceptedBy: side, scheduledDate: visit.proposedDate.toISOString() },
+  })
+
+  const recipients = [visit.buyerId, visit.agentId].filter((uid): uid is string => !!uid && uid !== userId)
+  await notifyUsers(
+    recipients.map((uid) => ({
+      userId: uid,
+      title: 'Site visit confirmed',
+      message: `The visit to ${visit.property.title} is confirmed for ${visit.proposedDate!.toLocaleString('en-IN')}.`,
+    }))
+  )
+
+  revalidate()
+  if (visit.interestId) revalidatePath(`/dashboard/leads/${visit.interestId}`)
+}
+
+/** Declines the proposed time outright, cancelling the visit.
+ *
+ *  Distinct from proposing a different date: this is "not happening", not "not
+ *  then". Either side can do it, and a fresh visit is created if things restart —
+ *  so the declined attempt stays on record. */
+export async function declineSiteVisitProposal(formData: FormData) {
+  const session = await getServerSession(authOptions)
+  if (!session) throw new Error('Unauthorized')
+  const id = String(formData.get('id') ?? '')
+  if (!id) throw new Error('Missing id')
+  const reason = String(formData.get('reason') ?? '').trim() || null
+
+  const visit = await prisma.siteVisit.findUnique({
+    where: { id },
+    include: { property: { select: { title: true } } },
+  })
+  if (!visit) throw new Error('Visit not found')
+  if (visit.status === 'COMPLETED' || visit.status === 'CANCELLED') {
+    throw new Error('This visit is already closed')
+  }
+
+  const { id: userId, role } = session.user
+  const isAgentSide = visit.agentId === userId || role === 'BACKEND' || role === 'ADMIN'
+  const isBuyer = visit.buyerId === userId
+  if (!isAgentSide && !isBuyer) throw new Error('Unauthorized')
+
+  await prisma.siteVisit.update({
+    where: { id },
+    data: {
+      status: 'CANCELLED',
+      proposedDate: null,
+      proposedBy: null,
+      feedback: reason ?? visit.feedback,
+    },
+  })
+
+  await syncInterest(visit.interestId, 'CANCELLED')
+  await recordAudit({
+    action: 'SITE_VISIT_CANCELLED',
+    actorId: userId,
+    entity: 'SiteVisit',
+    entityId: id,
+    meta: { declinedBy: isBuyer ? 'BUYER' : 'AGENT', reason },
+  })
+
+  const recipients = [visit.buyerId, visit.agentId].filter((uid): uid is string => !!uid && uid !== userId)
+  await notifyUsers(
+    recipients.map((uid) => ({
+      userId: uid,
+      title: 'Site visit declined',
+      message: `The visit to ${visit.property.title} won't be going ahead.${reason ? ` Reason: ${reason}` : ''}`,
+    }))
+  )
+
+  revalidate()
+  if (visit.interestId) revalidatePath(`/dashboard/leads/${visit.interestId}`)
 }
 
 /** Agent marks a visit COMPLETED and records post-visit feedback. */
