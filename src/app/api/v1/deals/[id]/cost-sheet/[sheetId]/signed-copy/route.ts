@@ -10,7 +10,7 @@ import { recordAudit } from '@/lib/audit'
  *  alongside rather than instead of, stored as a DealDocument so it inherits the
  *  existing ownership and access-grant machinery.
  *
- *  Filed as docType COST_SHEET, which the closure gate and the documentation stage
+ *  Filed with purpose RECORD, which the closure gate and the documentation stage
  *  both skip: it is staff output, not something a party was asked to supply, and
  *  counting it as an unapproved closure requirement would stall the deal it is
  *  meant to record.
@@ -41,7 +41,9 @@ export const POST = withApi(async (req, ctx) => {
       data: {
         dealId,
         docType: 'COST_SHEET',
-        // Nobody is being chased for this — it is already in hand.
+        // Filed, not requested: nobody is being chased for this and it must not
+        // hold closure open. See DealDocument.purpose.
+        purpose: 'RECORD',
         requiredFrom: 'EITHER',
         fileUrl,
         status: 'UPLOADED',

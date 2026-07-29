@@ -353,6 +353,21 @@ model DealDocument {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  /// Whether a party owes this document, or the platform merely filed it.
+  ///
+  /// REQUIREMENT — someone was asked for it, so it gates the documentation stage
+  /// and closure until approved. RECORD — the platform produced it (a signed cost
+  /// sheet, a receipt, an internal note); it belongs in the file but nobody is
+  /// being chased for it, and counting one as outstanding would stall the deal it
+  /// documents.
+  ///
+  /// Defaults to REQUIREMENT so existing rows and existing call sites keep their
+  /// behaviour, and so the unsafe case is the one you have to ask for. This
+  /// replaced a denylist of docTypes to exclude, which was invisible at the point
+  /// where a document gets created — the next staff-produced type would have hit
+  /// the same trap with nothing to warn whoever added it.
+  purpose String @default("REQUIREMENT") // REQUIREMENT | RECORD
+
   /// The party this document belongs to. Distinct from uploadedBy: ownership
   /// determines who may see it by default and who must consent before the
   /// counterparty gets access, and it survives even before anything is uploaded.

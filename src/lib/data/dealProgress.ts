@@ -41,9 +41,9 @@ export interface DealProgressInput {
   buyerId?: string
   sellerId?: string
   siteVisit?: { status: string; outcome: string | null } | null
-  /** `docType` is optional so existing callers keep working; when present,
-   *  COST_SHEET copies are excluded — see DOCUMENTATION_EXCLUDED_TYPES. */
-  documents: { status: string; docType?: string }[]
+  /** `purpose` is optional so existing callers keep working; absent is treated as
+   *  REQUIREMENT, which is the gating case — see gatesDocumentation. */
+  documents: { status: string; purpose?: string }[]
   offlineNegotiations: unknown[]
   paymentRequests: { status: string; amount: number }[]
   /** Optional so existing callers that don't select these keep working — the
@@ -76,18 +76,23 @@ const STAGE_LABELS: Record<DealStage, string> = {
 }
 
 /** Walks the stages furthest-first and returns the deepest one reached. */
-/** Document types that are staff output rather than something a party was asked to
- *  supply, so they do not gate documentation progress or closure. A signed cost
- *  sheet filed for the record would otherwise read as an unapproved closure
- *  requirement and stall the deal. */
-export const DOCUMENTATION_EXCLUDED_TYPES = ['COST_SHEET']
-
-function countsTowardDocumentation(doc: { docType?: string }): boolean {
-  return !doc.docType || !DOCUMENTATION_EXCLUDED_TYPES.includes(doc.docType)
+/** Whether this document is something a party owes, and so gates progress.
+ *
+ *  Only RECORD documents are exempt — things the platform produced and filed, like
+ *  a signed cost sheet. Anything else, including a document with no purpose set,
+ *  counts: the gating behaviour is the default, so a new document type cannot
+ *  accidentally opt itself out of closure by omission.
+ *
+ *  This replaced a denylist of docTypes, which had the failure the wrong way round
+ *  — invisible at the point a document is created, so the next staff-produced type
+ *  would have stalled the deal it was meant to record, with nothing to warn
+ *  whoever added it. */
+export function gatesDocumentation(doc: { purpose?: string }): boolean {
+  return doc.purpose !== 'RECORD'
 }
 
 export function computeDealProgress(deal: DealProgressInput): DealProgress {
-  const gatingDocs = deal.documents.filter(countsTowardDocumentation)
+  const gatingDocs = deal.documents.filter(gatesDocumentation)
   const docsTotal = gatingDocs.length
   const docsApproved = gatingDocs.filter((d) => d.status === 'APPROVED').length
 
