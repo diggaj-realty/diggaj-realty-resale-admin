@@ -11,6 +11,31 @@ import { recordAudit } from '@/lib/audit'
  *  by surface.
  */
 
+/** Prisma's client and its transaction handle share the model methods used here,
+ *  so callers can pass either. */
+type Db = Pick<typeof prisma, 'propertyInterest'>
+
+/** Which agent owns the deal this offer is about to become.
+ *
+ *  The buyer's lead wins over Property.agentId: assigning an agent to a lead is
+ *  a statement about who is working *this buyer*, whereas Property.agentId is
+ *  the listing-side owner, and the same property can carry many leads owned by
+ *  different agents. Deals created from a negotiation or a site visit already
+ *  resolve it this way; offer acceptance used to read Property.agentId alone, so
+ *  a lead-assigned agent whose property had no agent got a deal with agentId
+ *  null — invisible in their Assigned Deals.
+ */
+export async function resolveDealAgentId(
+  db: Db,
+  { propertyId, buyerId, propertyAgentId }: { propertyId: string; buyerId: string; propertyAgentId: string | null }
+): Promise<string | null> {
+  const lead = await db.propertyInterest.findUnique({
+    where: { propertyId_buyerId: { propertyId, buyerId } },
+    select: { agentId: true },
+  })
+  return lead?.agentId ?? propertyAgentId ?? null
+}
+
 export class OfferAcceptanceError extends Error {
   /** 409 for a genuine conflict (already sold / already has a deal), 404 for a
    *  missing offer, so HTTP callers can map without re-deriving intent. */
@@ -37,7 +62,7 @@ export interface AcceptedOfferResult {
  *  Wrapped in a transaction with the invariants re-read inside it: two
  *  near-simultaneous accepts on the same property could otherwise both pass the
  *  LIVE/existing-deal checks before either write landed, leaving the loser's
- *  offer flipped to ACCEPTED and then crashing on the unique constraint instead
+ *  offer flipped to ACCEPTED and then crashing on the activePropertyId unique constraint instead
  *  of getting the intended conflict error.
  */
 export async function acceptOfferAndOpenDeal({
@@ -60,7 +85,7 @@ export async function acceptOfferAndOpenDeal({
       })
       if (!offer) throw new OfferAcceptanceError('Offer not found', 'NOT_FOUND')
 
-      // Deal.propertyId is @unique so a second deal can never persist, but
+      // Deal.activePropertyId is @unique so a second active deal can never persist, but
       // checking first turns a raw constraint crash into a clear message.
       if (offer.property.status !== 'LIVE') {
         throw new OfferAcceptanceError(
@@ -68,26 +93,38 @@ export async function acceptOfferAndOpenDeal({
           'CONFLICT'
         )
       }
-      const existingDeal = await tx.deal.findUnique({ where: { propertyId: offer.property.id } })
+      const existingDeal = await tx.deal.findUnique({ where: { activePropertyId: offer.property.id } })
       if (existingDeal) {
         throw new OfferAcceptanceError('This property already has a deal in progress.', 'CONFLICT')
       }
 
       await tx.offer.update({ where: { id: offerId }, data: { status: 'ACCEPTED' } })
 
+      const agentId = await resolveDealAgentId(tx, {
+        propertyId: offer.property.id,
+        buyerId: offer.buyerId,
+        propertyAgentId: offer.property.agentId,
+      })
+
       const deal = await tx.deal.create({
         data: {
           propertyId: offer.property.id,
+          activePropertyId: offer.property.id,
           buyerId: offer.buyerId,
           sellerId: offer.property.sellerId,
-          agentId: offer.property.agentId,
+          agentId,
           agreedPrice,
           status: 'IN_PROGRESS',
         },
       })
 
       // Lock the property out of search and new offers the moment a deal starts.
-      await tx.property.update({ where: { id: offer.property.id }, data: { status: 'UNDER_CONTRACT' } })
+      // The agent is back-filled only when the listing had none, so a lead-owned
+      // agent taking the deal never overwrites the listing-side assignment.
+      await tx.property.update({
+        where: { id: offer.property.id },
+        data: { status: 'UNDER_CONTRACT', ...(offer.property.agentId ? {} : { agentId }) },
+      })
 
       // Everything else still in flight on this property is now moot.
       await tx.offer.updateMany({
@@ -114,7 +151,7 @@ export async function acceptOfferAndOpenDeal({
         dealId: deal.id,
         buyerId: offer.buyerId,
         sellerId: offer.property.sellerId,
-        agentId: offer.property.agentId,
+        agentId,
         agreedPrice,
         propertyId: offer.property.id,
         propertyTitle: offer.property.title,
@@ -122,7 +159,7 @@ export async function acceptOfferAndOpenDeal({
     })
   } catch (err) {
     if (err instanceof OfferAcceptanceError) throw err
-    // P2002 on Deal.propertyId — a truly simultaneous transaction lost the race
+    // P2002 on Deal.activePropertyId — a truly simultaneous transaction lost the race
     // at the DB level rather than at our check above.
     if (err && typeof err === 'object' && 'code' in err && err.code === 'P2002') {
       throw new OfferAcceptanceError('This property already has a deal in progress.', 'CONFLICT')

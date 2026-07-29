@@ -511,12 +511,13 @@ export async function createDealFromSiteVisit(formData: FormData) {
   if (visit.property.status !== 'LIVE') {
     throw new Error('This property is no longer live — it may already be under contract with another buyer.')
   }
-  const existingDeal = await prisma.deal.findUnique({ where: { propertyId: visit.property.id } })
+  const existingDeal = await prisma.deal.findUnique({ where: { activePropertyId: visit.property.id } })
   if (existingDeal) throw new Error('This property already has a deal in progress.')
 
   const deal = await prisma.deal.create({
     data: {
       propertyId: visit.property.id,
+      activePropertyId: visit.property.id,
       buyerId: visit.buyerId,
       sellerId: visit.property.sellerId,
       agentId: visit.agentId ?? visit.property.agentId,

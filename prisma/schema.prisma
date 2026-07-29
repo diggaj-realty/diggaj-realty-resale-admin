@@ -163,7 +163,10 @@ model Property {
 
   photos              PropertyPhoto[]
   offers              Offer[]
-  deal                Deal?
+  // A list, not a single deal: a sale that falls through leaves its record
+  // behind and the property can be re-attempted. Only one may be active at a
+  // time — enforced by Deal.activePropertyId.
+  deals               Deal[]
   shortlists          Shortlist[]
   views               PropertyView[]
   siteVisits          SiteVisit[]
@@ -223,8 +226,17 @@ model OfferEvent {
 }
 
 model Deal {
-  id               String    @id @default(cuid())
-  propertyId       String    @unique
+  id         String @id @default(cuid())
+  propertyId String
+  /// Mirrors propertyId for as long as this deal holds the property, and is
+  /// NULLed the moment it falls through. Postgres allows many NULLs in a unique
+  /// index, so this enforces "one *active* deal per property" while still
+  /// letting a collapsed sale be re-attempted — propertyId alone used to be
+  /// @unique, which meant one failed deal locked the listing out of ever being
+  /// sold again. Guards that ask "is this property already spoken for?" look
+  /// this up rather than propertyId, and still get a P2002 on a genuine race.
+  activePropertyId String? @unique
+
   buyerId          String
   sellerId         String
   agentId          String?
@@ -237,9 +249,24 @@ model Deal {
   transactionRef   String?
   notes            String?
   commissionAmount Float?
-  status           String    @default("IN_PROGRESS") // DealStatus enum
+  status           String    @default("IN_PROGRESS") // IN_PROGRESS | CLOSED | FELL_THROUGH
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
+
+  /// Stage declared by staff, for coordination work the platform cannot observe
+  /// (a call happened, a price was agreed in person). Only ever moves the
+  /// reported stage *forward* of what the records prove, and only as far as a
+  /// SOFT stage — see resolveDealStage in src/lib/data/dealProgress.ts. Null
+  /// means "whatever the evidence says".
+  manualStage String?
+
+  // ── Collapse (FELL_THROUGH) — loan rejected, buyer walked, seller backed out.
+  // Kept as a record rather than deleted: it is the honest history of the
+  // property and the source of why-we-lose reporting.
+  failedAt     DateTime?
+  failureCode  String? // BUYER_WITHDREW | SELLER_WITHDREW | FINANCING_DENIED | LEGAL_TITLE_ISSUE | PRICE_DISPUTE | UNRESPONSIVE | OTHER
+  failureNote  String?
+  failedBy     String? // user id of the staff member who recorded it
 
   property              Property                   @relation(fields: [propertyId], references: [id])
   buyer                 User                       @relation("BuyerDeals", fields: [buyerId], references: [id])
@@ -255,8 +282,41 @@ model Deal {
   documentAccessGrants  DocumentAccessGrant[]
   identityVerifications DealIdentityVerification[]
   agreements            DealAgreement[]
+  stageChanges          DealStageChange[]
+  costSheets            CostSheet[]
 
+  // propertyId lost its @unique to activePropertyId above, so it needs an index
+  // of its own — "every deal ever attempted on this property" is a common read.
+  @@index([propertyId])
+  @@index([status])
   @@map("deals")
+}
+
+/// Every hand-made move of a deal's stage, forward or back.
+///
+/// Kept because a manually-set stage is a *claim* rather than an observation:
+/// the buyer and seller see the progress bar move, so who moved it, when, and
+/// why has to be answerable months later. A stage that walks backwards is the
+/// case this exists for — without the trail, "it said documentation complete
+/// last week" is unresolvable.
+model DealStageChange {
+  id        String   @id @default(cuid())
+  dealId    String
+  /// Effective stage before and after. `fromStage` is what was displayed, which
+  /// may have been derived rather than declared — that is the thing that
+  /// visibly changed.
+  fromStage String
+  toStage   String
+  direction String // FORWARD | BACKWARD
+  reason    String?
+  actorId   String
+  actorRole String
+  createdAt DateTime @default(now())
+
+  deal Deal @relation(fields: [dealId], references: [id], onDelete: Cascade)
+
+  @@index([dealId])
+  @@map("deal_stage_changes")
 }
 
 // ── Deal progress log — free-text, dated updates on how the paperwork/
@@ -438,21 +498,106 @@ model NegotiationEvent {
 /// from Offer/OfferEvent: that timeline is the platform's own negotiation record
 /// and must stay intact, while this captures what was agreed in the real world.
 model OfflineNegotiation {
-  id              String   @id @default(cuid())
-  dealId          String
-  agreedAmount    Float
-  buyerConfirmed  Boolean  @default(false)
-  sellerConfirmed Boolean  @default(false)
-  notes           String?
-  recordedById    String // the agent (or staff member) who recorded it
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id           String @id @default(cuid())
+  dealId       String
+  agreedAmount Float
+
+  /// Confirmations may ONLY be set by the party they belong to. Staff used to
+  /// tick these on the parties' behalf, which made "the buyer agreed to ₹1.7 Cr"
+  /// a claim by the agent rather than by the buyer — the same asymmetry the
+  /// online offer flow was built to avoid. Recording what was agreed is staff
+  /// work; confirming it is not.
+  buyerConfirmed  Boolean   @default(false)
+  sellerConfirmed Boolean   @default(false)
+  buyerActedAt    DateTime?
+  sellerActedAt   DateTime?
+
+  /// Set when a party says the recorded figure is wrong. A disputed record
+  /// blocks the deal's stage from advancing until it is resolved — paperwork
+  /// must not roll on over an unresolved disagreement about the price.
+  disputedBy    String? // BUYER | SELLER
+  disputedNote  String?
+  disputedAt    DateTime?
+  /// Ends the dispute. The amount can also be corrected instead, which clears
+  /// the dispute and resets both confirmations.
+  resolvedAt    DateTime?
+  supersededAt  DateTime?
+
+  notes        String?
+  recordedById String // the agent (or staff member) who recorded it
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   deal       Deal @relation(fields: [dealId], references: [id], onDelete: Cascade)
   recordedBy User @relation("OfflineNegotiationsRecorded", fields: [recordedById], references: [id])
 
   @@index([dealId])
   @@map("offline_negotiations")
+}
+
+/// A full breakdown of what the buyer actually pays, sent to them by the deal's
+/// agent or by backend.
+///
+/// Structured line items rather than an uploaded PDF, for three reasons: the
+/// buyer can query one line instead of the whole document, the total can be
+/// checked against the confirmed negotiated price rather than quietly
+/// disagreeing with it, and the numbers stay reportable. The formal signed copy
+/// can still be attached as a DealDocument alongside this.
+model CostSheet {
+  id      String @id @default(cuid())
+  dealId  String
+  /// Sending freezes a sheet. Editing a sent sheet supersedes it with a new
+  /// version rather than mutating it, so a figure the buyer already acknowledged
+  /// can never be quietly altered underneath them.
+  version Int    @default(1)
+  status  String @default("DRAFT") // DRAFT | SENT | SUPERSEDED
+
+  authorId String
+  sentAt   DateTime?
+
+  /// Buyer acknowledgement, or a query naming the line they dispute. Mirrors the
+  /// offline-negotiation pattern deliberately: same shape, same expectations.
+  acknowledgedAt DateTime?
+  queriedAt      DateTime?
+  queryNote      String?
+  queriedLineId  String?
+  resolvedAt     DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  deal  Deal            @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  lines CostSheetLine[]
+
+  @@index([dealId])
+  @@map("cost_sheets")
+}
+
+model CostSheetLine {
+  id          String @id @default(cuid())
+  costSheetId String
+  label       String
+  amount      Float
+  /// PROPERTY_PRICE | CHARGE | TAX | STATUTORY | DEDUCTION
+  ///
+  /// Exactly one PROPERTY_PRICE line is expected, and it must match the
+  /// confirmed negotiated amount — see reconcileCostSheet. STATUTORY covers
+  /// stamp duty and registration, which are shown as estimates: they vary by
+  /// sub-registrar office and move with circle rates, so presenting them as
+  /// firm quotes would have buyers budgeting off a number the platform cannot
+  /// stand behind.
+  category    String
+  note        String?
+  /// Off by default. Brokerage and internal margin live on the same sheet as
+  /// the buyer's charges, and a default of "shared" would leak them the first
+  /// time someone forgot to untick it.
+  sharedWithBuyer Boolean @default(false)
+  order           Int     @default(0)
+
+  costSheet CostSheet @relation(fields: [costSheetId], references: [id], onDelete: Cascade)
+
+  @@index([costSheetId])
+  @@map("cost_sheet_lines")
 }
 
 /// A request for money that surfaces on the buyer's or seller's own dashboard

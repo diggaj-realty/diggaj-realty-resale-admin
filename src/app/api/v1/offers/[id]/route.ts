@@ -3,6 +3,7 @@ import { authenticate } from '@/lib/api/auth'
 import { ok, withApi, readJson, ApiError } from '@/lib/api/http'
 import { offerDTO } from '@/lib/api/dto'
 import { logOfferEvent } from '@/lib/actions/offerEvents'
+import { resolveDealAgentId } from '@/lib/data/offerAcceptance'
 
 /** Single offer, with its full negotiation timeline (OfferEvent history) —
  *  the buyer who made it, or the seller who owns the property, can view it.
@@ -38,7 +39,7 @@ export const GET = withApi(async (req, ctx) => {
  *  property (e.g. a counter-accept racing a direct accept) could otherwise
  *  both pass the LIVE/existingDeal checks before either write landed — the
  *  loser's Offer.status still flipped to ACCEPTED, then crashed on the
- *  Deal.propertyId unique constraint with a raw 500 instead of the friendly
+ *  Deal.activePropertyId unique constraint with a raw 500 instead of the friendly
  *  409 this function is supposed to give. */
 async function finalizeAcceptance(offerId: string, agreedPrice: number, actorId: string, actorRole: string) {
   let deal
@@ -50,31 +51,43 @@ async function finalizeAcceptance(offerId: string, agreedPrice: number, actorId:
       })
       if (!offer) throw new ApiError('Offer not found', 404)
 
-      // Defense in depth against double-selling: Deal.propertyId is @unique so a
-      // second deal on the same property can never actually be created, but
+      // Defense in depth against double-selling: Deal.activePropertyId is @unique so a
+      // second *active* deal on the same property can never be created, but
       // relying on that alone means this crashes with a raw DB error instead of
       // a clear message.
       if (offer.property.status !== 'LIVE') {
         throw new ApiError('This property is no longer live — it may already be under contract with another buyer.', 409)
       }
-      const existingDeal = await tx.deal.findUnique({ where: { propertyId: offer.property.id } })
+      const existingDeal = await tx.deal.findUnique({ where: { activePropertyId: offer.property.id } })
       if (existingDeal) throw new ApiError('This property already has a deal in progress.', 409)
 
       await tx.offer.update({ where: { id: offerId }, data: { status: 'ACCEPTED' } })
 
+      const agentId = await resolveDealAgentId(tx, {
+        propertyId: offer.property.id,
+        buyerId: offer.buyerId,
+        propertyAgentId: offer.property.agentId,
+      })
+
       const newDeal = await tx.deal.create({
         data: {
           propertyId: offer.property.id,
+          activePropertyId: offer.property.id,
           buyerId: offer.buyerId,
           sellerId: offer.property.sellerId,
-          agentId: offer.property.agentId,
+          agentId,
           agreedPrice,
           status: 'IN_PROGRESS',
         },
       })
 
-      // Lock the property out of search/new-offers the moment a deal starts.
-      await tx.property.update({ where: { id: offer.property.id }, data: { status: 'UNDER_CONTRACT' } })
+      // Lock the property out of search/new-offers the moment a deal starts. The
+      // agent is back-filled only when the listing had none, so a lead-owned
+      // agent taking the deal never overwrites the listing-side assignment.
+      await tx.property.update({
+        where: { id: offer.property.id },
+        data: { status: 'UNDER_CONTRACT', ...(offer.property.agentId ? {} : { agentId }) },
+      })
 
       await tx.offer.updateMany({
         where: {
@@ -89,7 +102,7 @@ async function finalizeAcceptance(offerId: string, agreedPrice: number, actorId:
     })
   } catch (err) {
     if (err instanceof ApiError) throw err
-    // P2002 = unique constraint violation on Deal.propertyId — the transaction
+    // P2002 = unique constraint violation on Deal.activePropertyId — the transaction
     // above should already have caught this via existingDeal, but a truly
     // simultaneous transaction can still lose the race at the DB level.
     if (err && typeof err === 'object' && 'code' in err && err.code === 'P2002') {
