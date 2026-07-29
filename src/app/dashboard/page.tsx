@@ -21,6 +21,8 @@ import StatTile from '@/components/dashboard/StatTile'
 import IndexRangeCard from '@/components/dashboard/IndexRangeCard'
 import PerformanceChartCard from '@/components/dashboard/PerformanceChartCard'
 import QuickActionsCard from '@/components/dashboard/QuickActionsCard'
+import AgentWorkQueue from '@/components/dashboard/AgentWorkQueue'
+import { getAgentWorkQueue } from '@/lib/data/agentWorkQueue'
 import TrendingInterestCard from '@/components/dashboard/TrendingInterestCard'
 import PropertyLocationCard from '@/components/dashboard/PropertyLocationCard'
 import ExplorePropertiesGrid, { type ExploreProperty } from '@/components/dashboard/ExplorePropertiesGrid'
@@ -94,6 +96,11 @@ export default async function DashboardPage() {
   ])
 
   if (role === 'AGENT') needsAttention = (data as Awaited<ReturnType<typeof getAgentDashboard>>).needsAttention
+
+  // An agent's day is a list of people to contact, so that list comes first and
+  // the statistics come after it. Only agents work a queue — backend and admin are
+  // looking at the whole book, which the stat tiles are actually for.
+  const workQueue = role === 'AGENT' ? await getAgentWorkQueue(id) : null
   const config = ROLE_CONFIG[role]
   const spark = data.performanceSeries.map((p) => p.value)
 
@@ -104,6 +111,12 @@ export default async function DashboardPage() {
         exportFilename={`${role.toLowerCase()}-overview`}
         primaryAction={config.primaryAction}
       />
+
+      {workQueue && (
+        <div className="mb-6" data-animate="fade-up">
+          <AgentWorkQueue queue={workQueue} />
+        </div>
+      )}
 
       {featured && (
         <DashboardHeroBanner
@@ -129,7 +142,10 @@ export default async function DashboardPage() {
       </div>
 
       <div className="mb-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <QuickActionsCard role={role} />
+        {/* Agents get the work queue above instead: this grid only repeated their
+            sidebar, which is dead weight on the page they land on most. Backend and
+            admin keep it — their nav is larger and the shortcuts do save a hop. */}
+        {role !== 'AGENT' && <QuickActionsCard role={role} />}
         {featured ? (
           <PropertyLocationCard
             code={featured.code}

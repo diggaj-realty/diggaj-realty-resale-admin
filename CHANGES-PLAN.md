@@ -203,7 +203,10 @@ code), AGENT 12, BACKEND 14, ADMIN 14, all flat.
 - [x] 45. Nav grouped into Pipeline / Inventory / People / Setup with section headings
 - [ ] 46. Collapse Leads + Site Visits + Negotiations + Accepted Offers + Deals into one **Pipeline** view with stage columns
 - [ ] 47. Manual stage control (28–36) lives on that Pipeline view
-- [ ] 48. Agent landing page = today's work queue, not a nav grid
+- [x] 48. `AgentWorkQueue` at the top of an agent's dashboard: visits in the next few
+      days, leads breaching their SLA, deals blocked by a buyer objection, and the
+      claimable count — each row a person with a tap-to-call number. Quick Actions
+      dropped for agents (it repeated their sidebar). Verified by screenshot.
 - [x] 49. Amenities moved to Setup (admin-only); Performance/Feedback/Help/Settings all
       sit below the divider, out of the primary list
 - [x] 50. Dead BUYER nav branch gone, plus the three unreachable pages it pointed at
