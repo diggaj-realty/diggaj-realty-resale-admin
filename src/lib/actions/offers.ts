@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { logOfferEvent } from '@/lib/actions/offerEvents'
-import { resolveDealAgentId } from '@/lib/data/offerAcceptance'
+import { acceptOfferAndOpenDeal, OfferAcceptanceError } from '@/lib/data/offerAcceptance'
 import { notifyUsers } from '@/lib/notify'
 
 export async function makeOffer(formData: FormData) {
@@ -38,98 +38,36 @@ export async function makeOffer(formData: FormData) {
   revalidatePath('/dashboard')
 }
 
-/** Shared by acceptOffer and acceptCounter: creates the Deal, auto-rejects sibling
- *  non-terminal offers on the same property, notifies the buyer and (if not already
- *  involved) the seller. Not exported — internal helper only.
+/** Shared by acceptOffer and acceptCounter.
  *
- *  Wrapped in a transaction: two near-simultaneous accepts on the same
- *  property could otherwise both pass the LIVE/existingDeal checks before
- *  either write landed — the loser's Offer.status still flipped to ACCEPTED,
- *  then crashed on the Deal.activePropertyId unique constraint with a raw error
- *  instead of the friendly message this function is supposed to give. */
+ *  The Deal creation, property lock, sibling-offer rejection and race handling all
+ *  live in acceptOfferAndOpenDeal now. This used to be a hand-maintained copy of
+ *  it — as did the equivalent in the public API route — with only comments tying
+ *  the three together, which is precisely the drift risk that file's own header
+ *  warned about. Notifications stay here because the wording differs by surface.
+ */
 async function finalizeAcceptance(offerId: string, agreedPrice: number, actorId: string, actorRole: string) {
   let result
   try {
-    result = await prisma.$transaction(async (tx) => {
-      const offer = await tx.offer.findUnique({
-        where: { id: offerId },
-        include: { property: { select: { id: true, title: true, sellerId: true, agentId: true, status: true } } },
-      })
-      if (!offer) throw new Error('Offer not found')
-
-      // Defense in depth against double-selling: Deal.activePropertyId is @unique
-      // so a second *active* deal on the same property can never be created, but
-      // relying on that alone means the seller/agent sees a raw DB-constraint
-      // crash instead of a clear message. Check first.
-      if (offer.property.status !== 'LIVE') {
-        throw new Error('This property is no longer live — it may already be under contract with another buyer.')
-      }
-      const existingDeal = await tx.deal.findUnique({ where: { activePropertyId: offer.property.id } })
-      if (existingDeal) throw new Error('This property already has a deal in progress.')
-
-      await tx.offer.update({ where: { id: offerId }, data: { status: 'ACCEPTED' } })
-
-      const agentId = await resolveDealAgentId(tx, {
-        propertyId: offer.property.id,
-        buyerId: offer.buyerId,
-        propertyAgentId: offer.property.agentId,
-      })
-
-      await tx.deal.create({
-        data: {
-          propertyId: offer.property.id,
-          activePropertyId: offer.property.id,
-          buyerId: offer.buyerId,
-          sellerId: offer.property.sellerId,
-          agentId,
-          agreedPrice,
-          status: 'IN_PROGRESS',
-        },
-      })
-
-      // Lock the property out of search/new-offers the moment a deal starts —
-      // previously it stayed LIVE the whole way through paperwork/payment,
-      // so a second buyer could make (and even have accepted) a competing offer.
-      // The agent is back-filled only when the listing had none, so a lead-owned
-      // agent taking the deal never overwrites the listing-side assignment.
-      await tx.property.update({
-        where: { id: offer.property.id },
-        data: { status: 'UNDER_CONTRACT', ...(offer.property.agentId ? {} : { agentId }) },
-      })
-
-      await tx.offer.updateMany({
-        where: {
-          propertyId: offer.property.id,
-          id: { not: offerId },
-          status: { in: ['PENDING_REVIEW', 'PENDING', 'COUNTERED'] },
-        },
-        data: { status: 'REJECTED' },
-      })
-
-      return offer
-    })
+    result = await acceptOfferAndOpenDeal({ offerId, agreedPrice, actorId, actorRole })
   } catch (err) {
-    if (err && typeof err === 'object' && 'code' in err && err.code === 'P2002') {
-      throw new Error('This property already has a deal in progress.')
-    }
+    // The dashboard surfaces plain Errors, so unwrap the typed one.
+    if (err instanceof OfferAcceptanceError) throw new Error(err.message)
     throw err
   }
 
-  const offer = result
-  await logOfferEvent({ offerId, type: 'ACCEPTED', amount: agreedPrice, actorId, actorRole })
-
   await notifyUsers([
     {
-      userId: offer.buyerId,
+      userId: result.buyerId,
       title: 'Offer accepted',
-      message: `Your offer on ${offer.property.title} was accepted.`,
+      message: `Your offer on ${result.propertyTitle} was accepted.`,
     },
   ])
   await notifyUsers([
     {
-      userId: offer.property.sellerId,
+      userId: result.sellerId,
       title: 'Deal started',
-      message: `An offer on ${offer.property.title} was accepted and a deal has started.`,
+      message: `An offer on ${result.propertyTitle} was accepted and a deal has started.`,
     },
   ])
 

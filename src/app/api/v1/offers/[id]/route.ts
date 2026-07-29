@@ -3,7 +3,8 @@ import { authenticate } from '@/lib/api/auth'
 import { ok, withApi, readJson, ApiError } from '@/lib/api/http'
 import { offerDTO } from '@/lib/api/dto'
 import { logOfferEvent } from '@/lib/actions/offerEvents'
-import { resolveDealAgentId } from '@/lib/data/offerAcceptance'
+import { acceptOfferAndOpenDeal, OfferAcceptanceError } from '@/lib/data/offerAcceptance'
+import { notifyUsers } from '@/lib/notify'
 
 /** Single offer, with its full negotiation timeline (OfferEvent history) —
  *  the buyer who made it, or the seller who owns the property, can view it.
@@ -31,96 +32,35 @@ export const GET = withApi(async (req, ctx) => {
   return ok(offerDTO(offer, { forBuyer: isBuyer }))
 })
 
-/** Creates the Deal, auto-rejects sibling non-terminal offers on the same
- *  property, and notifies both parties. Mirrors finalizeAcceptance in
- *  src/lib/actions/offers.ts.
+/** Accepts the offer via the shared path, then notifies both parties.
  *
- *  Wrapped in a transaction: two near-simultaneous accepts on the same
- *  property (e.g. a counter-accept racing a direct accept) could otherwise
- *  both pass the LIVE/existingDeal checks before either write landed — the
- *  loser's Offer.status still flipped to ACCEPTED, then crashed on the
- *  Deal.activePropertyId unique constraint with a raw 500 instead of the friendly
- *  409 this function is supposed to give. */
+ *  Deal creation, the property lock, sibling-offer rejection and the
+ *  simultaneous-accept race are all handled by acceptOfferAndOpenDeal. This route
+ *  and the dashboard action used to each keep their own copy of that logic, tied
+ *  together only by comments. Notifications stay per-surface, since the wording
+ *  differs.
+ */
 async function finalizeAcceptance(offerId: string, agreedPrice: number, actorId: string, actorRole: string) {
-  let deal
+  let result
   try {
-    deal = await prisma.$transaction(async (tx) => {
-      const offer = await tx.offer.findUnique({
-        where: { id: offerId },
-        include: { property: { select: { id: true, title: true, sellerId: true, agentId: true, status: true } } },
-      })
-      if (!offer) throw new ApiError('Offer not found', 404)
-
-      // Defense in depth against double-selling: Deal.activePropertyId is @unique so a
-      // second *active* deal on the same property can never be created, but
-      // relying on that alone means this crashes with a raw DB error instead of
-      // a clear message.
-      if (offer.property.status !== 'LIVE') {
-        throw new ApiError('This property is no longer live — it may already be under contract with another buyer.', 409)
-      }
-      const existingDeal = await tx.deal.findUnique({ where: { activePropertyId: offer.property.id } })
-      if (existingDeal) throw new ApiError('This property already has a deal in progress.', 409)
-
-      await tx.offer.update({ where: { id: offerId }, data: { status: 'ACCEPTED' } })
-
-      const agentId = await resolveDealAgentId(tx, {
-        propertyId: offer.property.id,
-        buyerId: offer.buyerId,
-        propertyAgentId: offer.property.agentId,
-      })
-
-      const newDeal = await tx.deal.create({
-        data: {
-          propertyId: offer.property.id,
-          activePropertyId: offer.property.id,
-          buyerId: offer.buyerId,
-          sellerId: offer.property.sellerId,
-          agentId,
-          agreedPrice,
-          status: 'IN_PROGRESS',
-        },
-      })
-
-      // Lock the property out of search/new-offers the moment a deal starts. The
-      // agent is back-filled only when the listing had none, so a lead-owned
-      // agent taking the deal never overwrites the listing-side assignment.
-      await tx.property.update({
-        where: { id: offer.property.id },
-        data: { status: 'UNDER_CONTRACT', ...(offer.property.agentId ? {} : { agentId }) },
-      })
-
-      await tx.offer.updateMany({
-        where: {
-          propertyId: offer.property.id,
-          id: { not: offerId },
-          status: { in: ['PENDING_REVIEW', 'PENDING', 'COUNTERED'] },
-        },
-        data: { status: 'REJECTED' },
-      })
-
-      return { newDeal, offer }
-    })
+    result = await acceptOfferAndOpenDeal({ offerId, agreedPrice, actorId, actorRole })
   } catch (err) {
-    if (err instanceof ApiError) throw err
-    // P2002 = unique constraint violation on Deal.activePropertyId — the transaction
-    // above should already have caught this via existingDeal, but a truly
-    // simultaneous transaction can still lose the race at the DB level.
-    if (err && typeof err === 'object' && 'code' in err && err.code === 'P2002') {
-      throw new ApiError('This property already has a deal in progress.', 409)
+    if (err instanceof OfferAcceptanceError) {
+      throw new ApiError(err.message, err.kind === 'NOT_FOUND' ? 404 : 409)
     }
     throw err
   }
 
-  const { newDeal, offer } = deal
-  await logOfferEvent({ offerId, type: 'ACCEPTED', amount: agreedPrice, actorId, actorRole })
-  await prisma.notification.createMany({
-    data: [
-      { userId: offer.buyerId, title: 'Offer accepted', message: `Your offer on ${offer.property.title} was accepted.` },
-      { userId: offer.property.sellerId, title: 'Deal started', message: `An offer on ${offer.property.title} was accepted and a deal has started.` },
-    ],
-  })
+  await notifyUsers([
+    { userId: result.buyerId, title: 'Offer accepted', message: `Your offer on ${result.propertyTitle} was accepted.` },
+    {
+      userId: result.sellerId,
+      title: 'Deal started',
+      message: `An offer on ${result.propertyTitle} was accepted and a deal has started.`,
+    },
+  ])
 
-  return newDeal
+  return result
 }
 
 type Action = 'accept' | 'reject' | 'counter' | 'close'
