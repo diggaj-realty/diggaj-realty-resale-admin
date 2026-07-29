@@ -3,11 +3,12 @@ import { getServerSession } from 'next-auth'
 import { redirect } from 'next/navigation'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { formatINR, formatRelativeTime } from '@/lib/format'
+import { formatINR } from '@/lib/format'
 import PageHeader from '@/components/dashboard/PageHeader'
 import DashboardEntrance from '@/components/dashboard/DashboardEntrance'
 import StatusPill from '@/components/dashboard/StatusPill'
-import AgingBadge from '@/components/dashboard/AgingBadge'
+import LeadBreachBadge from '@/components/dashboard/LeadBreachBadge'
+import ClaimLeadButton from '@/components/dashboard/ClaimLeadButton'
 import { UserRound, MapPin, UserCog, CalendarCheck, Scale } from 'lucide-react'
 import type { Prisma } from '@prisma/client'
 
@@ -29,8 +30,9 @@ export default async function LeadsPage({
   const isStaff = role === 'BACKEND' || role === 'ADMIN'
 
   const where: Prisma.PropertyInterestWhereInput = {}
-  // An agent only ever sees their own book.
-  if (!isStaff) where.agentId = id
+  // An agent sees their own book, and — when they ask for it — the unassigned
+  // pool, so they can pick up work rather than waiting to be handed it.
+  if (!isStaff) where.agentId = owner === 'unassigned' ? null : id
   else if (owner === 'unassigned') where.agentId = null
   if (status) where.status = status
 
@@ -51,7 +53,7 @@ export default async function LeadsPage({
         },
       },
     }),
-    isStaff ? prisma.propertyInterest.count({ where: { agentId: null } }) : Promise.resolve(0),
+    prisma.propertyInterest.count({ where: { agentId: null } }),
     isStaff
       ? prisma.user.findMany({ where: { role: 'AGENT', isActive: true }, select: { id: true, name: true } })
       : Promise.resolve([]),
@@ -62,20 +64,18 @@ export default async function LeadsPage({
       <PageHeader
         title={isStaff ? 'Buyer Leads' : 'My Leads'}
         subtitle={`${leads.length} lead${leads.length === 1 ? '' : 's'}${
-          isStaff && unassignedCount > 0 ? ` · ${unassignedCount} awaiting an agent` : ''
+          unassignedCount > 0 ? ` · ${unassignedCount} awaiting an agent` : ''
         }`}
       />
 
       <div className="mb-4 flex flex-wrap items-center gap-2" data-animate="fade-up">
         <FilterChip href="/dashboard/leads" label="All" active={!status && !owner} />
-        {isStaff && (
-          <FilterChip
-            href="/dashboard/leads?owner=unassigned"
-            label={`Needs an agent${unassignedCount > 0 ? ` (${unassignedCount})` : ''}`}
-            active={owner === 'unassigned'}
-            tone={unassignedCount > 0 ? 'warn' : undefined}
-          />
-        )}
+        <FilterChip
+          href="/dashboard/leads?owner=unassigned"
+          label={`${isStaff ? 'Needs an agent' : 'Up for grabs'}${unassignedCount > 0 ? ` (${unassignedCount})` : ''}`}
+          active={owner === 'unassigned'}
+          tone={unassignedCount > 0 ? 'warn' : undefined}
+        />
         {['CONTACT_REQUESTED', 'SITE_VISIT_REQUESTED', 'SITE_VISIT_COMPLETED', 'INTERESTED', 'NEGOTIATION_IN_PROGRESS'].map(
           (s) => (
             <FilterChip
@@ -120,7 +120,7 @@ export default async function LeadsPage({
                         · {lead.property.title}
                       </span>
                     </p>
-                    <p className="mt-0.5 flex items-center gap-1 truncate text-xs" style={{ color: 'var(--text-3)' }}>
+                    <p className="mt-0.5 flex flex-wrap items-center gap-1 text-xs" style={{ color: 'var(--text-3)' }}>
                       <MapPin size={11} className="flex-shrink-0" /> {lead.property.location}
                       {/* Legacy leads only: new ones can't be created without a
                           number. Flagged in the list so staff can chase it
@@ -136,8 +136,9 @@ export default async function LeadsPage({
                   <span className="whitespace-nowrap text-sm font-bold" style={{ color: 'var(--accent-700)' }}>
                     {formatINR(lead.property.askingPrice)}
                   </span>
-                  <AgingBadge since={lead.updatedAt} />
+                  <LeadBreachBadge lead={lead} />
                   <StatusPill status={lead.status} />
+                  {role === 'AGENT' && !lead.agentId && <ClaimLeadButton interestId={lead.id} />}
                 </div>
 
                 <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t pt-3" style={{ borderColor: 'var(--line)' }}>

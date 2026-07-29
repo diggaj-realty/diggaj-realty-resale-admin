@@ -28,11 +28,16 @@ notification, no status guard. Decision: a save stays a bookmark.
 `createOrUpdateInterest` seeds the agent from `Property.agentId`, then freezes it.
 No agent → broadcast to every active BACKEND + ADMIN.
 
-- [ ] 5. Auto-assign an agent when the listing has none (rule TBD: round-robin / city / load)
+- [x] 5. Auto-assign an agent when the listing has none — `pickAgentForLead`:
+      continuity with whoever already works the buyer, else least busy with city
+      familiarity breaking ties. The reason is stored in the audit trail.
 - [ ] 6. **[FE]** Tell the buyer a lead exists and who owns it
-- [ ] 7. Lead ageing + SLA escalation for unclaimed/uncontacted leads
-- [ ] 8. Targeted staff notification instead of broadcast-to-all
-- [ ] 9. Agents can claim unassigned leads themselves
+- [x] 7. Lead ageing — `leadBreach` distinguishes UNASSIGNED / UNCONTACTED / STALLED
+      with their own clocks, surfaced by `LeadBreachBadge` on the leads list
+- [x] 8. Unassignable leads now notify admins only (a staffing problem, not a triage
+      one) instead of broadcasting to every backend user
+- [x] 9. `claimLead` + `ClaimLeadButton`; agents can now see the unassigned pool via
+      the "Up for grabs" filter, which their own-book-only query previously hid
 
 ## Step 3 — Buyer phone number
 

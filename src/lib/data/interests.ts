@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { notifyUsers } from '@/lib/notify'
 import { recordAudit } from '@/lib/audit'
 import { toStoredPhone, PHONE_ERROR } from '@/lib/phone'
+import { pickAgentForLead, type AssignmentReason } from '@/lib/data/agentAssignment'
 import type { PropertyInterest } from '@prisma/client'
 
 /** Buyer lead (PropertyInterest) domain rules, shared by the public API and the
@@ -135,7 +136,7 @@ export async function createOrUpdateInterest({
 }): Promise<CreateInterestResult> {
   const property = await prisma.property.findUnique({
     where: { id: propertyId },
-    select: { id: true, title: true, status: true, agentId: true, sellerId: true },
+    select: { id: true, title: true, status: true, agentId: true, sellerId: true, city: true },
   })
   if (!property) return { error: 'PROPERTY_NOT_FOUND' as const }
 
@@ -168,7 +169,17 @@ export async function createOrUpdateInterest({
 
   // Seed from the property's default agent. Once set on the interest it's the
   // operational owner and is not silently re-read from the property again.
-  const agentId = existing?.agentId ?? property.agentId ?? null
+  //
+  // Where neither the lead nor the listing has one, an agent is chosen rather
+  // than the lead being left at NEW for someone to notice — that gap is what
+  // produced deals with no agent on them. See pickAgentForLead for the rule.
+  let assignmentReason: AssignmentReason | null = null
+  let agentId = existing?.agentId ?? property.agentId ?? null
+  if (!agentId) {
+    const pick = await pickAgentForLead({ buyerId, city: property.city })
+    agentId = pick.agentId
+    assignmentReason = pick.reason
+  }
   const isNew = !existing
   const wasTerminal = existing ? isTerminalInterestStatus(existing.status) : false
 
@@ -209,7 +220,7 @@ export async function createOrUpdateInterest({
     actorId: buyerId,
     entity: 'PropertyInterest',
     entityId: interest.id,
-    meta: { propertyId, source, agentId, reopened: wasTerminal },
+    meta: { propertyId, source, agentId, reopened: wasTerminal, assignmentReason },
   })
 
   if (agentId) {
@@ -221,17 +232,20 @@ export async function createOrUpdateInterest({
       },
     ])
   } else {
-    // No agent to hand this to — staff must assign one before anything can
-    // happen, so make it their problem rather than letting the lead go quiet.
-    const staff = await prisma.user.findMany({
-      where: { role: { in: ['BACKEND', 'ADMIN'] }, isActive: true },
+    // Only reachable when the platform has no active agent at all, now that
+    // assignment is automatic — so this is a staffing problem, not a triage one,
+    // and it goes to admins who can do something about it rather than to every
+    // backend user. Broadcasting every unassigned lead to the whole desk was how
+    // these notifications got tuned out.
+    const admins = await prisma.user.findMany({
+      where: { role: 'ADMIN', isActive: true },
       select: { id: true },
     })
     await notifyUsers(
-      staff.map((s) => ({
-        userId: s.id,
-        title: 'Buyer interest needs an agent',
-        message: `${buyerName} is interested in ${property.title}, which has no assigned agent.`,
+      admins.map((a) => ({
+        userId: a.id,
+        title: 'Buyer lead could not be assigned',
+        message: `${buyerName} is interested in ${property.title}, but there are no active agents to assign it to.`,
       }))
     )
   }

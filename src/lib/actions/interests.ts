@@ -61,6 +61,34 @@ export async function assignLeadAgent(formData: FormData) {
   revalidateLead(interestId)
 }
 
+/** An agent taking an unassigned lead for themselves.
+ *
+ *  Assignment used to be push-only — staff had to hand a lead over, so an agent
+ *  looking at the unassigned queue could see work they were willing to do and had
+ *  no way to take it. Restricted to leads nobody owns: claiming someone else's is
+ *  a reassignment, which stays a staff decision. */
+export async function claimLead(formData: FormData) {
+  const session = await getServerSession(authOptions)
+  if (!session || session.user.role !== 'AGENT') throw new Error('Only an agent can claim a lead')
+
+  const interestId = String(formData.get('interestId'))
+  if (!interestId) throw new Error('Lead is required')
+
+  const lead = await prisma.propertyInterest.findUnique({
+    where: { id: interestId },
+    select: { agentId: true },
+  })
+  if (!lead) throw new Error('Lead not found')
+  if (lead.agentId) throw new Error('This lead is already assigned')
+
+  const result = await assignInterestAgent({ interestId, agentId: session.user.id, actorId: session.user.id })
+  if ('error' in result) {
+    throw new Error(result.error === 'INVALID_AGENT' ? 'Your account cannot take leads' : 'Lead not found')
+  }
+
+  revalidateLead(interestId)
+}
+
 /** Advances a lead's operational status.
  *
  *  CONVERTED_TO_DEAL is excluded — that's a consequence of a deal actually being
