@@ -105,7 +105,9 @@ export async function deleteListing(formData: FormData) {
   const propertyId = String(formData.get('propertyId'))
   const property = await requirePropertyEditAccess(propertyId)
 
-  const deal = await prisma.deal.findUnique({ where: { propertyId } })
+  // activePropertyId, not propertyId: a deal that fell through shouldn't keep
+  // blocking deletion of a listing that is back on the market.
+  const deal = await prisma.deal.findUnique({ where: { activePropertyId: propertyId } })
   if (deal) throw new Error('This listing has a deal in progress and cannot be deleted.')
 
   const photos = await prisma.propertyPhoto.findMany({ where: { propertyId } })

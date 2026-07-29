@@ -68,7 +68,7 @@ export const POST = withApi(async (req, ctx) => {
         throw new ApiError('This property is no longer live — it may already be under contract.', 409)
       }
 
-      const existingDeal = await tx.deal.findUnique({ where: { propertyId: fresh.propertyId } })
+      const existingDeal = await tx.deal.findUnique({ where: { activePropertyId: fresh.propertyId } })
       if (existingDeal) throw new ApiError('This property already has a deal in progress.', 409)
 
       // Use the operational agent from the negotiation, not Property.agentId —
@@ -76,6 +76,7 @@ export const POST = withApi(async (req, ctx) => {
       const deal = await tx.deal.create({
         data: {
           propertyId: fresh.propertyId,
+          activePropertyId: fresh.propertyId,
           buyerId: fresh.buyerId,
           sellerId: fresh.sellerId,
           agentId: fresh.agentId,
@@ -162,7 +163,7 @@ export const POST = withApi(async (req, ctx) => {
     })
   } catch (err) {
     if (err instanceof ApiError) throw err
-    // P2002 on Deal.propertyId — a genuinely simultaneous attempt lost the race
+    // P2002 on Deal.activePropertyId — a genuinely simultaneous attempt lost the race
     // at the DB level rather than at our check.
     if (err && typeof err === 'object' && 'code' in err && err.code === 'P2002') {
       throw new ApiError('This property already has a deal in progress.', 409)

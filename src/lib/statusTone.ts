@@ -7,6 +7,6 @@ export function statusTone(status: string): string {
   if (['PENDING_VERIFICATION', 'PENDING', 'PENDING_REVIEW', 'UNDER_REVIEW', 'REQUESTED'].includes(s)) return 'gold'
   if (['IN_PROGRESS', 'COUNTERED', 'UNDER_CONTRACT', 'SCHEDULED'].includes(s)) return 'blue'
   if (['NOT_INTERESTED'].includes(s)) return 'red'
-  if (['REJECTED', 'CANCELLED', 'NEGOTIATION_CLOSED'].includes(s)) return 'red'
+  if (['REJECTED', 'CANCELLED', 'NEGOTIATION_CLOSED', 'FELL_THROUGH'].includes(s)) return 'red'
   return 'purple'
 }

@@ -246,12 +246,13 @@ export async function createDealFromNegotiation(formData: FormData) {
       if (property.status !== 'LIVE') {
         throw new Error('This property is no longer live — it may already be under contract.')
       }
-      const existing = await tx.deal.findUnique({ where: { propertyId: fresh.propertyId } })
+      const existing = await tx.deal.findUnique({ where: { activePropertyId: fresh.propertyId } })
       if (existing) throw new Error('This property already has a deal in progress.')
 
       const deal = await tx.deal.create({
         data: {
           propertyId: fresh.propertyId,
+          activePropertyId: fresh.propertyId,
           buyerId: fresh.buyerId,
           sellerId: fresh.sellerId,
           agentId: fresh.agentId,
