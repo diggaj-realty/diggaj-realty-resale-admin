@@ -12,7 +12,8 @@ import AssignLeadAgentForm from '@/components/dashboard/AssignLeadAgentForm'
 import LeadStatusForm from '@/components/dashboard/LeadStatusForm'
 import ProposeSiteVisitForm from '@/components/dashboard/ProposeSiteVisitForm'
 import SiteVisitScheduler from '@/components/dashboard/SiteVisitScheduler'
-import { ArrowLeft, Building2, UserRound, CalendarCheck } from 'lucide-react'
+import { formatPhone, telHref, whatsAppHref } from '@/lib/phone'
+import { ArrowLeft, Building2, UserRound, CalendarCheck, Phone, MessageCircle } from 'lucide-react'
 
 /** One buyer lead, end to end: who wants what, who owns it, the visit, and the
  *  negotiation. This is where an agent works a lead from first contact through to
@@ -121,7 +122,33 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
             <p className="text-[11px] font-medium uppercase tracking-wide" style={{ color: 'var(--text-3)' }}>Buyer</p>
             <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{lead.buyer.name}</p>
             <p className="text-xs" style={{ color: 'var(--text-2)' }}>{lead.buyer.email}</p>
-            {lead.buyer.phone && <p className="text-xs" style={{ color: 'var(--text-2)' }}>{lead.buyer.phone}</p>}
+            {/* Tap-to-call and WhatsApp rather than a number to copy by hand:
+                working a lead *is* phoning the buyer, and agents do it from
+                phones. A lead with no number is flagged, not silently blank. */}
+            {telHref(lead.buyer.phone) ? (
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <a
+                  href={telHref(lead.buyer.phone)!}
+                  className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold"
+                  style={{ background: 'var(--green-50)', color: 'var(--green-700)' }}
+                >
+                  <Phone size={12} /> {formatPhone(lead.buyer.phone)}
+                </a>
+                <a
+                  href={whatsAppHref(lead.buyer.phone, `Hi ${lead.buyer.name}, regarding ${lead.property.title}`)!}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold"
+                  style={{ background: 'var(--surface-1)', color: 'var(--text-2)', border: '1px solid var(--line)' }}
+                >
+                  <MessageCircle size={12} /> WhatsApp
+                </a>
+              </div>
+            ) : (
+              <p className="mt-2 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold" style={{ background: 'var(--amber-50)', color: 'var(--amber-700)' }}>
+                <Phone size={12} /> No phone number on file
+              </p>
+            )}
           </div>
           <div className="mb-3 rounded-lg p-3" style={{ background: 'var(--surface-2)' }}>
             <p className="text-[11px] font-medium uppercase tracking-wide" style={{ color: 'var(--text-3)' }}>Assigned agent</p>

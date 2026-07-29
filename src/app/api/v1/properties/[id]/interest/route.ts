@@ -6,6 +6,7 @@ import {
   propertyInterestDTO,
   INTEREST_SOURCES,
   type InterestSource,
+  interestErrorResponse,
 } from '@/lib/data/interests'
 
 /** Property-scoped alias for `POST /api/v1/interests`, for callers that already
@@ -15,7 +16,7 @@ import {
 export const POST = withApi(async (req, ctx) => {
   const user = await authenticate(req, ['BUYER'])
   const { id: propertyId } = await ctx.params
-  const body = await readJson<{ source?: string; buyerNote?: string }>(req)
+  const body = await readJson<{ source?: string; buyerNote?: string; buyerPhone?: string }>(req)
 
   const source = String(body.source || 'GENERAL_INTEREST').trim().toUpperCase()
   if (!INTEREST_SOURCES.includes(source as InterestSource)) {
@@ -28,11 +29,12 @@ export const POST = withApi(async (req, ctx) => {
     buyerName: user.name,
     source: source as InterestSource,
     buyerNote: body.buyerNote ? String(body.buyerNote).trim() : null,
+    buyerPhone: body.buyerPhone ? String(body.buyerPhone) : null,
   })
 
   if ('error' in result) {
-    if (result.error === 'PROPERTY_NOT_FOUND') throw new ApiError('Property not found', 404)
-    throw new ApiError('This property is no longer available', 400)
+    const { message, status } = interestErrorResponse(result.error)
+    throw new ApiError(message, status)
   }
 
   const full = await prisma.propertyInterest.findUnique({

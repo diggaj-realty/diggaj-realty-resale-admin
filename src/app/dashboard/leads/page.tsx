@@ -122,6 +122,14 @@ export default async function LeadsPage({
                     </p>
                     <p className="mt-0.5 flex items-center gap-1 truncate text-xs" style={{ color: 'var(--text-3)' }}>
                       <MapPin size={11} className="flex-shrink-0" /> {lead.property.location}
+                      {/* Legacy leads only: new ones can't be created without a
+                          number. Flagged in the list so staff can chase it
+                          without opening every lead to find out. */}
+                      {!lead.buyer.phone && (
+                        <span className="ml-1 flex-shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold" style={{ background: 'var(--amber-50)', color: 'var(--amber-700)' }}>
+                          no phone
+                        </span>
+                      )}
                     </p>
                   </div>
 

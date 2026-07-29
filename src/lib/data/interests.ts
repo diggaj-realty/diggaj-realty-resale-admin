@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { notifyUsers } from '@/lib/notify'
 import { recordAudit } from '@/lib/audit'
+import { toStoredPhone, PHONE_ERROR } from '@/lib/phone'
 import type { PropertyInterest } from '@prisma/client'
 
 /** Buyer lead (PropertyInterest) domain rules, shared by the public API and the
@@ -102,6 +103,12 @@ export function propertyInterestDTO(i: InterestWithRelations) {
   }
 }
 
+/** Explicitly discriminated so `'error' in result` narrows for callers — the
+ *  inferred union of this function's many returns did not. */
+export type CreateInterestResult =
+  | { error: InterestError }
+  | { interest: PropertyInterest; agentAssigned: boolean; isNew: boolean }
+
 /** Creates the lead (or revives/updates the buyer's existing open one for this
  *  property), seeds the agent from the property's default, and notifies whoever
  *  now needs to act — the assigned agent, or staff if nobody can be assigned.
@@ -115,13 +122,17 @@ export async function createOrUpdateInterest({
   buyerName,
   source,
   buyerNote,
+  buyerPhone,
 }: {
   propertyId: string
   buyerId: string
   buyerName: string
   source: InterestSource
   buyerNote?: string | null
-}) {
+  /** Lets the frontend collect a missing number in the same request that raises
+   *  the lead, rather than bouncing the buyer to a profile screen first. */
+  buyerPhone?: string | null
+}): Promise<CreateInterestResult> {
   const property = await prisma.property.findUnique({
     where: { id: propertyId },
     select: { id: true, title: true, status: true, agentId: true, sellerId: true },
@@ -132,6 +143,24 @@ export async function createOrUpdateInterest({
   // CLOSED / rejected properties aren't discoverable, so expressing interest in
   // one is a stale-page action rather than a real intent.
   if (property.status !== 'LIVE') return { error: 'PROPERTY_NOT_AVAILABLE' as const }
+
+  // A lead is a promise that someone will phone this buyer, so it cannot be
+  // raised without a number to phone. Enforced here rather than in each route
+  // so no entry point (interests, property interest, site-visit request) can
+  // create an unworkable lead. Google signups arrive without a phone, which is
+  // exactly the case this catches — buyerPhone lets the frontend supply it in
+  // the same request instead of sending the buyer away to a settings screen.
+  const buyer = await prisma.user.findUnique({ where: { id: buyerId }, select: { phone: true } })
+  let phone = buyer?.phone ?? null
+  if (buyerPhone) {
+    const normalized = toStoredPhone(buyerPhone)
+    if (!normalized) return { error: 'INVALID_PHONE' as const }
+    if (normalized !== phone) {
+      await prisma.user.update({ where: { id: buyerId }, data: { phone: normalized } })
+    }
+    phone = normalized
+  }
+  if (!phone) return { error: 'BUYER_PHONE_REQUIRED' as const }
 
   const existing = await prisma.propertyInterest.findUnique({
     where: { propertyId_buyerId: { propertyId, buyerId } },
@@ -263,4 +292,28 @@ export async function assignInterestAgent({
   ])
 
   return { interest: updated }
+}
+
+/** Every failure `createOrUpdateInterest` can return, as message + HTTP status.
+ *
+ *  Centralised because three routes consume it (POST /interests,
+ *  POST /properties/:id/interest, POST /site-visits) and each previously
+ *  hand-mapped the two cases that existed, collapsing anything unrecognised into
+ *  "no longer available" — which would have reported a missing phone number as a
+ *  sold property.
+ */
+export const INTEREST_ERROR_RESPONSES = {
+  PROPERTY_NOT_FOUND: { message: 'Property not found', status: 404 },
+  PROPERTY_NOT_AVAILABLE: { message: 'This property is no longer available', status: 400 },
+  INVALID_PHONE: { message: PHONE_ERROR, status: 400 },
+  BUYER_PHONE_REQUIRED: {
+    message: 'A mobile number is required before you can register interest — an agent needs to be able to call you.',
+    status: 422,
+  },
+} as const satisfies Record<string, { message: string; status: number }>
+
+export type InterestError = keyof typeof INTEREST_ERROR_RESPONSES
+
+export function interestErrorResponse(error: InterestError) {
+  return INTEREST_ERROR_RESPONSES[error]
 }

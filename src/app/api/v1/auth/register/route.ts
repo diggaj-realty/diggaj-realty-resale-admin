@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { signApiToken } from '@/lib/api/jwt'
 import { ok, withApi, readJson, ApiError } from '@/lib/api/http'
 import { userDTO } from '@/lib/api/dto'
+import { toStoredPhone, PHONE_ERROR } from '@/lib/phone'
 import type { UserRole } from '@/types'
 
 /** Self-serve signup for the public-facing frontend. Only BUYER and SELLER
@@ -18,7 +19,6 @@ export const POST = withApi(async (req) => {
   const name = String(body.name || '').trim()
   const email = String(body.email || '').trim().toLowerCase()
   const password = String(body.password || '')
-  const phone = body.phone ? String(body.phone).trim() : null
   const role = String(body.role || 'BUYER').trim().toUpperCase()
 
   if (!name) throw new ApiError('name is required', 400)
@@ -27,6 +27,14 @@ export const POST = withApi(async (req) => {
   if (!PUBLIC_ROLES.includes(role as UserRole)) {
     throw new ApiError(`role must be one of: ${PUBLIC_ROLES.join(', ')}`, 400)
   }
+
+  // Mandatory, not optional: the entire lead process is an agent phoning the
+  // buyer, and a signup with no number produces a lead nobody can act on. Stored
+  // normalised so the same person typed three different ways is one person.
+  const phoneRaw = body.phone ? String(body.phone).trim() : ''
+  if (!phoneRaw) throw new ApiError('phone is required', 400)
+  const phone = toStoredPhone(phoneRaw)
+  if (!phone) throw new ApiError(PHONE_ERROR, 400)
 
   const existing = await prisma.user.findUnique({ where: { email } })
   if (existing) throw new ApiError('An account with this email already exists', 409)
