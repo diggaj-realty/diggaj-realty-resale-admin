@@ -7,6 +7,7 @@ import { prisma } from '@/lib/prisma'
 import { notifyUsers } from '@/lib/notify'
 import { recordAudit } from '@/lib/audit'
 import { formatINR } from '@/lib/format'
+import { WHATSAPP_TEMPLATES } from '@/lib/whatsapp'
 import {
   recordOfflineNegotiation,
   resolveNegotiationDispute,
@@ -86,6 +87,12 @@ export async function recordOfflineNegotiationAction(formData: FormData) {
       userId,
       title: 'Agreed price recorded — please confirm',
       message: `${formatINR(record.agreedAmount)} was recorded as the agreed price for ${deal.property.title}. Confirm it, or tell us if it isn't right.`,
+      // The deal does not move until both sides confirm, so waiting on someone to
+      // open the app is waiting on the transaction.
+      whatsapp: {
+        template: WHATSAPP_TEMPLATES.PRICE_RECORDED,
+        variables: [formatINR(record.agreedAmount), deal.property.title],
+      },
     }))
   )
 

@@ -3,6 +3,7 @@ import { notifyUsers } from '@/lib/notify'
 import { recordAudit } from '@/lib/audit'
 import { toStoredPhone, PHONE_ERROR } from '@/lib/phone'
 import { pickAgentForLead, type AssignmentReason } from '@/lib/data/agentAssignment'
+import { WHATSAPP_TEMPLATES } from '@/lib/whatsapp'
 import type { PropertyInterest } from '@prisma/client'
 
 /** Buyer lead (PropertyInterest) domain rules, shared by the public API and the
@@ -230,6 +231,22 @@ export async function createOrUpdateInterest({
         title: isNew ? 'New buyer interest' : 'Buyer interest updated',
         message: `${buyerName} is interested in ${property.title}. Reach out to them to take this forward.`,
       },
+      // The buyer hears that someone is on it, on the channel they actually read.
+      // Previously raising interest produced silence on their side, so "an agent
+      // will be in touch" was a promise the platform never actually made.
+      ...(isNew
+        ? [
+            {
+              userId: buyerId,
+              title: 'We have your enquiry',
+              message: `An agent will call you shortly about ${property.title}.`,
+              whatsapp: {
+                template: WHATSAPP_TEMPLATES.LEAD_RECEIVED,
+                variables: [buyerName, property.title],
+              },
+            },
+          ]
+        : []),
     ])
   } else {
     // Only reachable when the platform has no active agent at all, now that

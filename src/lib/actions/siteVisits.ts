@@ -7,6 +7,7 @@ import { prisma } from '@/lib/prisma'
 import { notifyUsers } from '@/lib/notify'
 import { recordAudit } from '@/lib/audit'
 import { isTerminalInterestStatus } from '@/lib/data/interests'
+import { WHATSAPP_TEMPLATES } from '@/lib/whatsapp'
 import {
   isVisitOutcome,
   outcomeNeedsAmount,
@@ -208,6 +209,13 @@ export async function bookAgreedSiteVisit(formData: FormData) {
       userId: interest.buyerId,
       title: 'Site visit booked',
       message: `Your visit to ${interest.property.title} is booked for ${scheduledDate.toLocaleString('en-IN')}, as agreed on your call. Tell us if that is wrong.`,
+      // Booked on their behalf, so this has to reach them somewhere they will see
+      // it before the day — an in-app row they never open is not good enough for a
+      // date somebody else put in their diary.
+      whatsapp: {
+        template: WHATSAPP_TEMPLATES.VISIT_BOOKED,
+        variables: [interest.property.title, scheduledDate.toLocaleString('en-IN')],
+      },
     },
   ])
 

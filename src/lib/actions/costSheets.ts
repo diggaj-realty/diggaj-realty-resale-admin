@@ -15,6 +15,7 @@ import {
   type CostLineInput,
 } from '@/lib/data/costSheets'
 import { buyerVisibleTotal } from '@/lib/costSheetFields'
+import { WHATSAPP_TEMPLATES } from '@/lib/whatsapp'
 
 /** Cost-sheet authoring from the internal dashboard. Buyer-side acknowledgement
  *  and queries go through the public API instead — buyers never reach this UI. */
@@ -80,6 +81,12 @@ export async function sendCostSheetAction(formData: FormData) {
       userId: result.buyerId,
       title: 'Cost breakdown shared with you',
       message: `Your full cost breakdown totals ${formatINR(total)}. Review it and acknowledge, or ask us about any line.`,
+      // An unacknowledged sheet holds the deal up, and this is the first time the
+      // buyer sees the full figure — worth more than a bell icon.
+      whatsapp: {
+        template: WHATSAPP_TEMPLATES.COST_SHEET_SENT,
+        variables: [result.propertyTitle, formatINR(total)],
+      },
     },
   ])
 

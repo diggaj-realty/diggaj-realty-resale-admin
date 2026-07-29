@@ -14,6 +14,7 @@ import {
   type CostSheetWithLines,
 } from '@/lib/data/costSheets'
 import { buyerVisibleTotal, costSheetTotal, isEstimateCategory } from '@/lib/costSheetFields'
+import { WHATSAPP_TEMPLATES } from '@/lib/whatsapp'
 
 /** Serialises a sheet. `forBuyer` drops internal lines and recomputes the total
  *  from what remains — a total that doesn't add up from the visible rows would
@@ -130,6 +131,10 @@ export const POST = withApi(async (req, ctx) => {
       userId: sent.buyerId,
       title: 'Cost breakdown shared with you',
       message: `Your full cost breakdown totals ${formatINR(buyerVisibleTotal(sent.sheet.lines))}. Review it and acknowledge, or ask us about any line.`,
+      whatsapp: {
+        template: WHATSAPP_TEMPLATES.COST_SHEET_SENT,
+        variables: [sent.propertyTitle, formatINR(buyerVisibleTotal(sent.sheet.lines))],
+      },
     },
   ])
 

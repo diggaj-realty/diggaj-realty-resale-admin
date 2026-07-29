@@ -206,11 +206,15 @@ export async function sendCostSheet({
   actorId: string
   actorRole: string
 }): Promise<
-  { error: CostSheetError; messages?: string[] } | { sheet: CostSheetWithLines; dealId: string; buyerId: string }
+  | { error: CostSheetError; messages?: string[] }
+  | { sheet: CostSheetWithLines; dealId: string; buyerId: string; propertyTitle: string }
 > {
   const sheet = await prisma.costSheet.findUnique({
     where: { id: sheetId },
-    include: { lines: true, deal: { select: { id: true, agentId: true, status: true, buyerId: true } } },
+    include: {
+      lines: true,
+      deal: { select: { id: true, agentId: true, status: true, buyerId: true, property: { select: { title: true } } } },
+    },
   })
   if (!sheet) return { error: 'NOT_FOUND' }
   if (!canAuthor(sheet.deal, actorId, actorRole)) return { error: 'FORBIDDEN' }
@@ -250,7 +254,12 @@ export async function sendCostSheet({
     return next
   })
 
-  return { sheet: updated, dealId: sheet.dealId, buyerId: sheet.deal.buyerId }
+  return {
+    sheet: updated,
+    dealId: sheet.dealId,
+    buyerId: sheet.deal.buyerId,
+    propertyTitle: sheet.deal.property.title,
+  }
 }
 
 /** Opens a new draft from the sent sheet, so it can be corrected.

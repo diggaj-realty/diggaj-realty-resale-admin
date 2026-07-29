@@ -178,8 +178,13 @@ stay reportable.
       active deal per property; that is a redesign, and resale is arguably one-unit-per-
       listing anyway. Dropping a live column and API field is destructive, so not done
       unilaterally.
-- [ ] 41. Give sellers their own progress view of the deal
-- [ ] 42. WhatsApp/SMS delivery for key events, reusing the phone from step 3
+- [x] 41. `GET /deals/:id/progress` — the 12-step ladder with `source`, for buyer and
+      seller alike. Payments and the cost sheet stay buyer-only; the seller sees the
+      stage and document counts. **[FE]** renders it.
+- [x] 42. `src/lib/whatsapp.ts` + `notifyUsers({ whatsapp })`. Four buyer-facing events
+      opted in: lead received, visit booked, price recorded, cost sheet sent. Meta Cloud
+      API implemented; **you still need to pick a provider, register the templates and
+      set WHATSAPP_PROVIDER** — until then sends are logged, not dropped silently.
 - [ ] 43. Buyer-level lead ownership, or cross-lead visibility so agents don't collide
 - [x] 44. All three offer-acceptance paths now call `acceptOfferAndOpenDeal`; the two
       hand-maintained copies are gone. Notifications stay per-surface.
