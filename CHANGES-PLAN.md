@@ -126,18 +126,28 @@ interested party. And the new stage control let an agent declare
 
 ## Step 10 — Cost sheet (full disclosure of what the buyer pays)
 
-Schema is in place (`CostSheet`, `CostSheetLine`); the logic and UI are next.
+Structured line items rather than an uploaded PDF: the buyer can query one line,
+the property-price line is checked against the confirmed price, and the numbers
+stay reportable.
 
-- [~] 62. `CostSheet` per deal — versioned, `DRAFT` → `SENT` → `SUPERSEDED`
-- [~] 63. `CostSheetLine` — label, amount, category, note, `sharedWithBuyer`
-- [ ] 64. The `PROPERTY_PRICE` line must reconcile with the confirmed negotiated amount
-- [ ] 65. Lines are internal-only by default, so brokerage never leaks by omission
-- [ ] 66. `STATUTORY` lines (stamp duty, registration) labelled as estimates
-- [ ] 67. Editing a sent sheet supersedes it with a new version and needs fresh
-      acknowledgement
-- [ ] 68. Buyer acknowledges, or queries a specific line → same dispute handling as 56–57
-- [ ] 69. Attach the formal PDF via the existing `DealDocument`
-- [ ] 70. Authored by the deal's agent **or** backend; visible to both (your call)
+- [x] 62. `CostSheet` per deal — versioned, `DRAFT` → `SENT` → `SUPERSEDED`
+- [x] 63. `CostSheetLine` — label, amount, category, note, `sharedWithBuyer`
+- [x] 64. `reconcileCostSheet` blocks sending unless the `PROPERTY_PRICE` line matches
+      the confirmed negotiated amount, is present exactly once, and is visible to
+      the buyer (`RECONCILE_FAILED`, 409, with the specific problem)
+- [x] 65. Lines default to internal; the buyer's view strips them and recomputes the
+      total from what remains, so a hidden line can't be inferred from the arithmetic
+- [x] 66. `STATUTORY` lines carry `isEstimate` and are labelled as estimates in the UI
+- [x] 68. Buyer acknowledges, or queries a specific line; an open query blocks stage
+      advancement (`COST_SHEET_QUERIED`, 409) exactly as a disputed price does
+- [x] 67. Revising copies the sent sheet into a new DRAFT and leaves the sent one
+      untouched until the revision is sent; the buyer re-acknowledges the new version
+- [ ] 69. Attach the formal PDF via the existing `DealDocument` — not built
+- [x] 70. Authored by the deal's agent **or** backend/admin; both see every version
+      and every line
+- [ ] 73. **[FE]** Buyer-facing view of the sent sheet with acknowledge / query-a-line
+      actions — `GET /deals/:id/cost-sheet` returns the buyer-safe shape, and
+      `POST /deals/:id/cost-sheet/:sheetId/respond` is BUYER-only
 - [ ] 71. *(later)* Templates per builder/project
 - [ ] 72. *(later)* Generate `PaymentRequest`s from cost-sheet lines
 

@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { recordAudit } from '@/lib/audit'
 import { currentOfflineNegotiation, hasPriceDispute } from '@/lib/data/offlineNegotiation'
+import { hasOpenCostSheetQuery } from '@/lib/data/costSheets'
 import {
   computeDealProgress,
   canDeclareStage,
@@ -47,6 +48,9 @@ export type DealStageError =
   /** One party says the recorded price is wrong. Paperwork must not roll on over
    *  an unresolved disagreement about what is being paid. */
   | 'PRICE_DISPUTED'
+  /** The buyer has queried a line on the cost sheet. Same principle: they are
+   *  asking what they are paying, and the answer is owed before the deal moves. */
+  | 'COST_SHEET_QUERIED'
 
 export interface DealStageView {
   /** What the records prove on their own. */
@@ -125,7 +129,10 @@ export async function declareDealStage({
   // progressing on a number they have just said is wrong. Reverting stays
   // allowed — that is part of how staff walk a disputed deal back.
   const advancing = stageIndex(to) > stageIndex(from)
-  if (advancing && (await hasPriceDispute(dealId))) return { error: 'PRICE_DISPUTED' }
+  if (advancing) {
+    if (await hasPriceDispute(dealId)) return { error: 'PRICE_DISPUTED' }
+    if (await hasOpenCostSheetQuery(dealId)) return { error: 'COST_SHEET_QUERIED' }
+  }
 
   // "A price was agreed" with no price is not a recordable claim.
   const live = await currentOfflineNegotiation(dealId)
@@ -180,6 +187,12 @@ export function dealStageErrorMessage(error: DealStageError): { message: string;
   if (error === 'FORBIDDEN') return { message: 'This deal is assigned to another agent', status: 403 }
   if (error === 'AMOUNT_REQUIRED') {
     return { message: 'Enter the amount that was agreed — a recorded negotiation needs its figure', status: 400 }
+  }
+  if (error === 'COST_SHEET_QUERIED') {
+    return {
+      message: 'The buyer has queried the cost sheet — answer that before moving this deal forward.',
+      status: 409,
+    }
   }
   if (error === 'PRICE_DISPUTED') {
     return {

@@ -11,6 +11,8 @@ import DealFellThroughForm from '@/components/dashboard/DealFellThroughForm'
 import DealStageControl from '@/components/dashboard/DealStageControl'
 import { getDealStageView } from '@/lib/data/dealStageControl'
 import { currentOfflineNegotiation } from '@/lib/data/offlineNegotiation'
+import { currentCostSheet } from '@/lib/data/costSheets'
+import CostSheetPanel from '@/components/dashboard/CostSheetPanel'
 import { STAGE_LABELS } from '@/lib/data/dealProgress'
 import { DEAL_FAILURE_LABELS, type DealFailureCode } from '@/lib/dealFailureCodes'
 import DealLog from '@/components/dashboard/DealLog'
@@ -60,6 +62,15 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
 
   const stageView = await getDealStageView(dealId)
   const liveNegotiation = await currentOfflineNegotiation(dealId)
+  const costSheet = await currentCostSheet(dealId)
+  // Reconcile against the *confirmed* figure, not Deal.agreedPrice — that may
+  // still hold the original accepted offer.
+  const confirmedAmount =
+    liveNegotiation && liveNegotiation.buyerConfirmed && liveNegotiation.sellerConfirmed
+      ? liveNegotiation.agreedAmount
+      : liveNegotiation
+        ? null
+        : deal.agreedPrice
   // Actor names resolved separately: DealStageChange stores only the id, so that
   // the log survives a staff member being deactivated or removed.
   const stageChanges = await prisma.dealStageChange.findMany({
@@ -104,6 +115,37 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
           />
         </div>
       )}
+
+      <div className="mb-6" data-animate="fade-up">
+        <CostSheetPanel
+          dealId={deal.id}
+          canAuthor={canManage && deal.status === 'IN_PROGRESS'}
+          agreedAmount={confirmedAmount}
+          sheet={
+            costSheet
+              ? {
+                  id: costSheet.id,
+                  version: costSheet.version,
+                  status: costSheet.status,
+                  sentAt: costSheet.sentAt?.toISOString() ?? null,
+                  acknowledgedAt: costSheet.acknowledgedAt?.toISOString() ?? null,
+                  queriedAt: costSheet.queriedAt?.toISOString() ?? null,
+                  queryNote: costSheet.queryNote,
+                  queriedLineId: costSheet.queriedLineId,
+                  isQueryOpen: costSheet.queriedAt != null && costSheet.resolvedAt == null,
+                  lines: costSheet.lines.map((l) => ({
+                    id: l.id,
+                    label: l.label,
+                    amount: l.amount,
+                    category: l.category,
+                    note: l.note,
+                    sharedWithBuyer: l.sharedWithBuyer,
+                  })),
+                }
+              : null
+          }
+        />
+      </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className="card p-6" data-animate="fade-up">
