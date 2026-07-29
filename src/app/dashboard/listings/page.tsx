@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { getServerSession } from 'next-auth'
 import { redirect } from 'next/navigation'
-import { MapPin, BedDouble, Ruler, Eye, Tag, ImageOff, User2 } from 'lucide-react'
+import { MapPin, BedDouble, Ruler, Eye, Tag, ImageOff, User2, Heart } from 'lucide-react'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { formatINR } from '@/lib/format'
@@ -49,6 +49,10 @@ export default async function ListingsPage({
       seller: { select: { name: true, role: true } },
       agent: { select: { name: true } },
       photos: { where: { mediaType: 'IMAGE' }, orderBy: { order: 'asc' }, select: { photoUrl: true } },
+      // Saves are a demand signal staff had no way to see: a buyer can shortlist
+      // a listing without ever raising a lead, so a property with fifteen saves
+      // and no enquiries looks identical to one nobody has looked at.
+      _count: { select: { shortlists: true, interests: true } },
     },
   })
 
@@ -191,6 +195,27 @@ export default async function ListingsPage({
                     >
                       <Eye size={11} /> {p.viewCount} views
                     </span>
+                    {p._count.shortlists > 0 && (
+                      <span
+                        className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                        style={{ background: 'var(--surface-2)', color: 'var(--text-2)' }}
+                        title="Buyers who saved this listing"
+                      >
+                        <Heart size={11} /> {p._count.shortlists} saved
+                      </span>
+                    )}
+                    {/* Saved but nobody enquiring is the interesting case — real
+                        interest that never became a lead, which is what the
+                        post-save prompt on the buyer's side is meant to catch. */}
+                    {p._count.shortlists > 0 && p._count.interests === 0 && (
+                      <span
+                        className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                        style={{ background: 'var(--amber-50)', color: 'var(--amber-700)' }}
+                        title="Saved by buyers, but nobody has enquired yet"
+                      >
+                        no enquiries yet
+                      </span>
+                    )}
                     <CompletenessBadge
                       score={listingCompletenessScore({
                         description: p.description,

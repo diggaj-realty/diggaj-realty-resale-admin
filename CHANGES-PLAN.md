@@ -18,10 +18,12 @@ Status: `[ ]` todo · `[~]` in progress · `[x]` done
 Saving currently writes one `Shortlist` row and nothing else: no lead, no
 notification, no status guard. Decision: a save stays a bookmark.
 
-- [ ] 1. Save stays a silent bookmark — no lead created
-- [ ] 2. Staff-visible saves view; save counts surfaced on the listing
+- [x] 1. Save stays a silent bookmark — confirmed, no lead created (unchanged by design)
+- [x] 2. Save counts on the listings list, plus a "no enquiries yet" flag, and a
+      per-buyer saver list on the listing detail — staff/agent only, since the
+      platform brokers buyer contact through the agent rather than the seller
 - [ ] 3. **[FE]** Post-save prompt (*show interest / know more*) → this creates the lead
-- [ ] 4. Block saving non-LIVE listings (match the guard `createOrUpdateInterest` already has)
+- [x] 4. Saving is refused on non-LIVE listings, in both the API and the server action
 
 ## Step 2 — Lead created
 

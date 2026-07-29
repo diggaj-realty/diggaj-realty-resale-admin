@@ -1,9 +1,10 @@
 import Link from 'next/link'
 import { getServerSession } from 'next-auth'
 import { redirect, notFound } from 'next/navigation'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Heart } from 'lucide-react'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { formatPhone, telHref } from '@/lib/phone'
 import { formatINR } from '@/lib/format'
 import PageHeader from '@/components/dashboard/PageHeader'
 import DashboardEntrance from '@/components/dashboard/DashboardEntrance'
@@ -32,6 +33,8 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
       photos: { orderBy: { order: 'asc' } },
     },
   })
+
+
   if (!property) notFound()
 
   const { role, id: userId } = session.user
@@ -45,6 +48,28 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
   const canEdit = property.sellerId === userId || property.agentId === userId || role === 'ADMIN' || role === 'BACKEND'
   const canAssignAgent = role === 'ADMIN' || role === 'BACKEND'
   const canReview = (role === 'ADMIN' || role === 'BACKEND') && ['DRAFT', 'PENDING_VERIFICATION'].includes(property.status)
+
+  // Who saved this listing, and whether they ever went further.
+  //
+  // A save is a silent bookmark — no lead, no notification — so a listing with a
+  // dozen saves and no enquiries was indistinguishable from one nobody had
+  // opened. These are real, warm buyers, and staff had no way to see them.
+  // Staff and the listing's agent only. This page is also visible to the seller,
+  // and the platform deliberately brokers buyer contact through the agent rather
+  // than handing over names and numbers — the leads API strips buyer contact for
+  // sellers for the same reason.
+  const canSeeSavers = role === 'ADMIN' || role === 'BACKEND' || property.agentId === userId
+  const savers = !canSeeSavers ? [] : await prisma.shortlist.findMany({
+    where: { propertyId: id },
+    orderBy: { createdAt: 'desc' },
+    take: 20,
+    include: { user: { select: { id: true, name: true, phone: true } } },
+  })
+  const saverInterests = savers.length === 0 ? [] : await prisma.propertyInterest.findMany({
+    where: { propertyId: id, buyerId: { in: savers.map((x) => x.userId) } },
+    select: { buyerId: true },
+  })
+  const enquiredBuyerIds = new Set(saverInterests.map((x) => x.buyerId))
 
   const agents = canAssignAgent
     ? await prisma.user.findMany({ where: { role: 'AGENT', isActive: true }, select: { id: true, name: true }, orderBy: { name: 'asc' } })
@@ -188,6 +213,40 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
                 <dt className="text-xs" style={{ color: 'var(--text-3)' }}>Last 7d</dt>
               </div>
             </dl>
+
+            {savers.length > 0 && (
+              <div className="mt-4 border-t pt-3" style={{ borderColor: 'var(--line)' }}>
+                <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold" style={{ color: 'var(--text-2)' }}>
+                  <Heart size={12} /> Saved by {savers.length} buyer{savers.length === 1 ? '' : 's'}
+                </p>
+                <ul className="flex flex-col gap-1">
+                  {savers.map((sv) => {
+                    const enquired = enquiredBuyerIds.has(sv.userId)
+                    return (
+                      <li key={sv.id} className="flex flex-wrap items-center gap-2 text-xs" style={{ color: 'var(--text-2)' }}>
+                        <span>{sv.user.name}</span>
+                        {/* Saved but never enquired is the case worth chasing:
+                            genuine interest that never became a lead. */}
+                        {enquired ? (
+                          <span className="rounded-full px-1.5 py-0.5 text-[10px] font-semibold" style={{ background: 'var(--green-50)', color: 'var(--green-700)' }}>
+                            enquired
+                          </span>
+                        ) : (
+                          <span className="rounded-full px-1.5 py-0.5 text-[10px] font-semibold" style={{ background: 'var(--amber-50)', color: 'var(--amber-700)' }}>
+                            no enquiry
+                          </span>
+                        )}
+                        {telHref(sv.user.phone) && (
+                          <a href={telHref(sv.user.phone)!} className="font-semibold" style={{ color: 'var(--accent-700)' }}>
+                            {formatPhone(sv.user.phone)}
+                          </a>
+                        )}
+                      </li>
+                    )
+                  })}
+                </ul>
+              </div>
+            )}
           </div>
 
           <div className="card p-6">
