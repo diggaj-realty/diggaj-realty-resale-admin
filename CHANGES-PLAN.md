@@ -157,7 +157,10 @@ stay reportable.
       advancement (`COST_SHEET_QUERIED`, 409) exactly as a disputed price does
 - [x] 67. Revising copies the sent sheet into a new DRAFT and leaves the sent one
       untouched until the revision is sent; the buyer re-acknowledges the new version
-- [ ] 69. Attach the formal PDF via the existing `DealDocument` — not built
+- [x] 69. `POST /deals/:id/cost-sheet/:sheetId/signed-copy` files the signed PDF as a
+      `DealDocument` of type `COST_SHEET`, linked from `CostSheet.signedDocumentId`.
+      That type is excluded from the closure gate and the documentation stage — it is
+      staff output, and counting it as an unapproved requirement would stall the deal.
 - [x] 70. Authored by the deal's agent **or** backend/admin; both see every version
       and every line
 - [ ] 73. **[FE]** Buyer-facing view of the sent sheet with acknowledge / query-a-line

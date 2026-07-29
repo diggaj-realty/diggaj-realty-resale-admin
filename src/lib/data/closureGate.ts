@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma'
+import { DOCUMENTATION_EXCLUDED_TYPES } from '@/lib/data/dealProgress'
 
 /** Whether a deal is allowed to close.
  *
@@ -29,7 +30,7 @@ export async function evaluateClosureGate(dealId: string): Promise<ClosureCheck 
     prisma.deal.findUnique({
       where: { id: dealId },
       include: {
-        documents: { select: { status: true } },
+        documents: { select: { status: true, docType: true } },
         identityVerifications: { select: { userId: true, status: true } },
         agreements: { select: { status: true, version: true }, orderBy: { version: 'desc' } },
         paymentRequests: { select: { status: true } },
@@ -50,8 +51,11 @@ export async function evaluateClosureGate(dealId: string): Promise<ClosureCheck 
   const finalPaymentMet = deal.finalPaymentDate != null
   if (!finalPaymentMet) blockers.push('Record the final payment before closing the deal')
 
-  const docsTotal = deal.documents.length
-  const docsApproved = deal.documents.filter((d) => d.status === 'APPROVED').length
+  // A signed cost sheet is filed for the record, not requested from a party, so it
+  // must not count as an outstanding closure requirement.
+  const gatingDocs = deal.documents.filter((d) => !DOCUMENTATION_EXCLUDED_TYPES.includes(d.docType))
+  const docsTotal = gatingDocs.length
+  const docsApproved = gatingDocs.filter((d) => d.status === 'APPROVED').length
   const documentsMet = docsApproved === docsTotal
   if (requireDocuments && !documentsMet) {
     blockers.push(

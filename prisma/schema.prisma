@@ -362,6 +362,7 @@ model DealDocument {
   owner        User?                 @relation("DocumentsOwned", fields: [ownerId], references: [id])
   accessGrants DocumentAccessGrant[]
   sharedFor    DocumentRequest[]
+  costSheet    CostSheet?            @relation("CostSheetSignedCopy")
 
   @@index([dealId])
   @@index([ownerId])
@@ -574,11 +575,22 @@ model CostSheet {
   queriedLineId  String?
   resolvedAt     DateTime?
 
+  /// The formal signed copy, as a DealDocument, once one exists.
+  ///
+  /// The structured lines remain the source of truth — they are what reconciles
+  /// against the agreed price and what the buyer queries. This is the paper for the
+  /// file, alongside rather than instead of. Documents of type COST_SHEET are
+  /// excluded from the closure gate and the documentation stage: they are staff
+  /// output, not something a party was asked to supply, and counting one as an
+  /// unapproved closure requirement would stall the deal.
+  signedDocumentId String? @unique
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  deal  Deal            @relation(fields: [dealId], references: [id], onDelete: Cascade)
-  lines CostSheetLine[]
+  deal           Deal          @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  signedDocument DealDocument? @relation("CostSheetSignedCopy", fields: [signedDocumentId], references: [id], onDelete: SetNull)
+  lines          CostSheetLine[]
 
   @@index([dealId])
   @@map("cost_sheets")

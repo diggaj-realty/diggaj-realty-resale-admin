@@ -41,7 +41,9 @@ export interface DealProgressInput {
   buyerId?: string
   sellerId?: string
   siteVisit?: { status: string; outcome: string | null } | null
-  documents: { status: string }[]
+  /** `docType` is optional so existing callers keep working; when present,
+   *  COST_SHEET copies are excluded — see DOCUMENTATION_EXCLUDED_TYPES. */
+  documents: { status: string; docType?: string }[]
   offlineNegotiations: unknown[]
   paymentRequests: { status: string; amount: number }[]
   /** Optional so existing callers that don't select these keep working — the
@@ -74,9 +76,20 @@ const STAGE_LABELS: Record<DealStage, string> = {
 }
 
 /** Walks the stages furthest-first and returns the deepest one reached. */
+/** Document types that are staff output rather than something a party was asked to
+ *  supply, so they do not gate documentation progress or closure. A signed cost
+ *  sheet filed for the record would otherwise read as an unapproved closure
+ *  requirement and stall the deal. */
+export const DOCUMENTATION_EXCLUDED_TYPES = ['COST_SHEET']
+
+function countsTowardDocumentation(doc: { docType?: string }): boolean {
+  return !doc.docType || !DOCUMENTATION_EXCLUDED_TYPES.includes(doc.docType)
+}
+
 export function computeDealProgress(deal: DealProgressInput): DealProgress {
-  const docsTotal = deal.documents.length
-  const docsApproved = deal.documents.filter((d) => d.status === 'APPROVED').length
+  const gatingDocs = deal.documents.filter(countsTowardDocumentation)
+  const docsTotal = gatingDocs.length
+  const docsApproved = gatingDocs.filter((d) => d.status === 'APPROVED').length
 
   const livePayments = deal.paymentRequests.filter((p) => p.status !== 'CANCELLED')
   const paymentsPaid = livePayments.filter((p) => p.status === 'PAID').length
