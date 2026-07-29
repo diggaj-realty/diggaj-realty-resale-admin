@@ -7,6 +7,12 @@ import PageHeader from '@/components/dashboard/PageHeader'
 import StatusPill from '@/components/dashboard/StatusPill'
 import DashboardEntrance from '@/components/dashboard/DashboardEntrance'
 import DealPaymentForms from '@/components/dashboard/DealPaymentForms'
+import DealFellThroughForm from '@/components/dashboard/DealFellThroughForm'
+import DealStageControl from '@/components/dashboard/DealStageControl'
+import { getDealStageView } from '@/lib/data/dealStageControl'
+import { currentOfflineNegotiation } from '@/lib/data/offlineNegotiation'
+import { STAGE_LABELS } from '@/lib/data/dealProgress'
+import { DEAL_FAILURE_LABELS, type DealFailureCode } from '@/lib/dealFailureCodes'
 import DealLog from '@/components/dashboard/DealLog'
 import DealDocuments from '@/components/dashboard/DealDocuments'
 
@@ -52,6 +58,21 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
   const isAssignedAgent = role === 'AGENT' && deal.agent?.id === userId
   const canManage = isAssignedAgent || isStaff
 
+  const stageView = await getDealStageView(dealId)
+  const liveNegotiation = await currentOfflineNegotiation(dealId)
+  // Actor names resolved separately: DealStageChange stores only the id, so that
+  // the log survives a staff member being deactivated or removed.
+  const stageChanges = await prisma.dealStageChange.findMany({
+    where: { dealId },
+    orderBy: { createdAt: 'desc' },
+    take: 8,
+  })
+  const stageActors = await prisma.user.findMany({
+    where: { id: { in: [...new Set(stageChanges.map((c) => c.actorId))] } },
+    select: { id: true, name: true },
+  })
+  const actorNameById = new Map(stageActors.map((u) => [u.id, u.name]))
+
   return (
     <DashboardEntrance>
       <PageHeader
@@ -59,6 +80,30 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
         subtitle={`${deal.property.location} · Agreed Price: ${formatINR(deal.agreedPrice)}`}
         action={<StatusPill status={deal.status} />}
       />
+
+      {stageView && (
+        <div className="mb-6" data-animate="fade-up">
+          <DealStageControl
+            dealId={deal.id}
+            effectiveLabel={stageView.effectiveLabel}
+            source={stageView.source}
+            derivedLabel={STAGE_LABELS[stageView.derived]}
+            options={stageView.options}
+            needsAmount={!liveNegotiation}
+            readOnly={!canManage || deal.status !== 'IN_PROGRESS'}
+            history={stageChanges.map((c) => ({
+              id: c.id,
+              fromStage: c.fromStage,
+              toStage: c.toStage,
+              direction: c.direction,
+              reason: c.reason,
+              actorRole: c.actorRole,
+              actorName: actorNameById.get(c.actorId) ?? null,
+              createdAt: c.createdAt,
+            }))}
+          />
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className="card p-6" data-animate="fade-up">
@@ -87,21 +132,34 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
           )}
         </div>
 
-        {canManage && deal.status !== 'CLOSED' ? (
-          <DealPaymentForms
-            dealId={deal.id}
-            tokenAmount={deal.tokenAmount}
-            tokenDate={deal.tokenDate}
-            finalAmount={deal.finalAmount}
-            finalPaymentDate={deal.finalPaymentDate}
-            paymentMode={deal.paymentMode}
-            transactionRef={deal.transactionRef}
-            notes={deal.notes}
-            canClose={!!deal.finalPaymentDate}
-          />
+        {canManage && deal.status === 'IN_PROGRESS' ? (
+          <div className="flex flex-col gap-6">
+            <DealPaymentForms
+              dealId={deal.id}
+              tokenAmount={deal.tokenAmount}
+              tokenDate={deal.tokenDate}
+              finalAmount={deal.finalAmount}
+              finalPaymentDate={deal.finalPaymentDate}
+              paymentMode={deal.paymentMode}
+              transactionRef={deal.transactionRef}
+              notes={deal.notes}
+              canClose={!!deal.finalPaymentDate}
+            />
+            <DealFellThroughForm dealId={deal.id} alreadyFailed={false} />
+          </div>
         ) : (
-          <div className="card flex items-center justify-center p-6 text-sm" style={{ color: 'var(--text-3)' }} data-animate="fade-up">
-            {deal.status === 'CLOSED' ? 'This deal is closed.' : 'Read-only view — only the assigned agent or staff can update this deal.'}
+          <div className="card flex flex-col items-center justify-center gap-1 p-6 text-center text-sm" style={{ color: 'var(--text-3)' }} data-animate="fade-up">
+            {deal.status === 'CLOSED' ? (
+              'This deal is closed.'
+            ) : deal.status === 'FELL_THROUGH' ? (
+              <>
+                <span>This deal fell through{deal.failureCode ? `: ${DEAL_FAILURE_LABELS[deal.failureCode as DealFailureCode] ?? deal.failureCode}` : ''}.</span>
+                {deal.failureNote && <span className="text-xs">{deal.failureNote}</span>}
+                {deal.failedAt && <span className="text-xs">Recorded {formatDate(deal.failedAt)}</span>}
+              </>
+            ) : (
+              'Read-only view — only the assigned agent or staff can update this deal.'
+            )}
           </div>
         )}
       </div>

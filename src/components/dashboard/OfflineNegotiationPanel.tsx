@@ -1,8 +1,8 @@
 'use client'
 
 import { useRef, useState, useTransition } from 'react'
-import { Handshake, CheckCircle2 } from 'lucide-react'
-import { recordOfflineNegotiation } from '@/lib/actions/dealOps'
+import { Handshake, CheckCircle2, AlertTriangle } from 'lucide-react'
+import { recordOfflineNegotiationAction } from '@/lib/actions/dealOps'
 import { formatINR, formatRelativeTime } from '@/lib/format'
 
 export interface OfflineNegotiationView {
@@ -13,11 +13,20 @@ export interface OfflineNegotiationView {
   notes: string | null
   recordedByName: string
   createdAt: string
+  disputedBy: string | null
+  disputedNote: string | null
+  isDisputeOpen: boolean
 }
 
 /** Negotiation that happened in person / by phone rather than on the platform.
  *  Recorded after the fact by the assigned agent (or staff). Deliberately does
- *  not touch the platform offer history — both records coexist. */
+ *  not touch the platform offer history — both records coexist.
+ *
+ *  Staff record the figure and nothing more. The confirmation chips are
+ *  read-only: they used to be checkboxes on this form, which let an agent assert
+ *  that the buyer had agreed to a price the buyer had never seen. Each party now
+ *  confirms (or disputes) on their own screen, and only then does the amount
+ *  become Deal.agreedPrice. */
 export default function OfflineNegotiationPanel({
   dealId,
   canRecord,
@@ -43,12 +52,16 @@ export default function OfflineNegotiationPanel({
         <span
           className="rounded-full px-2.5 py-1 text-[11px] font-semibold"
           style={
-            latest
-              ? { background: 'var(--green-50)', color: 'var(--green-700)' }
-              : { background: 'var(--surface-2)', color: 'var(--text-3)' }
+            !latest
+              ? { background: 'var(--surface-2)', color: 'var(--text-3)' }
+              : latest.isDisputeOpen
+                ? { background: 'var(--red-50)', color: 'var(--red-700)' }
+                : latest.buyerConfirmed && latest.sellerConfirmed
+                  ? { background: 'var(--green-50)', color: 'var(--green-700)' }
+                  : { background: 'var(--amber-50)', color: 'var(--amber-700)' }
           }
         >
-          {latest ? 'Recorded' : 'Not recorded'}
+          {!latest ? 'Not recorded' : latest.isDisputeOpen ? 'Disputed' : latest.buyerConfirmed && latest.sellerConfirmed ? 'Agreed' : 'Awaiting confirmation'}
         </span>
       </div>
 
@@ -59,9 +72,38 @@ export default function OfflineNegotiationPanel({
             Recorded by {latest.recordedByName} · {formatRelativeTime(new Date(latest.createdAt))}
           </p>
           <div className="mt-2 flex flex-wrap gap-1.5">
-            <ConfirmChip label="Buyer confirmed" on={latest.buyerConfirmed} />
-            <ConfirmChip label="Seller confirmed" on={latest.sellerConfirmed} />
+            <ConfirmChip label="Buyer" on={latest.buyerConfirmed} />
+            <ConfirmChip label="Seller" on={latest.sellerConfirmed} />
           </div>
+          {latest.buyerConfirmed && latest.sellerConfirmed ? (
+            <p className="mt-2 text-xs font-semibold" style={{ color: 'var(--green-700)' }}>
+              Confirmed by both sides — this is the deal&rsquo;s agreed price.
+            </p>
+          ) : !latest.isDisputeOpen ? (
+            <p className="mt-2 text-xs" style={{ color: 'var(--text-3)' }}>
+              Awaiting confirmation from{' '}
+              {!latest.buyerConfirmed && !latest.sellerConfirmed
+                ? 'both parties'
+                : !latest.buyerConfirmed
+                  ? 'the buyer'
+                  : 'the seller'}
+              . Until then this is a proposal, not the agreed price.
+            </p>
+          ) : null}
+          {latest.isDisputeOpen && (
+            <div className="mt-2 rounded-lg p-2.5" style={{ background: 'var(--red-50)' }}>
+              <p className="flex items-center gap-1.5 text-xs font-semibold" style={{ color: 'var(--red-700)' }}>
+                <AlertTriangle size={12} /> The {latest.disputedBy?.toLowerCase()} says this is not what was agreed
+              </p>
+              {latest.disputedNote && (
+                <p className="mt-1 text-xs italic" style={{ color: 'var(--red-700)' }}>&ldquo;{latest.disputedNote}&rdquo;</p>
+              )}
+              <p className="mt-1 text-xs" style={{ color: 'var(--text-2)' }}>
+                The deal cannot move forward until this is settled — record the corrected figure below, or resolve it
+                after speaking to them.
+              </p>
+            </div>
+          )}
           {latest.notes && <p className="mt-2 text-sm" style={{ color: 'var(--text-1)' }}>{latest.notes}</p>}
         </div>
       )}
@@ -101,7 +143,7 @@ export default function OfflineNegotiationPanel({
             formData.set('dealId', dealId)
             startTransition(async () => {
               try {
-                await recordOfflineNegotiation(formData)
+                await recordOfflineNegotiationAction(formData)
                 formRef.current?.reset()
                 setOpen(false)
               } catch (err) {
@@ -125,14 +167,9 @@ export default function OfflineNegotiationPanel({
             />
           </div>
 
-          <div className="flex flex-wrap gap-4">
-            <label className="flex items-center gap-2 text-xs" style={{ color: 'var(--text-2)' }}>
-              <input type="checkbox" name="buyerConfirmed" /> Buyer confirmed
-            </label>
-            <label className="flex items-center gap-2 text-xs" style={{ color: 'var(--text-2)' }}>
-              <input type="checkbox" name="sellerConfirmed" /> Seller confirmed
-            </label>
-          </div>
+          <p className="text-xs" style={{ color: 'var(--text-3)' }}>
+            The buyer and seller each confirm this figure themselves — they&rsquo;ll be asked as soon as you save.
+          </p>
 
           <div className="flex flex-col gap-1">
             <label className="text-[11px] font-medium" style={{ color: 'var(--text-3)' }}>Notes</label>
@@ -179,7 +216,7 @@ function ConfirmChip({ label, on }: { label: string; on: boolean }) {
           : { background: 'var(--surface)', color: 'var(--text-3)' }
       }
     >
-      {on && <CheckCircle2 size={11} />} {label}{on ? '' : ': no'}
+      {on && <CheckCircle2 size={11} />} {label} {on ? 'confirmed' : 'pending'}
     </span>
   )
 }
