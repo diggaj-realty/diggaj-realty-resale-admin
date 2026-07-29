@@ -185,7 +185,9 @@ stay reportable.
       opted in: lead received, visit booked, price recorded, cost sheet sent. Meta Cloud
       API implemented; **you still need to pick a provider, register the templates and
       set WHATSAPP_PROVIDER** — until then sends are logged, not dropped silently.
-- [ ] 43. Buyer-level lead ownership, or cross-lead visibility so agents don't collide
+- [x] 43. Auto-assignment routes a buyer's new leads to whoever already works them
+      (ALREADY_WORKS_BUYER), and the lead detail lists their other open leads, flagging
+      any held by a different agent — so a collision is visible rather than silent.
 - [x] 44. All three offer-acceptance paths now call `acceptOfferAndOpenDeal`; the two
       hand-maintained copies are gone. Notifications stay per-surface.
 

@@ -68,6 +68,25 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
       })
     : []
 
+  // This buyer's other live leads.
+  //
+  // PropertyInterest is unique per (property, buyer) and each row carries its own
+  // agent, so one buyer can be worked by several agents at once — all ringing the
+  // same person about different flats, none aware of the others. Auto-assignment
+  // now routes a buyer's new leads to whoever already has them, but leads
+  // predating that, and staff reassignments, can still split a buyer. Showing the
+  // rest of their book is what makes a collision visible.
+  const otherLeads = await prisma.propertyInterest.findMany({
+    where: {
+      buyerId: lead.buyerId,
+      id: { not: lead.id },
+      status: { notIn: ['CONVERTED_TO_DEAL', 'CLOSED', 'CANCELLED', 'NOT_INTERESTED'] },
+    },
+    orderBy: { updatedAt: 'desc' },
+    take: 6,
+    include: { property: { select: { title: true } }, agent: { select: { id: true, name: true } } },
+  })
+
   const negotiation = lead.negotiationSessions[0] ?? null
   const dealId = lead.negotiationSessions.find((n) => n.dealId)?.dealId ?? null
 
@@ -152,6 +171,37 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
               </p>
             )}
           </div>
+          {otherLeads.length > 0 && (
+            <div className="mb-3 rounded-lg p-3" style={{ background: 'var(--surface-2)' }}>
+              <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide" style={{ color: 'var(--text-3)' }}>
+                This buyer&rsquo;s other open leads
+              </p>
+              <ul className="flex flex-col gap-1">
+                {otherLeads.map((o) => {
+                  // Someone else working the same buyer is the case to flag — that
+                  // is two agents calling one person.
+                  const collision = o.agentId != null && o.agentId !== lead.agentId
+                  return (
+                    <li key={o.id} className="text-xs">
+                      <Link href={`/dashboard/leads/${o.id}`} style={{ color: 'var(--accent-700)' }}>
+                        {o.property.title}
+                      </Link>
+                      <span style={{ color: 'var(--text-3)' }}> · {o.status.replace(/_/g, ' ').toLowerCase()}</span>
+                      {collision && (
+                        <span
+                          className="ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold"
+                          style={{ background: 'var(--amber-50)', color: 'var(--amber-700)' }}
+                        >
+                          with {o.agent?.name}
+                        </span>
+                      )}
+                    </li>
+                  )
+                })}
+              </ul>
+            </div>
+          )}
+
           <div className="mb-3 rounded-lg p-3" style={{ background: 'var(--surface-2)' }}>
             <p className="text-[11px] font-medium uppercase tracking-wide" style={{ color: 'var(--text-3)' }}>Assigned agent</p>
             <p className="text-sm font-semibold" style={{ color: lead.agent ? 'var(--text-1)' : 'var(--amber-700)' }}>
