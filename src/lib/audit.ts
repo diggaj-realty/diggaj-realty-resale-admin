@@ -13,6 +13,7 @@ export type AuditAction =
   | 'INTEREST_CREATED'
   | 'INTEREST_STATUS_CHANGED'
   | 'AGENT_ASSIGNED'
+  | 'LEAD_CLOSED'
   // Site visit
   | 'SITE_VISIT_REQUESTED'
   | 'SITE_VISIT_SCHEDULED'

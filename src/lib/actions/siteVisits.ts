@@ -7,6 +7,12 @@ import { prisma } from '@/lib/prisma'
 import { notifyUsers } from '@/lib/notify'
 import { recordAudit } from '@/lib/audit'
 import { isTerminalInterestStatus } from '@/lib/data/interests'
+import {
+  isVisitOutcome,
+  outcomeNeedsAmount,
+  outcomeMeansVisitDidNotHappen,
+  leadStatusForOutcome,
+} from '@/lib/visitOutcomes'
 
 async function requireRole(...roles: string[]) {
   const session = await getServerSession(authOptions)
@@ -557,7 +563,7 @@ export async function declineSiteVisitProposal(formData: FormData) {
 
 /** Agent marks a visit COMPLETED and records post-visit feedback. */
 export async function completeSiteVisit(formData: FormData) {
-  const session = await requireRole('AGENT')
+  const session = await requireRole('AGENT', 'BACKEND', 'ADMIN')
   const id = String(formData.get('id') ?? '')
   if (!id) throw new Error('Missing id')
   const feedback = String(formData.get('feedback') ?? '').trim() || null
@@ -567,7 +573,8 @@ export async function completeSiteVisit(formData: FormData) {
     include: { property: { select: { title: true } } },
   })
   if (!visit) throw new Error('Visit not found')
-  if (visit.agentId !== session.user.id) throw new Error('Unauthorized')
+  const isStaff = session.user.role === 'BACKEND' || session.user.role === 'ADMIN'
+  if (!isStaff && visit.agentId !== session.user.id) throw new Error('Unauthorized')
   if (visit.status !== 'SCHEDULED') throw new Error('Only a scheduled visit can be marked complete')
 
   await prisma.siteVisit.update({ where: { id }, data: { status: 'COMPLETED', feedback } })
@@ -583,42 +590,67 @@ export async function completeSiteVisit(formData: FormData) {
   revalidate()
 }
 
-/** Agent records what happened after a COMPLETED visit — the negotiation
- *  itself happens in person, never online, so this just logs the outcome.
- *  Callable repeatedly (further in-person rounds can update the amount)
- *  right up until a Deal is created from this visit — see
- *  createDealFromSiteVisit. Defaults the amount to the property's asking
- *  price the first time "interested" is recorded with no amount given. */
+/** Records what happened at the visit, and completes it in the same step.
+ *
+ *  Completing and recording used to be two actions, with the outcome refused
+ *  until the visit was already marked COMPLETED. An agent walking out of a flat
+ *  wants one form: what happened, at what price, what next — so this marks the
+ *  visit complete itself when it is still SCHEDULED.
+ *
+ *  Callable repeatedly right up until a Deal is created from this visit, since
+ *  further in-person rounds can change the figure. Open to backend and admin as
+ *  well as the owning agent: an agent who leaves or goes on holiday used to make
+ *  their visits impossible to close out, and the desk could not correct a mistake.
+ */
 export async function recordSiteVisitOutcome(formData: FormData) {
-  const session = await requireRole('AGENT')
+  const session = await requireRole('AGENT', 'BACKEND', 'ADMIN')
   const id = String(formData.get('id') ?? '')
   if (!id) throw new Error('Missing id')
   const outcome = String(formData.get('outcome') ?? '')
-  if (!['INTERESTED', 'NOT_INTERESTED', 'FOLLOW_UP_REQUIRED'].includes(outcome)) throw new Error('Invalid outcome')
+  if (!isVisitOutcome(outcome)) throw new Error('Invalid outcome')
+  const feedback = String(formData.get('feedback') ?? '').trim() || null
 
   const visit = await prisma.siteVisit.findUnique({
     where: { id },
     include: { property: { select: { title: true, askingPrice: true } } },
   })
   if (!visit) throw new Error('Visit not found')
-  if (visit.agentId !== session.user.id) throw new Error('Unauthorized')
-  if (visit.status !== 'COMPLETED') throw new Error('Log the visit as completed before recording an outcome')
+
+  const isStaff = session.user.role === 'BACKEND' || session.user.role === 'ADMIN'
+  if (!isStaff && visit.agentId !== session.user.id) throw new Error('Unauthorized')
+  if (visit.status === 'CANCELLED') throw new Error('This visit was cancelled')
   if (visit.dealId) throw new Error('A deal has already been created from this visit')
 
   const amountRaw = formData.get('interestedAmount')
-  const interestedAmount =
-    outcome === 'INTERESTED'
-      ? amountRaw && String(amountRaw).trim() ? Number(amountRaw) : (visit.interestedAmount ?? visit.property.askingPrice)
-      : null
+  const interestedAmount = outcomeNeedsAmount(outcome)
+    ? amountRaw && String(amountRaw).trim()
+      ? Number(amountRaw)
+      : (visit.interestedAmount ?? visit.property.askingPrice)
+    : null
 
-  if (outcome === 'INTERESTED' && (!interestedAmount || interestedAmount <= 0)) {
+  if (outcomeNeedsAmount(outcome) && (!interestedAmount || interestedAmount <= 0)) {
     throw new Error('Enter a valid amount')
   }
 
-  await prisma.siteVisit.update({ where: { id }, data: { outcome, interestedAmount } })
+  await prisma.siteVisit.update({
+    where: { id },
+    data: {
+      outcome,
+      interestedAmount,
+      // One step: a visit still on the calendar is closed out by recording what
+      // happened at it. A no-show is still a completed visit slot — the outcome
+      // is what says nothing happened, and leaving it SCHEDULED would keep it in
+      // the upcoming-visits list forever.
+      ...(visit.status === 'SCHEDULED' || visit.status === 'REQUESTED' ? { status: 'COMPLETED' } : {}),
+      ...(feedback ? { feedback } : {}),
+    },
+  })
 
-  // Keep the parent lead in step, unless it has already finished.
-  if (visit.interestId) {
+  // Keep the parent lead in step, unless it has already finished. A no-show says
+  // nothing about the buyer's intent, so leadStatusForOutcome returns null and the
+  // lead stays where it was rather than drifting out of the follow-up queue.
+  const nextLeadStatus = leadStatusForOutcome(outcome)
+  if (visit.interestId && nextLeadStatus) {
     const interest = await prisma.propertyInterest.findUnique({
       where: { id: visit.interestId },
       select: { status: true },
@@ -626,12 +658,7 @@ export async function recordSiteVisitOutcome(formData: FormData) {
     if (interest && !isTerminalInterestStatus(interest.status)) {
       await prisma.propertyInterest.update({
         where: { id: visit.interestId },
-        data: {
-          status:
-            outcome === 'INTERESTED' ? 'INTERESTED'
-            : outcome === 'NOT_INTERESTED' ? 'NOT_INTERESTED'
-            : 'SITE_VISIT_COMPLETED',
-        },
+        data: { status: nextLeadStatus },
       })
     }
   }
@@ -641,24 +668,34 @@ export async function recordSiteVisitOutcome(formData: FormData) {
     actorId: session.user.id,
     entity: 'SiteVisit',
     entityId: id,
-    meta: { outcome, interestedAmount, interestId: visit.interestId },
+    meta: { outcome, interestedAmount, interestId: visit.interestId, by: session.user.role },
   })
 
-  await notifyUsers([
-    {
-      userId: visit.buyerId,
-      title: outcome === 'NOT_INTERESTED' ? 'Visit outcome recorded' : 'Great news',
-      message:
-        outcome === 'INTERESTED'
-          ? `Your interest in ${visit.property.title} has been noted — paperwork can begin once the price is finalized.`
-          : outcome === 'FOLLOW_UP_REQUIRED'
-            ? `Your agent will follow up with you about ${visit.property.title}.`
-            : `Your visit to ${visit.property.title} has been closed out.`,
-    },
-  ])
+  // A no-show or failed visit is an internal operations note, not news for the
+  // buyer — telling them "your visit was recorded as you not turning up" invites
+  // an argument the platform cannot settle. Staff follow up by phone instead.
+  if (!outcomeMeansVisitDidNotHappen(outcome)) {
+    await notifyUsers([
+      {
+        userId: visit.buyerId,
+        title: outcome === 'NOT_INTERESTED' ? 'Visit outcome recorded' : 'Thanks for visiting',
+        message:
+          outcome === 'INTERESTED'
+            ? `Your interest in ${visit.property.title} has been noted — paperwork can begin once the price is finalised.`
+            : outcome === 'NEGOTIATING'
+              ? `We have recorded that you are still discussing price on ${visit.property.title}.`
+              : outcome === 'REVISIT_REQUESTED'
+                ? `We will arrange another visit to ${visit.property.title}.`
+                : outcome === 'NOT_INTERESTED'
+                  ? `Your visit to ${visit.property.title} has been closed out.`
+                  : `Your agent will follow up with you about ${visit.property.title}.`,
+      },
+    ])
+  }
 
   revalidate()
   revalidatePath('/dashboard/site-visits-queue')
+  if (visit.interestId) revalidatePath(`/dashboard/leads/${visit.interestId}`)
 }
 
 /** Agent (or staff) creates the Deal directly once a price is agreed —

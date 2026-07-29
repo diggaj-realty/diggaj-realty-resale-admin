@@ -79,12 +79,17 @@ Already built: outcome capture (`INTERESTED` / `NOT_INTERESTED` /
 `FOLLOW_UP_REQUIRED`), `interestedAmount`, and `createDealFromSiteVisit` which
 skips the online offer flow entirely. Gaps are at the edges.
 
-- [ ] 20. Merge complete + outcome into one post-visit form
-- [ ] 21. Expand outcome vocabulary — no-shows, visit failed, revisit, negotiating vs deciding
-- [ ] 22. Explicit **close lead** with a loss reason (feeds win/loss reporting)
-- [ ] 23. Separate "not interested in this property" from "not interested at all"
-- [ ] 24. Log offline negotiation rounds, not just the final figure
-- [ ] 25. Let BACKEND/ADMIN complete + record outcomes, not only the owning agent
+- [x] 20. Recording the outcome completes the visit itself — one form, not two steps
+- [x] 21. Nine outcomes in `src/lib/visitOutcomes.ts`, incl. both no-shows, VISIT_FAILED,
+      REVISIT_REQUESTED, and FOLLOW_UP_REQUIRED split into NEGOTIATING vs DECIDING
+- [x] 22. `closeLead` + `CloseLeadForm` — nine loss reasons, mandatory, stored on the
+      lead with who closed it and when
+- [x] 23. `lossEndsBuyerInterest` — BOUGHT_ELSEWHERE / TIMING / NOT_SERIOUS also close
+      the buyer's other live leads; everything else leaves them warm
+- [~] 24. `NEGOTIATING` now records an in-progress figure distinctly from an agreed one,
+      and `OfflineNegotiation` supersession keeps each recorded round. A per-round
+      log on the visit itself is still not built.
+- [x] 25. `recordSiteVisitOutcome` and `completeSiteVisit` accept BACKEND/ADMIN
 - [x] 26. Buyer confirms/disputes the agreed price before it becomes `Deal.agreedPrice`
       — done as part of step 9 (items 56, 60)
 - [x] 27. On-site agreement → deal directly, skipping negotiation — already works, keep it

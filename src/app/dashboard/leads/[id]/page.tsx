@@ -10,6 +10,8 @@ import StatusPill from '@/components/dashboard/StatusPill'
 import NegotiationPanel from '@/components/dashboard/NegotiationPanel'
 import AssignLeadAgentForm from '@/components/dashboard/AssignLeadAgentForm'
 import LeadStatusForm from '@/components/dashboard/LeadStatusForm'
+import CloseLeadForm from '@/components/dashboard/CloseLeadForm'
+import { LEAD_LOSS_LABELS, type LeadLossReason } from '@/lib/visitOutcomes'
 import ProposeSiteVisitForm from '@/components/dashboard/ProposeSiteVisitForm'
 import SiteVisitScheduler from '@/components/dashboard/SiteVisitScheduler'
 import { formatPhone, telHref, whatsAppHref } from '@/lib/phone'
@@ -171,6 +173,23 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
             <div className="mt-3 border-t pt-3" style={{ borderColor: 'var(--line)' }}>
               <p className="mb-2 text-[11px] font-medium" style={{ color: 'var(--text-3)' }}>Update status</p>
               <LeadStatusForm interestId={lead.id} status={lead.status} />
+            </div>
+          )}
+
+          {/* Closing is separate from a status change: it needs a reason, and it
+              is how a dead lead leaves the queue instead of sitting in it. */}
+          {canManage && !lead.closedAt && lead.status !== 'CONVERTED_TO_DEAL' && (
+            <div className="mt-3 border-t pt-3" style={{ borderColor: 'var(--line)' }}>
+              <CloseLeadForm interestId={lead.id} />
+            </div>
+          )}
+
+          {lead.closedAt && (
+            <div className="mt-3 border-t pt-3" style={{ borderColor: 'var(--line)' }}>
+              <p className="text-xs font-semibold" style={{ color: 'var(--text-2)' }}>
+                Closed{lead.lossReason ? ` — ${LEAD_LOSS_LABELS[lead.lossReason as LeadLossReason] ?? lead.lossReason}` : ''}
+              </p>
+              {lead.lossNote && <p className="mt-0.5 text-xs italic" style={{ color: 'var(--text-3)' }}>&ldquo;{lead.lossNote}&rdquo;</p>}
             </div>
           )}
         </section>

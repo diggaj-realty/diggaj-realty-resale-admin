@@ -391,6 +391,17 @@ model PropertyInterest {
   source    String? // SHORTLIST | CONTACT_REQUEST | SITE_VISIT_REQUEST | GENERAL_INTEREST | OTHER
   buyerNote String?
 
+  /// Why the lead was lost, set when it is closed.
+  ///
+  /// Closing used to mean setting NOT_INTERESTED, which left dead leads looking
+  /// open in the queue and recorded nothing about why. These are the only
+  /// why-we-lose data the platform gets, so the reason is required when closing.
+  /// See src/lib/visitOutcomes.ts for the codes.
+  lossReason String?
+  lossNote   String?
+  closedAt   DateTime?
+  closedById String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
