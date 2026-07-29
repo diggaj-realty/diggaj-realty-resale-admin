@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { signOut } from 'next-auth/react'
 import { ChevronDown, LogOut, Menu, X, Building2 } from 'lucide-react'
-import { getNavIcons, ROLE_LABELS } from './navConfig'
+import { getNavGroups, navHome, ROLE_LABELS } from './navConfig'
 import { initials } from '@/lib/format'
 import SearchOverlay from './SearchOverlay'
 import NotificationsDropdown, { type DashboardNotification } from './NotificationsDropdown'
@@ -65,9 +65,13 @@ export default function DashboardShell({
     return () => document.removeEventListener('mousedown', onClickOutside)
   }, [])
 
-  const navItems = getNavIcons(role)
-  const primaryItems = navItems.filter((item) => !item.secondary)
-  const secondaryItems = navItems.filter((item) => item.secondary)
+  // Grouped, with the utility items still split off to the bottom. Dashboard sits
+  // above the groups because it belongs to none of them.
+  const groups = getNavGroups(role)
+  const primaryGroups = groups
+    .map((group) => ({ ...group, items: group.items.filter((item) => !item.secondary) }))
+    .filter((group) => group.items.length > 0)
+  const secondaryItems = groups.flatMap((group) => group.items.filter((item) => item.secondary))
   const firstName = userName.split(' ')[0]
 
   function isActive(href: string) {
@@ -77,26 +81,56 @@ export default function DashboardShell({
   const navList = (onNavigate?: () => void) => (
     <>
       <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto scrollbar-thin px-3">
-        {primaryItems.map((item) => {
-          const active = isActive(item.href)
-          const Icon = item.icon
+        {(() => {
+          const active = isActive(navHome.href)
+          const Icon = navHome.icon
           return (
             <Link
-              key={item.key}
-              href={item.href}
+              href={navHome.href}
               onClick={onNavigate}
               aria-current={active ? 'page' : undefined}
-              className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors"
+              className="mb-2 flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors"
               style={{
                 background: active ? 'var(--accent-50)' : 'transparent',
                 color: active ? 'var(--accent-700)' : 'var(--text-2)',
               }}
             >
               <Icon size={17} strokeWidth={active ? 2.25 : 2} />
-              <span className="truncate">{item.label}</span>
+              <span className="truncate">{navHome.label}</span>
             </Link>
           )
-        })}
+        })()}
+
+        {primaryGroups.map((group) => (
+          <div key={group.key} className="mb-2 flex flex-col gap-0.5">
+            <p
+              className="px-3 pb-1 pt-1 text-[10px] font-bold uppercase tracking-wider"
+              style={{ color: 'var(--text-3)' }}
+            >
+              {group.label}
+            </p>
+            {group.items.map((item) => {
+              const active = isActive(item.href)
+              const Icon = item.icon
+              return (
+                <Link
+                  key={item.key}
+                  href={item.href}
+                  onClick={onNavigate}
+                  aria-current={active ? 'page' : undefined}
+                  className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors"
+                  style={{
+                    background: active ? 'var(--accent-50)' : 'transparent',
+                    color: active ? 'var(--accent-700)' : 'var(--text-2)',
+                  }}
+                >
+                  <Icon size={17} strokeWidth={active ? 2.25 : 2} />
+                  <span className="truncate">{item.label}</span>
+                </Link>
+              )
+            })}
+          </div>
+        ))}
       </nav>
 
       {secondaryItems.length > 0 && (

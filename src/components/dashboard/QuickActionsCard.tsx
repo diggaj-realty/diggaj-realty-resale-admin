@@ -26,18 +26,12 @@ interface QuickAction {
   highlight?: boolean
 }
 
-// SELLER is intentionally absent — SELLER sessions are redirected away from
-// /dashboard entirely (see dashboard/layout.tsx), so this card never renders
-// for that role.
+// SELLER and BUYER are intentionally absent: dashboard/layout.tsx redirects both
+// away from /dashboard entirely, so this card never renders for either. The BUYER
+// branch outlived that redirect by some margin, pointing at browse/shortlist/
+// saved-searches pages nobody could open — those are gone too.
 function actionsForRole(role: UserRole): QuickAction[] {
   switch (role) {
-    case 'BUYER':
-      return [
-        { label: 'Browse Properties', href: '/dashboard/browse', icon: Search },
-        { label: 'Shortlist', href: '/dashboard/shortlist', icon: Heart },
-        { label: 'Saved Searches', href: '/dashboard/saved-searches', icon: BookmarkPlus },
-        { label: 'Book a Site Visit', href: '/dashboard/site-visits', icon: CalendarCheck },
-      ]
     case 'AGENT':
       return [
         { label: 'My Listings', href: '/dashboard/listings', icon: Building2 },
