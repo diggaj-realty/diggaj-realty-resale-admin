@@ -214,9 +214,10 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
           ) : null}
 
           {/* The agent working this lead can open a visit themselves rather than
-              waiting for the buyer to ask. Only the assigned agent: the action
-              enforces that too, so the UI shouldn't offer what it would refuse. */}
-          {isOwnAgent && (
+              waiting for the buyer to ask. Backend and admin can too — they run the
+              desk, and an agent on leave used to stall every visit they owned. The
+              actions enforce the same rule, so the UI offers exactly what they allow. */}
+          {canManage && (
             <div className={lead.siteVisits.length === 0 ? 'mt-3' : 'mt-4 border-t pt-4'} style={{ borderColor: 'var(--line)' }}>
               <ProposeSiteVisitForm
                 interestId={lead.id}

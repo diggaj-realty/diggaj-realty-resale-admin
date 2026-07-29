@@ -76,7 +76,7 @@ export async function requestSiteVisit(formData: FormData) {
  *  time than the buyer asked for, `proposeSiteVisitDate` is the honest action —
  *  it asks rather than tells. */
 export async function scheduleSiteVisit(formData: FormData) {
-  const session = await requireRole('AGENT')
+  const session = await requireRole('AGENT', 'BACKEND', 'ADMIN')
   const id = String(formData.get('id') ?? '')
   if (!id) throw new Error('Missing id')
   const scheduledDate = parseDate(formData.get('scheduledDate'), 'date')
@@ -86,8 +86,18 @@ export async function scheduleSiteVisit(formData: FormData) {
     include: { property: { select: { title: true } } },
   })
   if (!visit) throw new Error('Visit not found')
-  if (visit.agentId && visit.agentId !== session.user.id) throw new Error('Unauthorized')
+  // Backend and admin run the desk and were previously locked out of scheduling
+  // altogether, which meant an agent on leave stalled every visit they owned.
+  const isStaff = session.user.role === 'BACKEND' || session.user.role === 'ADMIN'
+  if (!isStaff && visit.agentId && visit.agentId !== session.user.id) throw new Error('Unauthorized')
   if (visit.status !== 'REQUESTED') throw new Error('Only a requested visit can be scheduled')
+
+  // Confirming the buyer's own proposed date records their consent directly.
+  // Anything else is staff asserting a slot the buyer agreed to verbally.
+  const via =
+    visit.proposedBy === 'BUYER' && visit.proposedDate?.getTime() === scheduledDate.getTime()
+      ? 'BUYER_ACCEPTED'
+      : 'AGREED_OFFLINE'
 
   await prisma.siteVisit.update({
     where: { id },
@@ -96,9 +106,13 @@ export async function scheduleSiteVisit(formData: FormData) {
     data: {
       status: 'SCHEDULED',
       scheduledDate,
-      agentId: session.user.id,
+      agentId: visit.agentId ?? (isStaff ? null : session.user.id),
       proposedDate: null,
       proposedBy: null,
+      scheduledVia: via,
+      scheduledById: via === 'AGREED_OFFLINE' ? session.user.id : null,
+      disputedAt: null,
+      disputedNote: null,
     },
   })
 
@@ -115,9 +129,141 @@ export async function scheduleSiteVisit(formData: FormData) {
     {
       userId: visit.buyerId,
       title: 'Site visit scheduled',
-      message: `Your visit to ${visit.property.title} is confirmed for ${scheduledDate.toLocaleString('en-IN')}.`,
+      message:
+        via === 'AGREED_OFFLINE'
+          ? `Your visit to ${visit.property.title} is booked for ${scheduledDate.toLocaleString('en-IN')}, as agreed on your call. Tell us if that is wrong.`
+          : `Your visit to ${visit.property.title} is confirmed for ${scheduledDate.toLocaleString('en-IN')}.`,
     },
   ])
+
+  revalidate()
+}
+
+/** Books a visit straight from a phone call, with no proposal step.
+ *
+ *  agentProposeSiteVisit puts a time forward and waits for the buyer to accept in
+ *  the app, which is right when nobody has spoken. It is wrong after a call where
+ *  the slot was already agreed: the agent then has to ask the buyer to confirm
+ *  something they just confirmed out loud, and the visit sits unbooked until they
+ *  get round to it.
+ *
+ *  Recorded as AGREED_OFFLINE with the staff member who booked it, and the buyer
+ *  is told it was booked on their behalf and given a way to dispute it. That
+ *  distinction is the whole safeguard — without it this is merely a way to put
+ *  things in someone else's diary. */
+export async function bookAgreedSiteVisit(formData: FormData) {
+  const session = await requireRole('AGENT', 'BACKEND', 'ADMIN')
+  const interestId = String(formData.get('interestId') ?? '')
+  if (!interestId) throw new Error('Missing lead')
+  const scheduledDate = parseDate(formData.get('scheduledDate'), 'date')
+  const note = String(formData.get('note') ?? '').trim() || null
+
+  const interest = await prisma.propertyInterest.findUnique({
+    where: { id: interestId },
+    include: { property: { select: { id: true, title: true, status: true } } },
+  })
+  if (!interest) throw new Error('Lead not found')
+
+  const isStaff = session.user.role === 'BACKEND' || session.user.role === 'ADMIN'
+  if (!isStaff && interest.agentId !== session.user.id) throw new Error('This lead is assigned to another agent')
+  if (interest.property.status !== 'LIVE') throw new Error('This property is no longer available to visit')
+
+  const open = await prisma.siteVisit.findFirst({
+    where: { interestId, status: { in: ['REQUESTED', 'SCHEDULED'] } },
+  })
+  if (open) throw new Error('This lead already has a visit in progress')
+
+  const visit = await prisma.siteVisit.create({
+    data: {
+      propertyId: interest.propertyId,
+      buyerId: interest.buyerId,
+      agentId: interest.agentId ?? (isStaff ? null : session.user.id),
+      interestId,
+      status: 'SCHEDULED',
+      requestedDate: scheduledDate,
+      scheduledDate,
+      buyerNote: note,
+      scheduledVia: 'AGREED_OFFLINE',
+      scheduledById: session.user.id,
+    },
+  })
+
+  await syncInterest(interestId, 'SITE_VISIT_SCHEDULED')
+  await recordAudit({
+    action: 'SITE_VISIT_SCHEDULED',
+    actorId: session.user.id,
+    entity: 'SiteVisit',
+    entityId: visit.id,
+    meta: { via: 'AGREED_OFFLINE', scheduledDate: scheduledDate.toISOString(), interestId },
+  })
+
+  await notifyUsers([
+    {
+      userId: interest.buyerId,
+      title: 'Site visit booked',
+      message: `Your visit to ${interest.property.title} is booked for ${scheduledDate.toLocaleString('en-IN')}, as agreed on your call. Tell us if that is wrong.`,
+    },
+  ])
+
+  revalidate()
+  revalidatePath(`/dashboard/leads/${interestId}`)
+}
+
+/** The buyer saying a staff-booked slot is not what they agreed.
+ *
+ *  Sends the visit back to being a proposal rather than leaving a date in place
+ *  the buyer has rejected. Only available on AGREED_OFFLINE bookings — a date the
+ *  buyer accepted themselves is rescheduled, not disputed. */
+export async function disputeScheduledSiteVisit(formData: FormData) {
+  const session = await getServerSession(authOptions)
+  if (!session) throw new Error('Unauthorized')
+
+  const id = String(formData.get('id') ?? '')
+  const note = String(formData.get('note') ?? '').trim() || null
+
+  const visit = await prisma.siteVisit.findUnique({
+    where: { id },
+    include: { property: { select: { title: true } } },
+  })
+  if (!visit) throw new Error('Visit not found')
+  if (visit.buyerId !== session.user.id) throw new Error('Only the buyer can dispute their own visit')
+  if (visit.status !== 'SCHEDULED') throw new Error('This visit is not currently booked')
+  if (visit.scheduledVia !== 'AGREED_OFFLINE') {
+    throw new Error('You confirmed this slot yourself — propose a different time instead')
+  }
+
+  await prisma.siteVisit.update({
+    where: { id },
+    data: {
+      status: 'REQUESTED',
+      // The booked date becomes a proposal again, attributed to whoever put it
+      // forward, so the buyer can accept or counter rather than starting over.
+      proposedDate: visit.scheduledDate,
+      proposedBy: 'AGENT',
+      scheduledDate: null,
+      scheduledVia: null,
+      disputedAt: new Date(),
+      disputedNote: note,
+    },
+  })
+
+  await syncInterest(visit.interestId, 'SITE_VISIT_REQUESTED')
+  await recordAudit({
+    action: 'SITE_VISIT_DISPUTED',
+    actorId: session.user.id,
+    entity: 'SiteVisit',
+    entityId: id,
+    meta: { note, wasScheduledFor: visit.scheduledDate?.toISOString() ?? null },
+  })
+
+  const staff = await prisma.user.findMany({ where: { role: 'BACKEND', isActive: true }, select: { id: true } })
+  await notifyUsers(
+    [...(visit.agentId ? [visit.agentId] : []), ...staff.map((x) => x.id)].map((userId) => ({
+      userId,
+      title: 'Buyer disputed a booked visit',
+      message: `The buyer says the slot booked for ${visit.property.title} is not what they agreed.${note ? ` "${note}"` : ''}`,
+    }))
+  )
 
   revalidate()
 }
@@ -227,24 +373,47 @@ export async function proposeSiteVisitDate(formData: FormData) {
   if (!isAgentSide && !isBuyer) throw new Error('Unauthorized')
   const proposedBy = isBuyer ? 'BUYER' : 'AGENT'
 
+  // A reschedule agreed on a call needs the same treatment as a first booking:
+  // otherwise moving a date the buyer already agreed to verbally drops the visit
+  // back into "awaiting a reply" and the agent has to chase a confirmation they
+  // already have. Staff-only — a buyer proposing a time is always a proposal.
+  const agreedOffline = isAgentSide && String(formData.get('agreedOffline') ?? '') === 'true'
+
   await prisma.siteVisit.update({
     where: { id },
-    data: {
-      status: 'REQUESTED',
-      proposedDate,
-      proposedBy,
-      // The old booking is no longer agreed once someone asks to move it.
-      scheduledDate: null,
-    },
+    data: agreedOffline
+      ? {
+          status: 'SCHEDULED',
+          scheduledDate: proposedDate,
+          proposedDate: null,
+          proposedBy: null,
+          scheduledVia: 'AGREED_OFFLINE',
+          scheduledById: userId,
+          disputedAt: null,
+          disputedNote: null,
+        }
+      : {
+          status: 'REQUESTED',
+          proposedDate,
+          proposedBy,
+          // The old booking is no longer agreed once someone asks to move it.
+          scheduledDate: null,
+          scheduledVia: null,
+        },
   })
 
-  await syncInterest(visit.interestId, 'SITE_VISIT_REQUESTED')
+  await syncInterest(visit.interestId, agreedOffline ? 'SITE_VISIT_SCHEDULED' : 'SITE_VISIT_REQUESTED')
   await recordAudit({
-    action: 'SITE_VISIT_REQUESTED',
+    action: agreedOffline ? 'SITE_VISIT_SCHEDULED' : 'SITE_VISIT_REQUESTED',
     actorId: userId,
     entity: 'SiteVisit',
     entityId: id,
-    meta: { proposedBy, proposedDate: proposedDate.toISOString(), reschedule: true },
+    meta: {
+      proposedBy,
+      proposedDate: proposedDate.toISOString(),
+      reschedule: true,
+      ...(agreedOffline ? { via: 'AGREED_OFFLINE' } : {}),
+    },
   })
 
   const recipient = isBuyer ? visit.agentId : visit.buyerId
@@ -252,8 +421,10 @@ export async function proposeSiteVisitDate(formData: FormData) {
     await notifyUsers([
       {
         userId: recipient,
-        title: 'New time proposed',
-        message: `A new time for the visit to ${visit.property.title} has been proposed: ${proposedDate.toLocaleString('en-IN')}.`,
+        title: agreedOffline ? 'Visit moved' : 'New time proposed',
+        message: agreedOffline
+          ? `The visit to ${visit.property.title} has been moved to ${proposedDate.toLocaleString('en-IN')}, as agreed on your call. Tell us if that is wrong.`
+          : `A new time for the visit to ${visit.property.title} has been proposed: ${proposedDate.toLocaleString('en-IN')}.`,
       },
     ])
   }

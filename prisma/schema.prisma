@@ -930,6 +930,23 @@ model SiteVisit {
   proposedDate DateTime?
   proposedBy   String? // BUYER | AGENT
 
+  /// How the booked date came to be agreed.
+  ///
+  /// BUYER_ACCEPTED — the buyer tapped accept in the app, so their consent is
+  /// recorded directly. AGREED_OFFLINE — staff booked it after agreeing on a
+  /// call, which is one party asserting the other's consent. Those are different
+  /// kinds of claim and the buyer is shown which one applies, with a way to say
+  /// it is wrong; without the distinction, offline confirmation becomes a way to
+  /// put things in someone's diary unilaterally.
+  scheduledVia  String? // BUYER_ACCEPTED | AGREED_OFFLINE
+  scheduledById String? // staff member who booked it, when AGREED_OFFLINE
+
+  /// Set when the buyer says a staff-booked slot isn't what they agreed. Sends
+  /// the visit back to being a proposal rather than silently keeping a date the
+  /// buyer has rejected.
+  disputedAt   DateTime?
+  disputedNote String?
+
   property Property          @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   buyer    User              @relation("BuyerVisits", fields: [buyerId], references: [id], onDelete: Cascade)
   agent    User?             @relation("AgentVisits", fields: [agentId], references: [id])

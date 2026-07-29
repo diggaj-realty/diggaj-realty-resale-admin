@@ -64,11 +64,14 @@ everywhere, so agents get leads with no number to call.
 Today an agent can only *propose*; the buyer must accept in-app. `scheduleSiteVisit`
 books directly but only on an already-`REQUESTED` visit, and is AGENT-only.
 
-- [ ] 15. Agent books a visit straight to `SCHEDULED` from an agreed call
-- [ ] 16. Give BACKEND/ADMIN scheduling power — they have none today
-- [ ] 17. Record how it was confirmed (`BUYER_ACCEPTED` vs `AGREED_OFFLINE`) + who
-- [ ] 18. **[FE]** Buyer sees "confirmed after your call" + one-tap dispute back to proposal
-- [ ] 19. Same offline-confirm path for reschedules, not just first booking
+- [x] 15. `bookAgreedSiteVisit` books straight to `SCHEDULED`, no proposal step
+- [x] 16. `scheduleSiteVisit` and the booking/propose UI now accept BACKEND/ADMIN
+- [x] 17. `SiteVisit.scheduledVia` (`BUYER_ACCEPTED` | `AGREED_OFFLINE`) + `scheduledById`
+- [~] 18. `disputeScheduledSiteVisit` is built and BUYER-only, and the notification
+      says the visit was booked following their call. **[FE]** still has to surface
+      the dispute action on the buyer's screen.
+- [x] 19. `proposeSiteVisitDate` takes `agreedOffline=true` so a reschedule settled on
+      a call books directly instead of dropping back to "awaiting a reply"
 
 ## Step 5 — Post-visit outcome
 

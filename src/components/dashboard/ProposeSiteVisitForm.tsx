@@ -1,15 +1,23 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { CalendarPlus } from 'lucide-react'
-import { agentProposeSiteVisit } from '@/lib/actions/siteVisits'
+import { CalendarPlus, CalendarCheck, Phone } from 'lucide-react'
+import { agentProposeSiteVisit, bookAgreedSiteVisit } from '@/lib/actions/siteVisits'
 
-/** Lets the assigned agent open a visit themselves.
+type Mode = 'PROPOSE' | 'AGREED'
+
+/** Lets staff open a visit on a lead, in the two ways a visit actually gets set.
  *
- *  Previously only a buyer could start one, so an agent who'd just got off the
- *  phone had nowhere to put a slot. This creates the visit as a *proposal* rather
- *  than a booking — the buyer still has to agree — so an agent can offer a time
- *  without silently committing someone else's diary. */
+ *  *Propose* offers a time and waits for the buyer to accept, which is right when
+ *  nobody has spoken. *Already agreed on a call* books it outright, which is right
+ *  after a call where the slot was settled — otherwise the agent has to ask the
+ *  buyer to confirm in an app what they just confirmed out loud, and the visit
+ *  sits unbooked meanwhile.
+ *
+ *  The second is one party asserting the other's consent, so it is recorded as
+ *  AGREED_OFFLINE and the buyer is told it was booked for them and given a way to
+ *  dispute it. Without that distinction, booking on someone's behalf is simply
+ *  taking their diary. */
 export default function ProposeSiteVisitForm({
   interestId,
   buyerName,
@@ -21,7 +29,7 @@ export default function ProposeSiteVisitForm({
 }) {
   const [pending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
-  const [open, setOpen] = useState(false)
+  const [mode, setMode] = useState<Mode | null>(null)
 
   if (disabledReason) {
     return (
@@ -31,17 +39,29 @@ export default function ProposeSiteVisitForm({
     )
   }
 
-  if (!open) {
+  if (!mode) {
     return (
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="btn-accent flex w-fit items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold"
-      >
-        <CalendarPlus size={13} /> Propose a site visit
-      </button>
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setMode('PROPOSE')}
+          className="btn-accent flex w-fit items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold"
+        >
+          <CalendarPlus size={13} /> Propose a site visit
+        </button>
+        <button
+          type="button"
+          onClick={() => setMode('AGREED')}
+          className="flex w-fit items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold"
+          style={{ background: 'var(--green-50)', color: 'var(--green-700)' }}
+        >
+          <Phone size={13} /> Already agreed on a call
+        </button>
+      </div>
     )
   }
+
+  const isAgreed = mode === 'AGREED'
 
   return (
     <form
@@ -50,10 +70,10 @@ export default function ProposeSiteVisitForm({
         fd.set('interestId', interestId)
         startTransition(async () => {
           try {
-            await agentProposeSiteVisit(fd)
-            setOpen(false)
+            await (isAgreed ? bookAgreedSiteVisit(fd) : agentProposeSiteVisit(fd))
+            setMode(null)
           } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to propose the visit')
+            setError(err instanceof Error ? err.message : 'Could not set up the visit')
           }
         })
       }}
@@ -62,7 +82,7 @@ export default function ProposeSiteVisitForm({
       <div className="flex flex-wrap items-center gap-2">
         <input
           type="datetime-local"
-          name="proposedDate"
+          name={isAgreed ? 'scheduledDate' : 'proposedDate'}
           required
           className="rounded-lg border px-2.5 py-1.5 text-xs outline-none"
           style={{ borderColor: 'var(--line)', color: 'var(--text-1)' }}
@@ -76,13 +96,19 @@ export default function ProposeSiteVisitForm({
         <button
           type="submit"
           disabled={pending}
-          className="btn-accent rounded-lg px-3 py-1.5 text-xs font-semibold disabled:opacity-70"
+          className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold disabled:opacity-70"
+          style={
+            isAgreed
+              ? { background: 'var(--green-50)', color: 'var(--green-700)' }
+              : { background: 'var(--accent-700)', color: '#fff' }
+          }
         >
-          {pending ? 'Sending...' : 'Send proposal'}
+          {isAgreed ? <CalendarCheck size={12} /> : null}
+          {pending ? 'Saving...' : isAgreed ? 'Book it' : 'Send proposal'}
         </button>
         <button
           type="button"
-          onClick={() => setOpen(false)}
+          onClick={() => { setMode(null); setError(null) }}
           className="rounded-lg px-2.5 py-1.5 text-xs font-semibold"
           style={{ background: 'var(--surface-2)', color: 'var(--text-2)' }}
         >
@@ -90,7 +116,9 @@ export default function ProposeSiteVisitForm({
         </button>
       </div>
       <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>
-        {buyerName} can accept, decline, or suggest another time.
+        {isAgreed
+          ? `${buyerName} is told this was booked following your call, and can flag it if it is wrong.`
+          : `${buyerName} can accept, decline, or suggest another time.`}
       </span>
       {error && <p className="text-xs" style={{ color: 'var(--red-700)' }}>{error}</p>}
     </form>
