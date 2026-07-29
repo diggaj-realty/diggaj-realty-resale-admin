@@ -18,6 +18,7 @@ import {
   Globe,
   FileCheck2,
   UserRound,
+  KanbanSquare,
 } from 'lucide-react'
 import type { UserRole } from '@/types'
 
@@ -65,6 +66,9 @@ const feedback: NavIcon = { key: 'feedback', label: 'Feedback', icon: MessageSqu
 const help: NavIcon = { key: 'help', label: 'Help Center', icon: LifeBuoy, href: '/dashboard/help', secondary: true }
 const settings: NavIcon = { key: 'settings', label: 'Settings', icon: Settings, href: '/dashboard/settings', secondary: true }
 
+/** The board over the whole funnel. First in its group because it is the way into
+ *  the five stage pages rather than a sixth destination beside them. */
+const pipeline: NavIcon = { key: 'pipeline', label: 'Pipeline Board', icon: KanbanSquare, href: '/dashboard/pipeline' }
 const leads: NavIcon = { key: 'leads', label: 'Buyer Leads', icon: UserRound, href: '/dashboard/leads' }
 const negotiations: NavIcon = { key: 'negotiations', label: 'Negotiations', icon: Scale, href: '/dashboard/negotiations' }
 const acceptedOffers: NavIcon = { key: 'accepted-offers', label: 'Accepted Offers', icon: FileCheck2, href: '/dashboard/accepted-offers' }
@@ -91,6 +95,7 @@ export function getNavGroups(role: UserRole): NavGroup[] {
     case 'AGENT':
       return [
         g('PIPELINE', [
+          pipeline,
           leads,
           { key: 'site-visits', label: 'Site Visits', icon: CalendarCheck, href: '/dashboard/site-visits' },
           { key: 'negotiations', label: 'My Negotiations', icon: Scale, href: '/dashboard/negotiations' },
@@ -107,6 +112,7 @@ export function getNavGroups(role: UserRole): NavGroup[] {
     case 'BACKEND':
       return [
         g('PIPELINE', [
+          pipeline,
           leads,
           { key: 'site-visits-queue', label: 'Site Visits', icon: CalendarCheck, href: '/dashboard/site-visits-queue' },
           negotiations,
@@ -134,7 +140,7 @@ export function getNavGroups(role: UserRole): NavGroup[] {
           { key: 'users', label: 'All Users', icon: Users, href: '/dashboard/users' },
           clients,
         ]),
-        g('PIPELINE', [leads, negotiations, acceptedOffers, deals]),
+        g('PIPELINE', [pipeline, leads, negotiations, acceptedOffers, deals]),
         g('INVENTORY', [
           { key: 'listings', label: 'All Listings', icon: Building2, href: '/dashboard/listings' },
           publicListings,

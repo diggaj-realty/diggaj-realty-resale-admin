@@ -89,7 +89,7 @@ export default function DashboardShell({
               href={navHome.href}
               onClick={onNavigate}
               aria-current={active ? 'page' : undefined}
-              className="mb-2 flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors"
+              className="mb-1.5 flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-colors"
               style={{
                 background: active ? 'var(--accent-50)' : 'transparent',
                 color: active ? 'var(--accent-700)' : 'var(--text-2)',
@@ -102,7 +102,7 @@ export default function DashboardShell({
         })()}
 
         {primaryGroups.map((group) => (
-          <div key={group.key} className="mb-2 flex flex-col gap-0.5">
+          <div key={group.key} className="mb-1.5 flex flex-col gap-0.5">
             <p
               className="px-3 pb-1 pt-1 text-[10px] font-bold uppercase tracking-wider"
               style={{ color: 'var(--text-3)' }}
@@ -118,7 +118,7 @@ export default function DashboardShell({
                   href={item.href}
                   onClick={onNavigate}
                   aria-current={active ? 'page' : undefined}
-                  className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors"
+                  className="flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-colors"
                   style={{
                     background: active ? 'var(--accent-50)' : 'transparent',
                     color: active ? 'var(--accent-700)' : 'var(--text-2)',
@@ -144,7 +144,7 @@ export default function DashboardShell({
                 href={item.href}
                 onClick={onNavigate}
                 aria-current={active ? 'page' : undefined}
-                className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors"
+                className="flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-colors"
                 style={{
                   background: active ? 'var(--surface-2)' : 'transparent',
                   color: active ? 'var(--text-1)' : 'var(--text-3)',
@@ -158,7 +158,7 @@ export default function DashboardShell({
           <button
             type="button"
             onClick={() => signOut({ callbackUrl: '/login' })}
-            className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition-colors hover:bg-black/[0.03]"
+            className="flex items-center gap-3 rounded-xl px-3 py-2 text-left text-sm font-medium transition-colors hover:bg-black/[0.03]"
             style={{ color: 'var(--red-700)' }}
           >
             <LogOut size={17} />

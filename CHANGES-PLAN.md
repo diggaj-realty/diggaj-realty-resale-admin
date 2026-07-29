@@ -201,8 +201,15 @@ that *"wrap or overflow on real laptop widths."* Counts today — BUYER 11 (dead
 code), AGENT 12, BACKEND 14, ADMIN 14, all flat.
 
 - [x] 45. Nav grouped into Pipeline / Inventory / People / Setup with section headings
-- [ ] 46. Collapse Leads + Site Visits + Negotiations + Accepted Offers + Deals into one **Pipeline** view with stage columns
-- [ ] 47. Manual stage control (28–36) lives on that Pipeline view
+- [x] 46. `/dashboard/pipeline` — one board over the whole funnel, six columns, every
+      thread flagged where it is stuck. The five stage pages remain and the board links
+      into them: it is the way in, not a replacement. Deals opened straight from an
+      accepted offer (no lead behind them) are included, or the board would omit live
+      transactions.
+- [~] 47. The board surfaces each thread's stage and links to the deal where the stage
+      control lives. Editing stage from the board itself is deliberately not built —
+      a declaration needs its reason, and a one-click board control invites unreasoned
+      moves, which is the thing DealStageChange exists to prevent.
 - [x] 48. `AgentWorkQueue` at the top of an agent's dashboard: visits in the next few
       days, leads breaching their SLA, deals blocked by a buyer objection, and the
       claimable count — each row a person with a tap-to-call number. Quick Actions
@@ -213,7 +220,11 @@ code), AGENT 12, BACKEND 14, ADMIN 14, all flat.
       (browse, shortlist, saved-searches) and the BUYER branch in QuickActionsCard
 - [x] 51. ADMIN now leads with People (users, clients) and keeps Amenities; BACKEND leads
       with the Pipeline and owns the listings/KYC queues
-- [ ] 52. Apply the Behance visual direction (orange/yellow/blue/black, Urbanist, hero banner)
+- [x] 52. **Already done, differently — do not repaint.** Commit `162a0d8` (25 Jul,
+      "Redesign dashboard to reference style") deliberately moved to a deep navy/indigo
+      accent and a left sidebar, and decoupled the functional tones *because* the accent
+      is no longer orange. Urbanist and the hero banner are in. My earlier note calling
+      for orange/yellow was stale; acting on it would have reverted that redesign.
 
 ---
 
