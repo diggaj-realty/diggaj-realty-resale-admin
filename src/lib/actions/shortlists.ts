@@ -23,8 +23,9 @@ export async function toggleShortlist(formData: FormData) {
     await prisma.shortlist.delete({ where: { id: existing.id } })
   } else {
     // Guard against shortlisting a property that doesn't exist / isn't browsable.
-    const property = await prisma.property.findUnique({ where: { id: propertyId }, select: { id: true } })
+    const property = await prisma.property.findUnique({ where: { id: propertyId }, select: { id: true, status: true } })
     if (!property) throw new Error('Property not found')
+    if (property.status !== 'LIVE') throw new Error('This property is no longer available')
     await prisma.shortlist.create({ data: { userId: session.user.id, propertyId } })
   }
 

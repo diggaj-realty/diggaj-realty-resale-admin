@@ -1,6 +1,9 @@
 import { prisma } from '@/lib/prisma'
 import { notifyUsers } from '@/lib/notify'
 import { recordAudit } from '@/lib/audit'
+import { toStoredPhone, PHONE_ERROR } from '@/lib/phone'
+import { pickAgentForLead, type AssignmentReason } from '@/lib/data/agentAssignment'
+import { WHATSAPP_TEMPLATES } from '@/lib/whatsapp'
 import type { PropertyInterest } from '@prisma/client'
 
 /** Buyer lead (PropertyInterest) domain rules, shared by the public API and the
@@ -102,6 +105,12 @@ export function propertyInterestDTO(i: InterestWithRelations) {
   }
 }
 
+/** Explicitly discriminated so `'error' in result` narrows for callers — the
+ *  inferred union of this function's many returns did not. */
+export type CreateInterestResult =
+  | { error: InterestError }
+  | { interest: PropertyInterest; agentAssigned: boolean; isNew: boolean }
+
 /** Creates the lead (or revives/updates the buyer's existing open one for this
  *  property), seeds the agent from the property's default, and notifies whoever
  *  now needs to act — the assigned agent, or staff if nobody can be assigned.
@@ -115,16 +124,20 @@ export async function createOrUpdateInterest({
   buyerName,
   source,
   buyerNote,
+  buyerPhone,
 }: {
   propertyId: string
   buyerId: string
   buyerName: string
   source: InterestSource
   buyerNote?: string | null
-}) {
+  /** Lets the frontend collect a missing number in the same request that raises
+   *  the lead, rather than bouncing the buyer to a profile screen first. */
+  buyerPhone?: string | null
+}): Promise<CreateInterestResult> {
   const property = await prisma.property.findUnique({
     where: { id: propertyId },
-    select: { id: true, title: true, status: true, agentId: true, sellerId: true },
+    select: { id: true, title: true, status: true, agentId: true, sellerId: true, city: true },
   })
   if (!property) return { error: 'PROPERTY_NOT_FOUND' as const }
 
@@ -133,13 +146,41 @@ export async function createOrUpdateInterest({
   // one is a stale-page action rather than a real intent.
   if (property.status !== 'LIVE') return { error: 'PROPERTY_NOT_AVAILABLE' as const }
 
+  // A lead is a promise that someone will phone this buyer, so it cannot be
+  // raised without a number to phone. Enforced here rather than in each route
+  // so no entry point (interests, property interest, site-visit request) can
+  // create an unworkable lead. Google signups arrive without a phone, which is
+  // exactly the case this catches — buyerPhone lets the frontend supply it in
+  // the same request instead of sending the buyer away to a settings screen.
+  const buyer = await prisma.user.findUnique({ where: { id: buyerId }, select: { phone: true } })
+  let phone = buyer?.phone ?? null
+  if (buyerPhone) {
+    const normalized = toStoredPhone(buyerPhone)
+    if (!normalized) return { error: 'INVALID_PHONE' as const }
+    if (normalized !== phone) {
+      await prisma.user.update({ where: { id: buyerId }, data: { phone: normalized } })
+    }
+    phone = normalized
+  }
+  if (!phone) return { error: 'BUYER_PHONE_REQUIRED' as const }
+
   const existing = await prisma.propertyInterest.findUnique({
     where: { propertyId_buyerId: { propertyId, buyerId } },
   })
 
   // Seed from the property's default agent. Once set on the interest it's the
   // operational owner and is not silently re-read from the property again.
-  const agentId = existing?.agentId ?? property.agentId ?? null
+  //
+  // Where neither the lead nor the listing has one, an agent is chosen rather
+  // than the lead being left at NEW for someone to notice — that gap is what
+  // produced deals with no agent on them. See pickAgentForLead for the rule.
+  let assignmentReason: AssignmentReason | null = null
+  let agentId = existing?.agentId ?? property.agentId ?? null
+  if (!agentId) {
+    const pick = await pickAgentForLead({ buyerId, city: property.city })
+    agentId = pick.agentId
+    assignmentReason = pick.reason
+  }
   const isNew = !existing
   const wasTerminal = existing ? isTerminalInterestStatus(existing.status) : false
 
@@ -164,8 +205,11 @@ export async function createOrUpdateInterest({
           source: source ?? existing.source,
           // Reopening a finished lead restarts it. An in-flight one only moves
           // on an explicit signal that genuinely advances it — see `advances`.
+          // Reviving clears the closure record too: a lead left holding closedAt
+          // is treated as closed by closeLead and by the lead page, so it could
+          // never be worked to an end a second time.
           ...(wasTerminal
-            ? { status: nextStatus }
+            ? { status: nextStatus, closedAt: null, closedById: null, lossReason: null, lossNote: null }
             : signalStatus && advances(existing.status, signalStatus)
               ? { status: signalStatus }
               : {}),
@@ -180,7 +224,7 @@ export async function createOrUpdateInterest({
     actorId: buyerId,
     entity: 'PropertyInterest',
     entityId: interest.id,
-    meta: { propertyId, source, agentId, reopened: wasTerminal },
+    meta: { propertyId, source, agentId, reopened: wasTerminal, assignmentReason },
   })
 
   if (agentId) {
@@ -190,19 +234,38 @@ export async function createOrUpdateInterest({
         title: isNew ? 'New buyer interest' : 'Buyer interest updated',
         message: `${buyerName} is interested in ${property.title}. Reach out to them to take this forward.`,
       },
+      // The buyer hears that someone is on it, on the channel they actually read.
+      // Previously raising interest produced silence on their side, so "an agent
+      // will be in touch" was a promise the platform never actually made.
+      ...(isNew
+        ? [
+            {
+              userId: buyerId,
+              title: 'We have your enquiry',
+              message: `An agent will call you shortly about ${property.title}.`,
+              whatsapp: {
+                template: WHATSAPP_TEMPLATES.LEAD_RECEIVED,
+                variables: [buyerName, property.title],
+              },
+            },
+          ]
+        : []),
     ])
   } else {
-    // No agent to hand this to — staff must assign one before anything can
-    // happen, so make it their problem rather than letting the lead go quiet.
-    const staff = await prisma.user.findMany({
-      where: { role: { in: ['BACKEND', 'ADMIN'] }, isActive: true },
+    // Only reachable when the platform has no active agent at all, now that
+    // assignment is automatic — so this is a staffing problem, not a triage one,
+    // and it goes to admins who can do something about it rather than to every
+    // backend user. Broadcasting every unassigned lead to the whole desk was how
+    // these notifications got tuned out.
+    const admins = await prisma.user.findMany({
+      where: { role: 'ADMIN', isActive: true },
       select: { id: true },
     })
     await notifyUsers(
-      staff.map((s) => ({
-        userId: s.id,
-        title: 'Buyer interest needs an agent',
-        message: `${buyerName} is interested in ${property.title}, which has no assigned agent.`,
+      admins.map((a) => ({
+        userId: a.id,
+        title: 'Buyer lead could not be assigned',
+        message: `${buyerName} is interested in ${property.title}, but there are no active agents to assign it to.`,
       }))
     )
   }
@@ -263,4 +326,28 @@ export async function assignInterestAgent({
   ])
 
   return { interest: updated }
+}
+
+/** Every failure `createOrUpdateInterest` can return, as message + HTTP status.
+ *
+ *  Centralised because three routes consume it (POST /interests,
+ *  POST /properties/:id/interest, POST /site-visits) and each previously
+ *  hand-mapped the two cases that existed, collapsing anything unrecognised into
+ *  "no longer available" — which would have reported a missing phone number as a
+ *  sold property.
+ */
+export const INTEREST_ERROR_RESPONSES = {
+  PROPERTY_NOT_FOUND: { message: 'Property not found', status: 404 },
+  PROPERTY_NOT_AVAILABLE: { message: 'This property is no longer available', status: 400 },
+  INVALID_PHONE: { message: PHONE_ERROR, status: 400 },
+  BUYER_PHONE_REQUIRED: {
+    message: 'A mobile number is required before you can register interest — an agent needs to be able to call you.',
+    status: 422,
+  },
+} as const satisfies Record<string, { message: string; status: number }>
+
+export type InterestError = keyof typeof INTEREST_ERROR_RESPONSES
+
+export function interestErrorResponse(error: InterestError) {
+  return INTEREST_ERROR_RESPONSES[error]
 }

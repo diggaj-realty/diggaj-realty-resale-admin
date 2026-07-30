@@ -3,6 +3,7 @@
 import bcrypt from 'bcryptjs'
 import { prisma } from '@/lib/prisma'
 import { notifyUsers } from '@/lib/notify'
+import { toStoredPhone, PHONE_ERROR } from '@/lib/phone'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -13,11 +14,17 @@ export async function requestStaffSignup(formData: FormData) {
   const name = String(formData.get('name') || '').trim()
   const email = String(formData.get('email') || '').trim().toLowerCase()
   const password = String(formData.get('password') || '')
-  const phone = String(formData.get('phone') || '').trim() || null
+  const phoneRaw = String(formData.get('phone') || '').trim()
 
   if (!name) throw new Error('Name is required')
   if (!EMAIL_RE.test(email)) throw new Error('A valid email is required')
   if (password.length < 8) throw new Error('Password must be at least 8 characters')
+
+  // Optional here — this is the internal staff request form, not buyer signup —
+  // but if given it is normalised, so staff numbers match the same shape as
+  // buyers' and can be dialled from the dashboard the same way.
+  const phone = phoneRaw ? toStoredPhone(phoneRaw) : null
+  if (phoneRaw && !phone) throw new Error(PHONE_ERROR)
 
   const existing = await prisma.user.findUnique({ where: { email } })
   if (existing) throw new Error('An account with this email already exists')

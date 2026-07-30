@@ -10,9 +10,12 @@ import StatusPill from '@/components/dashboard/StatusPill'
 import NegotiationPanel from '@/components/dashboard/NegotiationPanel'
 import AssignLeadAgentForm from '@/components/dashboard/AssignLeadAgentForm'
 import LeadStatusForm from '@/components/dashboard/LeadStatusForm'
+import CloseLeadForm from '@/components/dashboard/CloseLeadForm'
+import { LEAD_LOSS_LABELS, type LeadLossReason } from '@/lib/visitOutcomes'
 import ProposeSiteVisitForm from '@/components/dashboard/ProposeSiteVisitForm'
 import SiteVisitScheduler from '@/components/dashboard/SiteVisitScheduler'
-import { ArrowLeft, Building2, UserRound, CalendarCheck } from 'lucide-react'
+import { formatPhone, telHref, whatsAppHref } from '@/lib/phone'
+import { ArrowLeft, Building2, UserRound, CalendarCheck, Phone, MessageCircle } from 'lucide-react'
 
 /** One buyer lead, end to end: who wants what, who owns it, the visit, and the
  *  negotiation. This is where an agent works a lead from first contact through to
@@ -64,6 +67,25 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
         orderBy: { name: 'asc' },
       })
     : []
+
+  // This buyer's other live leads.
+  //
+  // PropertyInterest is unique per (property, buyer) and each row carries its own
+  // agent, so one buyer can be worked by several agents at once — all ringing the
+  // same person about different flats, none aware of the others. Auto-assignment
+  // now routes a buyer's new leads to whoever already has them, but leads
+  // predating that, and staff reassignments, can still split a buyer. Showing the
+  // rest of their book is what makes a collision visible.
+  const otherLeads = await prisma.propertyInterest.findMany({
+    where: {
+      buyerId: lead.buyerId,
+      id: { not: lead.id },
+      status: { notIn: ['CONVERTED_TO_DEAL', 'CLOSED', 'CANCELLED', 'NOT_INTERESTED'] },
+    },
+    orderBy: { updatedAt: 'desc' },
+    take: 6,
+    include: { property: { select: { title: true } }, agent: { select: { id: true, name: true } } },
+  })
 
   const negotiation = lead.negotiationSessions[0] ?? null
   const dealId = lead.negotiationSessions.find((n) => n.dealId)?.dealId ?? null
@@ -121,8 +143,65 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
             <p className="text-[11px] font-medium uppercase tracking-wide" style={{ color: 'var(--text-3)' }}>Buyer</p>
             <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{lead.buyer.name}</p>
             <p className="text-xs" style={{ color: 'var(--text-2)' }}>{lead.buyer.email}</p>
-            {lead.buyer.phone && <p className="text-xs" style={{ color: 'var(--text-2)' }}>{lead.buyer.phone}</p>}
+            {/* Tap-to-call and WhatsApp rather than a number to copy by hand:
+                working a lead *is* phoning the buyer, and agents do it from
+                phones. A lead with no number is flagged, not silently blank. */}
+            {telHref(lead.buyer.phone) ? (
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <a
+                  href={telHref(lead.buyer.phone)!}
+                  className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold"
+                  style={{ background: 'var(--green-50)', color: 'var(--green-700)' }}
+                >
+                  <Phone size={12} /> {formatPhone(lead.buyer.phone)}
+                </a>
+                <a
+                  href={whatsAppHref(lead.buyer.phone, `Hi ${lead.buyer.name}, regarding ${lead.property.title}`)!}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold"
+                  style={{ background: 'var(--surface-1)', color: 'var(--text-2)', border: '1px solid var(--line)' }}
+                >
+                  <MessageCircle size={12} /> WhatsApp
+                </a>
+              </div>
+            ) : (
+              <p className="mt-2 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold" style={{ background: 'var(--amber-50)', color: 'var(--amber-700)' }}>
+                <Phone size={12} /> No phone number on file
+              </p>
+            )}
           </div>
+          {otherLeads.length > 0 && (
+            <div className="mb-3 rounded-lg p-3" style={{ background: 'var(--surface-2)' }}>
+              <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide" style={{ color: 'var(--text-3)' }}>
+                This buyer&rsquo;s other open leads
+              </p>
+              <ul className="flex flex-col gap-1">
+                {otherLeads.map((o) => {
+                  // Someone else working the same buyer is the case to flag — that
+                  // is two agents calling one person.
+                  const collision = o.agentId != null && o.agentId !== lead.agentId
+                  return (
+                    <li key={o.id} className="text-xs">
+                      <Link href={`/dashboard/leads/${o.id}`} style={{ color: 'var(--accent-700)' }}>
+                        {o.property.title}
+                      </Link>
+                      <span style={{ color: 'var(--text-3)' }}> · {o.status.replace(/_/g, ' ').toLowerCase()}</span>
+                      {collision && (
+                        <span
+                          className="ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold"
+                          style={{ background: 'var(--amber-50)', color: 'var(--amber-700)' }}
+                        >
+                          with {o.agent?.name}
+                        </span>
+                      )}
+                    </li>
+                  )
+                })}
+              </ul>
+            </div>
+          )}
+
           <div className="mb-3 rounded-lg p-3" style={{ background: 'var(--surface-2)' }}>
             <p className="text-[11px] font-medium uppercase tracking-wide" style={{ color: 'var(--text-3)' }}>Assigned agent</p>
             <p className="text-sm font-semibold" style={{ color: lead.agent ? 'var(--text-1)' : 'var(--amber-700)' }}>
@@ -144,6 +223,23 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
             <div className="mt-3 border-t pt-3" style={{ borderColor: 'var(--line)' }}>
               <p className="mb-2 text-[11px] font-medium" style={{ color: 'var(--text-3)' }}>Update status</p>
               <LeadStatusForm interestId={lead.id} status={lead.status} />
+            </div>
+          )}
+
+          {/* Closing is separate from a status change: it needs a reason, and it
+              is how a dead lead leaves the queue instead of sitting in it. */}
+          {canManage && !lead.closedAt && lead.status !== 'CONVERTED_TO_DEAL' && (
+            <div className="mt-3 border-t pt-3" style={{ borderColor: 'var(--line)' }}>
+              <CloseLeadForm interestId={lead.id} />
+            </div>
+          )}
+
+          {lead.closedAt && (
+            <div className="mt-3 border-t pt-3" style={{ borderColor: 'var(--line)' }}>
+              <p className="text-xs font-semibold" style={{ color: 'var(--text-2)' }}>
+                Closed{lead.lossReason ? ` — ${LEAD_LOSS_LABELS[lead.lossReason as LeadLossReason] ?? lead.lossReason}` : ''}
+              </p>
+              {lead.lossNote && <p className="mt-0.5 text-xs italic" style={{ color: 'var(--text-3)' }}>&ldquo;{lead.lossNote}&rdquo;</p>}
             </div>
           )}
         </section>
@@ -187,9 +283,10 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
           ) : null}
 
           {/* The agent working this lead can open a visit themselves rather than
-              waiting for the buyer to ask. Only the assigned agent: the action
-              enforces that too, so the UI shouldn't offer what it would refuse. */}
-          {isOwnAgent && (
+              waiting for the buyer to ask. Backend and admin can too — they run the
+              desk, and an agent on leave used to stall every visit they owned. The
+              actions enforce the same rule, so the UI offers exactly what they allow. */}
+          {canManage && (
             <div className={lead.siteVisits.length === 0 ? 'mt-3' : 'mt-4 border-t pt-4'} style={{ borderColor: 'var(--line)' }}>
               <ProposeSiteVisitForm
                 interestId={lead.id}

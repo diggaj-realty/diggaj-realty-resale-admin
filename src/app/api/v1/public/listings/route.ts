@@ -4,6 +4,7 @@ import { ok, withApi, readJson, ApiError } from '@/lib/api/http'
 import { notifyUsers } from '@/lib/notify'
 import { buildRichPropertyData, type RichPropertyInput } from '@/lib/data/propertyFields'
 import { hasAnyRole } from '@/lib/api/auth'
+import { toStoredPhone, PHONE_ERROR } from '@/lib/phone'
 import type { Prisma } from '@prisma/client'
 
 /** Creates (or reuses) the placeholder SELLER account behind a no-signup public
@@ -67,6 +68,11 @@ export const POST = withApi(async (req) => {
 
   if (!sellerName) throw new ApiError('sellerName is required', 400)
   if (!sellerPhone) throw new ApiError('sellerPhone is required', 400)
+  // The number is the *only* reliable way back to a no-signup submitter, and
+  // resolveSubmitterUser matches repeat submissions on it — so a malformed one
+  // both loses the seller and fragments them into several placeholder accounts.
+  const sellerPhoneStored = toStoredPhone(sellerPhone)
+  if (!sellerPhoneStored) throw new ApiError(`sellerPhone: ${PHONE_ERROR}`, 400)
   if (!title) throw new ApiError('title is required', 400)
   if (!location) throw new ApiError('location is required', 400)
   if (!['RESIDENTIAL', 'PLOT', 'COMMERCIAL'].includes(type)) throw new ApiError('Invalid property type', 400)
@@ -74,7 +80,7 @@ export const POST = withApi(async (req) => {
   if (!askingPrice || askingPrice <= 0) throw new ApiError('askingPrice is required', 400)
 
   const rich = buildRichPropertyData(body as unknown as RichPropertyInput)
-  const submitter = await resolveSubmitterUser(sellerName, sellerPhone, sellerEmail)
+  const submitter = await resolveSubmitterUser(sellerName, sellerPhoneStored, sellerEmail)
 
   const property = await prisma.property.create({
     data: {

@@ -46,7 +46,10 @@ prisma/dev.db
 
 # local dev artifacts
 dev.log
+# one-off DB revert snapshots — contain real user data, never commit
+/backups
 .claude/
 
 .vercel
 .env*
+.screenshots/

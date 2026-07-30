@@ -163,7 +163,10 @@ model Property {
 
   photos              PropertyPhoto[]
   offers              Offer[]
-  deal                Deal?
+  // A list, not a single deal: a sale that falls through leaves its record
+  // behind and the property can be re-attempted. Only one may be active at a
+  // time — enforced by Deal.activePropertyId.
+  deals               Deal[]
   shortlists          Shortlist[]
   views               PropertyView[]
   siteVisits          SiteVisit[]
@@ -204,6 +207,10 @@ model Offer {
   buyer    User         @relation("BuyerOffers", fields: [buyerId], references: [id])
   events   OfferEvent[]
 
+  // Offer acceptance rejects every other live offer on the property, and the
+  // buyer's offer list is per-buyer.
+  @@index([propertyId, status])
+  @@index([buyerId])
   @@map("offers")
 }
 
@@ -223,8 +230,17 @@ model OfferEvent {
 }
 
 model Deal {
-  id               String    @id @default(cuid())
-  propertyId       String    @unique
+  id               String  @id @default(cuid())
+  propertyId       String
+  /// Mirrors propertyId for as long as this deal holds the property, and is
+  /// NULLed the moment it falls through. Postgres allows many NULLs in a unique
+  /// index, so this enforces "one *active* deal per property" while still
+  /// letting a collapsed sale be re-attempted — propertyId alone used to be
+  /// @unique, which meant one failed deal locked the listing out of ever being
+  /// sold again. Guards that ask "is this property already spoken for?" look
+  /// this up rather than propertyId, and still get a P2002 on a genuine race.
+  activePropertyId String? @unique
+
   buyerId          String
   sellerId         String
   agentId          String?
@@ -237,9 +253,24 @@ model Deal {
   transactionRef   String?
   notes            String?
   commissionAmount Float?
-  status           String    @default("IN_PROGRESS") // DealStatus enum
+  status           String    @default("IN_PROGRESS") // IN_PROGRESS | CLOSED | FELL_THROUGH
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
+
+  /// Stage declared by staff, for coordination work the platform cannot observe
+  /// (a call happened, a price was agreed in person). Only ever moves the
+  /// reported stage *forward* of what the records prove, and only as far as a
+  /// SOFT stage — see resolveDealStage in src/lib/data/dealProgress.ts. Null
+  /// means "whatever the evidence says".
+  manualStage String?
+
+  // ── Collapse (FELL_THROUGH) — loan rejected, buyer walked, seller backed out.
+  // Kept as a record rather than deleted: it is the honest history of the
+  // property and the source of why-we-lose reporting.
+  failedAt    DateTime?
+  failureCode String? // BUYER_WITHDREW | SELLER_WITHDREW | FINANCING_DENIED | LEGAL_TITLE_ISSUE | PRICE_DISPUTE | UNRESPONSIVE | OTHER
+  failureNote String?
+  failedBy    String? // user id of the staff member who recorded it
 
   property              Property                   @relation(fields: [propertyId], references: [id])
   buyer                 User                       @relation("BuyerDeals", fields: [buyerId], references: [id])
@@ -255,8 +286,47 @@ model Deal {
   documentAccessGrants  DocumentAccessGrant[]
   identityVerifications DealIdentityVerification[]
   agreements            DealAgreement[]
+  stageChanges          DealStageChange[]
+  costSheets            CostSheet[]
 
+  // propertyId lost its @unique to activePropertyId above, so it needs an index
+  // of its own — "every deal ever attempted on this property" is a common read.
+  @@index([propertyId])
+  @@index([status])
+  // Every deal list is scoped to one person: an agent's book, a buyer's or
+  // seller's own. Composite with status because all three are read as
+  // "this person's *in-progress* deals" far more often than as a whole history.
+  @@index([agentId, status])
+  @@index([buyerId, status])
+  @@index([sellerId, status])
   @@map("deals")
+}
+
+/// Every hand-made move of a deal's stage, forward or back.
+///
+/// Kept because a manually-set stage is a *claim* rather than an observation:
+/// the buyer and seller see the progress bar move, so who moved it, when, and
+/// why has to be answerable months later. A stage that walks backwards is the
+/// case this exists for — without the trail, "it said documentation complete
+/// last week" is unresolvable.
+model DealStageChange {
+  id        String   @id @default(cuid())
+  dealId    String
+  /// Effective stage before and after. `fromStage` is what was displayed, which
+  /// may have been derived rather than declared — that is the thing that
+  /// visibly changed.
+  fromStage String
+  toStage   String
+  direction String // FORWARD | BACKWARD
+  reason    String?
+  actorId   String
+  actorRole String
+  createdAt DateTime @default(now())
+
+  deal Deal @relation(fields: [dealId], references: [id], onDelete: Cascade)
+
+  @@index([dealId])
+  @@map("deal_stage_changes")
 }
 
 // ── Deal progress log — free-text, dated updates on how the paperwork/
@@ -293,6 +363,21 @@ model DealDocument {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  /// Whether a party owes this document, or the platform merely filed it.
+  ///
+  /// REQUIREMENT — someone was asked for it, so it gates the documentation stage
+  /// and closure until approved. RECORD — the platform produced it (a signed cost
+  /// sheet, a receipt, an internal note); it belongs in the file but nobody is
+  /// being chased for it, and counting one as outstanding would stall the deal it
+  /// documents.
+  ///
+  /// Defaults to REQUIREMENT so existing rows and existing call sites keep their
+  /// behaviour, and so the unsafe case is the one you have to ask for. This
+  /// replaced a denylist of docTypes to exclude, which was invisible at the point
+  /// where a document gets created — the next staff-produced type would have hit
+  /// the same trap with nothing to warn whoever added it.
+  purpose String @default("REQUIREMENT") // REQUIREMENT | RECORD
+
   /// The party this document belongs to. Distinct from uploadedBy: ownership
   /// determines who may see it by default and who must consent before the
   /// counterparty gets access, and it survives even before anything is uploaded.
@@ -302,6 +387,7 @@ model DealDocument {
   owner        User?                 @relation("DocumentsOwned", fields: [ownerId], references: [id])
   accessGrants DocumentAccessGrant[]
   sharedFor    DocumentRequest[]
+  costSheet    CostSheet?            @relation("CostSheetSignedCopy")
 
   @@index([dealId])
   @@index([ownerId])
@@ -331,6 +417,17 @@ model PropertyInterest {
   source    String? // SHORTLIST | CONTACT_REQUEST | SITE_VISIT_REQUEST | GENERAL_INTEREST | OTHER
   buyerNote String?
 
+  /// Why the lead was lost, set when it is closed.
+  ///
+  /// Closing used to mean setting NOT_INTERESTED, which left dead leads looking
+  /// open in the queue and recorded nothing about why. These are the only
+  /// why-we-lose data the platform gets, so the reason is required when closing.
+  /// See src/lib/visitOutcomes.ts for the codes.
+  lossReason String?
+  lossNote   String?
+  closedAt   DateTime?
+  closedById String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -346,6 +443,9 @@ model PropertyInterest {
   @@index([buyerId])
   @@index([agentId])
   @@index([status])
+  // The agent work queue and pickAgentForLead both count/scan one agent's live
+  // leads, ordered by how long they have sat.
+  @@index([agentId, status, updatedAt])
   @@map("property_interests")
 }
 
@@ -438,21 +538,120 @@ model NegotiationEvent {
 /// from Offer/OfferEvent: that timeline is the platform's own negotiation record
 /// and must stay intact, while this captures what was agreed in the real world.
 model OfflineNegotiation {
-  id              String   @id @default(cuid())
-  dealId          String
-  agreedAmount    Float
-  buyerConfirmed  Boolean  @default(false)
-  sellerConfirmed Boolean  @default(false)
-  notes           String?
-  recordedById    String // the agent (or staff member) who recorded it
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id           String @id @default(cuid())
+  dealId       String
+  agreedAmount Float
+
+  /// Confirmations may ONLY be set by the party they belong to. Staff used to
+  /// tick these on the parties' behalf, which made "the buyer agreed to ₹1.7 Cr"
+  /// a claim by the agent rather than by the buyer — the same asymmetry the
+  /// online offer flow was built to avoid. Recording what was agreed is staff
+  /// work; confirming it is not.
+  buyerConfirmed  Boolean   @default(false)
+  sellerConfirmed Boolean   @default(false)
+  buyerActedAt    DateTime?
+  sellerActedAt   DateTime?
+
+  /// Set when a party says the recorded figure is wrong. A disputed record
+  /// blocks the deal's stage from advancing until it is resolved — paperwork
+  /// must not roll on over an unresolved disagreement about the price.
+  disputedBy   String? // BUYER | SELLER
+  disputedNote String?
+  disputedAt   DateTime?
+  /// Ends the dispute. The amount can also be corrected instead, which clears
+  /// the dispute and resets both confirmations.
+  resolvedAt   DateTime?
+  supersededAt DateTime?
+
+  notes        String?
+  recordedById String // the agent (or staff member) who recorded it
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   deal       Deal @relation(fields: [dealId], references: [id], onDelete: Cascade)
   recordedBy User @relation("OfflineNegotiationsRecorded", fields: [recordedById], references: [id])
 
   @@index([dealId])
+  // The live record is the only one ever asked for by itself.
+  @@index([dealId, supersededAt])
   @@map("offline_negotiations")
+}
+
+/// A full breakdown of what the buyer actually pays, sent to them by the deal's
+/// agent or by backend.
+///
+/// Structured line items rather than an uploaded PDF, for three reasons: the
+/// buyer can query one line instead of the whole document, the total can be
+/// checked against the confirmed negotiated price rather than quietly
+/// disagreeing with it, and the numbers stay reportable. The formal signed copy
+/// can still be attached as a DealDocument alongside this.
+model CostSheet {
+  id      String @id @default(cuid())
+  dealId  String
+  /// Sending freezes a sheet. Editing a sent sheet supersedes it with a new
+  /// version rather than mutating it, so a figure the buyer already acknowledged
+  /// can never be quietly altered underneath them.
+  version Int    @default(1)
+  status  String @default("DRAFT") // DRAFT | SENT | SUPERSEDED
+
+  authorId String
+  sentAt   DateTime?
+
+  /// Buyer acknowledgement, or a query naming the line they dispute. Mirrors the
+  /// offline-negotiation pattern deliberately: same shape, same expectations.
+  acknowledgedAt DateTime?
+  queriedAt      DateTime?
+  queryNote      String?
+  queriedLineId  String?
+  resolvedAt     DateTime?
+
+  /// The formal signed copy, as a DealDocument, once one exists.
+  ///
+  /// The structured lines remain the source of truth — they are what reconciles
+  /// against the agreed price and what the buyer queries. This is the paper for the
+  /// file, alongside rather than instead of. Documents of type COST_SHEET are
+  /// excluded from the closure gate and the documentation stage: they are staff
+  /// output, not something a party was asked to supply, and counting one as an
+  /// unapproved closure requirement would stall the deal.
+  signedDocumentId String? @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  deal           Deal            @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  signedDocument DealDocument?   @relation("CostSheetSignedCopy", fields: [signedDocumentId], references: [id], onDelete: SetNull)
+  lines          CostSheetLine[]
+
+  @@index([dealId])
+  @@index([dealId, status])
+  @@map("cost_sheets")
+}
+
+model CostSheetLine {
+  id              String  @id @default(cuid())
+  costSheetId     String
+  label           String
+  amount          Float
+  /// PROPERTY_PRICE | CHARGE | TAX | STATUTORY | DEDUCTION
+  ///
+  /// Exactly one PROPERTY_PRICE line is expected, and it must match the
+  /// confirmed negotiated amount — see reconcileCostSheet. STATUTORY covers
+  /// stamp duty and registration, which are shown as estimates: they vary by
+  /// sub-registrar office and move with circle rates, so presenting them as
+  /// firm quotes would have buyers budgeting off a number the platform cannot
+  /// stand behind.
+  category        String
+  note            String?
+  /// Off by default. Brokerage and internal margin live on the same sheet as
+  /// the buyer's charges, and a default of "shared" would leak them the first
+  /// time someone forgot to untick it.
+  sharedWithBuyer Boolean @default(false)
+  order           Int     @default(0)
+
+  costSheet CostSheet @relation(fields: [costSheetId], references: [id], onDelete: Cascade)
+
+  @@index([costSheetId])
+  @@map("cost_sheet_lines")
 }
 
 /// A request for money that surfaces on the buyer's or seller's own dashboard
@@ -668,6 +867,9 @@ model Notification {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  // Read on every page load of every signed-in user — the bell is the single
+  // most frequent query in the app and had no index at all.
+  @@index([userId, isRead, createdAt])
   @@map("notifications")
 }
 
@@ -785,6 +987,23 @@ model SiteVisit {
   proposedDate DateTime?
   proposedBy   String? // BUYER | AGENT
 
+  /// How the booked date came to be agreed.
+  ///
+  /// BUYER_ACCEPTED — the buyer tapped accept in the app, so their consent is
+  /// recorded directly. AGREED_OFFLINE — staff booked it after agreeing on a
+  /// call, which is one party asserting the other's consent. Those are different
+  /// kinds of claim and the buyer is shown which one applies, with a way to say
+  /// it is wrong; without the distinction, offline confirmation becomes a way to
+  /// put things in someone's diary unilaterally.
+  scheduledVia  String? // BUYER_ACCEPTED | AGREED_OFFLINE
+  scheduledById String? // staff member who booked it, when AGREED_OFFLINE
+
+  /// Set when the buyer says a staff-booked slot isn't what they agreed. Sends
+  /// the visit back to being a proposal rather than silently keeping a date the
+  /// buyer has rejected.
+  disputedAt   DateTime?
+  disputedNote String?
+
   property Property          @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   buyer    User              @relation("BuyerVisits", fields: [buyerId], references: [id], onDelete: Cascade)
   agent    User?             @relation("AgentVisits", fields: [agentId], references: [id])
@@ -795,6 +1014,10 @@ model SiteVisit {
   @@index([agentId])
   @@index([status])
   @@index([interestId])
+  // The agent work queue and the visits queue both ask for one agent's
+  // scheduled visits in a date window.
+  @@index([agentId, status, scheduledDate])
+  @@index([propertyId])
   @@map("site_visits")
 }
 

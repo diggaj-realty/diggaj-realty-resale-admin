@@ -1,0 +1,237 @@
+# Buyer-journey rework — agreed change list
+
+Working notes from walking the flow end to end: buyer saves a property → lead →
+agent contact → site visit → negotiation → deal → closure. Numbering is stable;
+refer to items by number in commits and PRs.
+
+**Repo boundary:** this repo is the *internal* dashboard only. `dashboard/layout.tsx`
+redirects BUYER and SELLER to `/login` — buyers and sellers use the public
+marketing site + the `/api/v1` surface. Items marked **[FE]** belong to that
+public frontend, not here.
+
+Status: `[ ]` todo · `[~]` in progress · `[x]` done
+
+---
+
+## Step 1 — Buyer saves a property
+
+Saving currently writes one `Shortlist` row and nothing else: no lead, no
+notification, no status guard. Decision: a save stays a bookmark.
+
+- [x] 1. Save stays a silent bookmark — confirmed, no lead created (unchanged by design)
+- [x] 2. Save counts on the listings list, plus a "no enquiries yet" flag, and a
+      per-buyer saver list on the listing detail — staff/agent only, since the
+      platform brokers buyer contact through the agent rather than the seller
+- [ ] 3. **[FE]** Post-save prompt (*show interest / know more*) → this creates the lead
+- [x] 4. Saving is refused on non-LIVE listings, in both the API and the server action
+
+## Step 2 — Lead created
+
+`createOrUpdateInterest` seeds the agent from `Property.agentId`, then freezes it.
+No agent → broadcast to every active BACKEND + ADMIN.
+
+- [x] 5. Auto-assign an agent when the listing has none — `pickAgentForLead`:
+      continuity with whoever already works the buyer, else least busy with city
+      familiarity breaking ties. The reason is stored in the audit trail.
+- [ ] 6. **[FE]** Tell the buyer a lead exists and who owns it
+- [x] 7. Lead ageing — `leadBreach` distinguishes UNASSIGNED / UNCONTACTED / STALLED
+      with their own clocks, surfaced by `LeadBreachBadge` on the leads list
+- [x] 8. Unassignable leads now notify admins only (a staffing problem, not a triage
+      one) instead of broadcasting to every backend user
+- [x] 9. `claimLead` + `ClaimLeadButton`; agents can now see the unassigned pool via
+      the "Up for grabs" filter, which their own-book-only query previously hid
+
+## Step 3 — Buyer phone number
+
+`User.phone` exists and both auth routes accept it, but it is optional
+everywhere, so agents get leads with no number to call.
+
+- [x] 10. Require phone at buyer signup — `POST /auth/register` now rejects a missing
+      or malformed number (400). Google can't supply one, so that route returns
+      `needsPhone` instead. **[FE]** still has to add the field to its signup form.
+- [x] 11. Validate + normalize Indian mobile format — `src/lib/phone.ts`, applied at
+      every write site (register, google, profile, public listing intake, staff signup)
+- [x] 12. Tap-to-call + WhatsApp links on the lead detail; missing number flagged
+- [x] 13. Decided: it **hard-blocks**, enforced in `createOrUpdateInterest` so no
+      entry point can create an unreachable lead (`BUYER_PHONE_REQUIRED`, 422).
+      Routes accept `buyerPhone` so **[FE]** can collect it in the same request.
+- [~] 14. Phone-less leads flagged in the leads list. Backfill is small: of 26
+      accounts holding the BUYER role, 18 are QA/probe artifacts and only 8 are
+      real, all without a number — and 4 of those are the team's own. Three have
+      live leads an agent currently cannot call. No migration or nag campaign
+      needed; the **[FE]** prompt at the interest step covers it.
+
+## Step 4 — Site visit scheduled off a phone call
+
+Today an agent can only *propose*; the buyer must accept in-app. `scheduleSiteVisit`
+books directly but only on an already-`REQUESTED` visit, and is AGENT-only.
+
+- [x] 15. `bookAgreedSiteVisit` books straight to `SCHEDULED`, no proposal step
+- [x] 16. `scheduleSiteVisit` and the booking/propose UI now accept BACKEND/ADMIN
+- [x] 17. `SiteVisit.scheduledVia` (`BUYER_ACCEPTED` | `AGREED_OFFLINE`) + `scheduledById`
+- [~] 18. `disputeScheduledSiteVisit` is built and BUYER-only, and the notification
+      says the visit was booked following their call. **[FE]** still has to surface
+      the dispute action on the buyer's screen.
+- [x] 19. `proposeSiteVisitDate` takes `agreedOffline=true` so a reschedule settled on
+      a call books directly instead of dropping back to "awaiting a reply"
+
+## Step 5 — Post-visit outcome
+
+Already built: outcome capture (`INTERESTED` / `NOT_INTERESTED` /
+`FOLLOW_UP_REQUIRED`), `interestedAmount`, and `createDealFromSiteVisit` which
+skips the online offer flow entirely. Gaps are at the edges.
+
+- [x] 20. Recording the outcome completes the visit itself — one form, not two steps
+- [x] 21. Nine outcomes in `src/lib/visitOutcomes.ts`, incl. both no-shows, VISIT_FAILED,
+      REVISIT_REQUESTED, and FOLLOW_UP_REQUIRED split into NEGOTIATING vs DECIDING
+- [x] 22. `closeLead` + `CloseLeadForm` — nine loss reasons, mandatory, stored on the
+      lead with who closed it and when
+- [x] 23. `lossEndsBuyerInterest` — BOUGHT_ELSEWHERE / TIMING / NOT_SERIOUS also close
+      the buyer's other live leads; everything else leaves them warm
+- [~] 24. `NEGOTIATING` now records an in-progress figure distinctly from an agreed one,
+      and `OfflineNegotiation` supersession keeps each recorded round. A per-round
+      log on the visit itself is still not built.
+- [x] 25. `recordSiteVisitOutcome` and `completeSiteVisit` accept BACKEND/ADMIN
+- [x] 26. Buyer confirms/disputes the agreed price before it becomes `Deal.agreedPrice`
+      — done as part of step 9 (items 56, 60)
+- [x] 27. On-site agreement → deal directly, skipping negotiation — already works, keep it
+
+## Step 6 — Manual stage control (agent + backend)
+
+`dealProgress.ts` computes all 12 stages from evidence — *"nothing writes them."*
+Manual control turns the bar from a fact into a claim, so it is deliberately
+hybrid: soft stages manual, hard stages evidence-gated.
+
+- [x] 28. `Deal.manualStage` alongside the derived stage; `resolveDealStage` returns
+      the furthest of the two plus which source won
+- [x] 29. `DealStageControl` on the deal detail — forward, back, and "follow the records"
+- [x] 30. Soft stages declarable: `SOFT_STAGES` in `dealProgress.ts`
+- [x] 31. Hard stages refuse declaration (`NOT_DECLARABLE`, 409)
+- [x] 32. Revert floored at the evidence (`BELOW_EVIDENCE`, 409)
+- [x] 33. `DealStageChange` records actor, role, from, to, direction, reason, timestamp
+- [x] 34. `source: DERIVED | DECLARED` exposed on `GET /deals/:id/stage`; internal UI
+      labels it. **[FE]** still has to reflect it on the buyer-facing bar.
+- [x] 35. Closure untouched — stage control refuses any finished deal (`DEAL_FINISHED`)
+      and cannot reach `DEAL_CLOSED`; the configurable gate remains the only way to close
+- [x] 36. `NEGOTIATION_RECORDED` is declarable, so the online offer module is now
+      one route to it rather than the only one
+
+## Step 9 — Negotiated price: recording, confirming, disputing
+
+The offline-negotiation record already existed, but `buyerConfirmed` was a
+checkbox the *agent* ticked — so "the buyer agreed to ₹1.7 Cr" was a claim by one
+interested party. And the new stage control let an agent declare
+`NEGOTIATION_RECORDED` with no figure at all.
+
+- [x] 54. Declaring `NEGOTIATION_RECORDED` requires an `agreedAmount` and creates the
+      `OfflineNegotiation` in the same action (`AMOUNT_REQUIRED`, 400)
+- [x] 55. Agent-ticked `buyerConfirmed`/`sellerConfirmed` removed from the form and
+      the API; staff record the figure, nothing more
+- [x] 56. `POST /deals/:id/offline-negotiation/:negotiationId/respond` — BUYER/SELLER
+      only, `action: confirm | dispute`
+- [x] 57. An open dispute blocks stage *advancement* (`PRICE_DISPUTED`, 409); reverting
+      stays possible so staff can walk a disputed deal back
+- [x] 58. A corrected figure supersedes the old one and resets both confirmations;
+      confirming a superseded record returns `SUPERSEDED`
+- [ ] 59. **[FE]** Show the recorded price prominently with its confirmation state and
+      the confirm/query actions — `GET /deals/:id/offline-negotiation` exposes
+      `bothConfirmed`, `isDisputeOpen`, `isCurrent`, `disputedBy`, `disputedNote`
+- [x] 60. `Deal.agreedPrice` updates only when both sides have confirmed (was item 26)
+- [ ] 61. *(parked at your request)* Two-way messaging on `DealLogEntry`
+
+## Step 10 — Cost sheet (full disclosure of what the buyer pays)
+
+Structured line items rather than an uploaded PDF: the buyer can query one line,
+the property-price line is checked against the confirmed price, and the numbers
+stay reportable.
+
+- [x] 62. `CostSheet` per deal — versioned, `DRAFT` → `SENT` → `SUPERSEDED`
+- [x] 63. `CostSheetLine` — label, amount, category, note, `sharedWithBuyer`
+- [x] 64. `reconcileCostSheet` blocks sending unless the `PROPERTY_PRICE` line matches
+      the confirmed negotiated amount, is present exactly once, and is visible to
+      the buyer (`RECONCILE_FAILED`, 409, with the specific problem)
+- [x] 65. Lines default to internal; the buyer's view strips them and recomputes the
+      total from what remains, so a hidden line can't be inferred from the arithmetic
+- [x] 66. `STATUTORY` lines carry `isEstimate` and are labelled as estimates in the UI
+- [x] 68. Buyer acknowledges, or queries a specific line; an open query blocks stage
+      advancement (`COST_SHEET_QUERIED`, 409) exactly as a disputed price does
+- [x] 67. Revising copies the sent sheet into a new DRAFT and leaves the sent one
+      untouched until the revision is sent; the buyer re-acknowledges the new version
+- [x] 69. `POST /deals/:id/cost-sheet/:sheetId/signed-copy` files the signed PDF as a
+      `DealDocument` of type `COST_SHEET`, linked from `CostSheet.signedDocumentId`.
+      That type is excluded from the closure gate and the documentation stage — it is
+      staff output, and counting it as an unapproved requirement would stall the deal.
+- [x] 70. Authored by the deal's agent **or** backend/admin; both see every version
+      and every line
+- [ ] 73. **[FE]** Buyer-facing view of the sent sheet with acknowledge / query-a-line
+      actions — `GET /deals/:id/cost-sheet` returns the buyer-safe shape, and
+      `POST /deals/:id/cost-sheet/:sheetId/respond` is BUYER-only
+- [ ] 71. *(later)* Templates per builder/project
+- [ ] 72. *(later)* Generate `PaymentRequest`s from cost-sheet lines
+
+## Step 7 — Structural gaps
+
+- [x] 37. Terminal failure status for deals (`FELL_THROUGH`) with a reason
+- [x] 38. Return the property to `LIVE` when a deal collapses
+- [x] 39. One *active* deal per property instead of one deal ever, so a second attempt is possible
+- [ ] 40. **Needs your decision.** `unitsAvailable` is accepted, validated, stored and
+      displayed but never consumed — nothing decrements it, and one accepted offer locks
+      the whole property regardless. Zero of 16 listings currently set it above 1.
+      Making it real needs per-unit deals, since `activePropertyId @unique` allows one
+      active deal per property; that is a redesign, and resale is arguably one-unit-per-
+      listing anyway. Dropping a live column and API field is destructive, so not done
+      unilaterally.
+- [x] 41. `GET /deals/:id/progress` — the 12-step ladder with `source`, for buyer and
+      seller alike. Payments and the cost sheet stay buyer-only; the seller sees the
+      stage and document counts. **[FE]** renders it.
+- [x] 42. `src/lib/whatsapp.ts` + `notifyUsers({ whatsapp })`. Four buyer-facing events
+      opted in: lead received, visit booked, price recorded, cost sheet sent. Meta Cloud
+      API implemented; **you still need to pick a provider, register the templates and
+      set WHATSAPP_PROVIDER** — until then sends are logged, not dropped silently.
+- [x] 43. Auto-assignment routes a buyer's new leads to whoever already works them
+      (ALREADY_WORKS_BUYER), and the lead detail lists their other open leads, flagging
+      any held by a different agent — so a collision is visible rather than silent.
+- [x] 44. All three offer-acceptance paths now call `acceptOfferAndOpenDeal`; the two
+      hand-maintained copies are gone. Notifications stay per-surface.
+
+## Step 8 — Dashboard UI + navigation
+
+`navConfig.ts` admits the problem in a comment: BACKEND/ADMIN reach 11-12 links
+that *"wrap or overflow on real laptop widths."* Counts today — BUYER 11 (dead
+code), AGENT 12, BACKEND 14, ADMIN 14, all flat.
+
+- [x] 45. Nav grouped into Pipeline / Inventory / People / Setup with section headings
+- [x] 46. `/dashboard/pipeline` — one board over the whole funnel, six columns, every
+      thread flagged where it is stuck. The five stage pages remain and the board links
+      into them: it is the way in, not a replacement. Deals opened straight from an
+      accepted offer (no lead behind them) are included, or the board would omit live
+      transactions.
+- [~] 47. The board surfaces each thread's stage and links to the deal where the stage
+      control lives. Editing stage from the board itself is deliberately not built —
+      a declaration needs its reason, and a one-click board control invites unreasoned
+      moves, which is the thing DealStageChange exists to prevent.
+- [x] 48. `AgentWorkQueue` at the top of an agent's dashboard: visits in the next few
+      days, leads breaching their SLA, deals blocked by a buyer objection, and the
+      claimable count — each row a person with a tap-to-call number. Quick Actions
+      dropped for agents (it repeated their sidebar). Verified by screenshot.
+- [x] 49. Amenities moved to Setup (admin-only); Performance/Feedback/Help/Settings all
+      sit below the divider, out of the primary list
+- [x] 50. Dead BUYER nav branch gone, plus the three unreachable pages it pointed at
+      (browse, shortlist, saved-searches) and the BUYER branch in QuickActionsCard
+- [x] 51. ADMIN now leads with People (users, clients) and keeps Amenities; BACKEND leads
+      with the Pipeline and owns the listings/KYC queues
+- [x] 52. **Already done, differently — do not repaint.** Commit `162a0d8` (25 Jul,
+      "Redesign dashboard to reference style") deliberately moved to a deep navy/indigo
+      accent and a left sidebar, and decoupled the functional tones *because* the accent
+      is no longer orange. Urbanist and the hero banner are in. My earlier note calling
+      for orange/yellow was stale; acting on it would have reverted that redesign.
+
+---
+
+## Build order
+
+1. **37–39** — actively dangerous: a collapsed deal currently bricks the listing forever
+2. **10–14** — phone, since agent contact and WhatsApp both depend on it
+3. **28–36** — the manual stage control
+4. **45–52** — nav/UI, after the pipeline consolidation is settled
+5. Everything else

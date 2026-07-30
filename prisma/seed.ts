@@ -91,6 +91,7 @@ async function main() {
   await prisma.deal.create({
     data: {
       propertyId: jayanagar.id,
+      activePropertyId: jayanagar.id,
       buyerId: buyer.id,
       sellerId: seller2.id,
       agentId: agent.id,
@@ -101,6 +102,7 @@ async function main() {
   await prisma.deal.create({
     data: {
       propertyId: hsrHouse.id,
+      activePropertyId: hsrHouse.id,
       buyerId: buyer2.id,
       sellerId: seller2.id,
       agentId: agent.id,
@@ -111,6 +113,7 @@ async function main() {
   await prisma.deal.create({
     data: {
       propertyId: koramangala.id,
+      activePropertyId: koramangala.id,
       buyerId: buyer3.id,
       sellerId: seller.id,
       agentId: agent.id,

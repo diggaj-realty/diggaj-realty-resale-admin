@@ -7,6 +7,14 @@ import PageHeader from '@/components/dashboard/PageHeader'
 import StatusPill from '@/components/dashboard/StatusPill'
 import DashboardEntrance from '@/components/dashboard/DashboardEntrance'
 import DealPaymentForms from '@/components/dashboard/DealPaymentForms'
+import DealFellThroughForm from '@/components/dashboard/DealFellThroughForm'
+import DealStageControl from '@/components/dashboard/DealStageControl'
+import { getDealStageView } from '@/lib/data/dealStageControl'
+import { currentOfflineNegotiation } from '@/lib/data/offlineNegotiation'
+import { currentCostSheet } from '@/lib/data/costSheets'
+import CostSheetPanel from '@/components/dashboard/CostSheetPanel'
+import { STAGE_LABELS } from '@/lib/data/dealProgress'
+import { DEAL_FAILURE_LABELS, type DealFailureCode } from '@/lib/dealFailureCodes'
 import DealLog from '@/components/dashboard/DealLog'
 import DealDocuments from '@/components/dashboard/DealDocuments'
 
@@ -52,13 +60,98 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
   const isAssignedAgent = role === 'AGENT' && deal.agent?.id === userId
   const canManage = isAssignedAgent || isStaff
 
+  // Independent reads — awaited together rather than in five round trips.
+  const [stageView, liveNegotiation, costSheet, stageChanges] = await Promise.all([
+    getDealStageView(dealId),
+    currentOfflineNegotiation(dealId),
+    currentCostSheet(dealId),
+    // Actor names resolved separately below: DealStageChange stores only the id,
+    // so the log survives a staff member being deactivated or removed.
+    prisma.dealStageChange.findMany({ where: { dealId }, orderBy: { createdAt: 'desc' }, take: 8 }),
+  ])
+  // Reconcile against the *confirmed* figure, not Deal.agreedPrice — that may
+  // still hold the original accepted offer.
+  const confirmedAmount =
+    liveNegotiation && liveNegotiation.buyerConfirmed && liveNegotiation.sellerConfirmed
+      ? liveNegotiation.agreedAmount
+      : liveNegotiation
+        ? null
+        : deal.agreedPrice
+  const stageActors = await prisma.user.findMany({
+    where: { id: { in: [...new Set(stageChanges.map((c) => c.actorId))] } },
+    select: { id: true, name: true },
+  })
+  const actorNameById = new Map(stageActors.map((u) => [u.id, u.name]))
+
   return (
     <DashboardEntrance>
       <PageHeader
         title={deal.property.title}
-        subtitle={`${deal.property.location} · Agreed Price: ${formatINR(deal.agreedPrice)}`}
+        // Deal.agreedPrice keeps the last figure both sides signed off on, so
+        // while a newly recorded one is awaiting confirmation it is stale. Say so
+        // rather than presenting a superseded number as the agreed price.
+        subtitle={`${deal.property.location} · ${
+          confirmedAmount == null
+            ? `Agreed Price: ${formatINR(deal.agreedPrice)} — a new figure is awaiting confirmation`
+            : `Agreed Price: ${formatINR(confirmedAmount)}`
+        }`}
         action={<StatusPill status={deal.status} />}
       />
+
+      {stageView && (
+        <div className="mb-6" data-animate="fade-up">
+          <DealStageControl
+            dealId={deal.id}
+            effectiveLabel={stageView.effectiveLabel}
+            source={stageView.source}
+            derivedLabel={STAGE_LABELS[stageView.derived]}
+            options={stageView.options}
+            needsAmount={!liveNegotiation}
+            readOnly={!canManage || deal.status !== 'IN_PROGRESS'}
+            history={stageChanges.map((c) => ({
+              id: c.id,
+              fromStage: c.fromStage,
+              toStage: c.toStage,
+              direction: c.direction,
+              reason: c.reason,
+              actorRole: c.actorRole,
+              actorName: actorNameById.get(c.actorId) ?? null,
+              createdAt: c.createdAt,
+            }))}
+          />
+        </div>
+      )}
+
+      <div className="mb-6" data-animate="fade-up">
+        <CostSheetPanel
+          dealId={deal.id}
+          canAuthor={canManage && deal.status === 'IN_PROGRESS'}
+          agreedAmount={confirmedAmount}
+          sheet={
+            costSheet
+              ? {
+                  id: costSheet.id,
+                  version: costSheet.version,
+                  status: costSheet.status,
+                  sentAt: costSheet.sentAt?.toISOString() ?? null,
+                  acknowledgedAt: costSheet.acknowledgedAt?.toISOString() ?? null,
+                  queriedAt: costSheet.queriedAt?.toISOString() ?? null,
+                  queryNote: costSheet.queryNote,
+                  queriedLineId: costSheet.queriedLineId,
+                  isQueryOpen: costSheet.queriedAt != null && costSheet.resolvedAt == null,
+                  lines: costSheet.lines.map((l) => ({
+                    id: l.id,
+                    label: l.label,
+                    amount: l.amount,
+                    category: l.category,
+                    note: l.note,
+                    sharedWithBuyer: l.sharedWithBuyer,
+                  })),
+                }
+              : null
+          }
+        />
+      </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className="card p-6" data-animate="fade-up">
@@ -67,7 +160,7 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
             <div className="flex justify-between"><dt style={{ color: 'var(--text-3)' }}>Buyer</dt><dd style={{ color: 'var(--text-1)' }}>{deal.buyer.name}</dd></div>
             <div className="flex justify-between"><dt style={{ color: 'var(--text-3)' }}>Seller</dt><dd style={{ color: 'var(--text-1)' }}>{deal.seller.name}</dd></div>
             <div className="flex justify-between"><dt style={{ color: 'var(--text-3)' }}>Agent</dt><dd style={{ color: 'var(--text-1)' }}>{deal.agent?.name ?? 'Unassigned'}</dd></div>
-            <div className="flex justify-between"><dt style={{ color: 'var(--text-3)' }}>Agreed Price</dt><dd style={{ color: 'var(--text-1)' }}>{formatINR(deal.agreedPrice)}</dd></div>
+            <div className="flex justify-between"><dt style={{ color: 'var(--text-3)' }}>Agreed Price</dt><dd style={{ color: 'var(--text-1)' }}>{formatINR(deal.agreedPrice)}{confirmedAmount == null && <span style={{ color: 'var(--text-3)' }}> · unconfirmed revision pending</span>}</dd></div>
             <div className="flex justify-between"><dt style={{ color: 'var(--text-3)' }}>Token Amount</dt><dd style={{ color: 'var(--text-1)' }}>{deal.tokenAmount ? formatINR(deal.tokenAmount) : '—'}</dd></div>
             <div className="flex justify-between"><dt style={{ color: 'var(--text-3)' }}>Token Date</dt><dd style={{ color: 'var(--text-1)' }}>{formatDate(deal.tokenDate)}</dd></div>
             <div className="flex justify-between"><dt style={{ color: 'var(--text-3)' }}>Final Amount</dt><dd style={{ color: 'var(--text-1)' }}>{deal.finalAmount ? formatINR(deal.finalAmount) : '—'}</dd></div>
@@ -87,21 +180,34 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
           )}
         </div>
 
-        {canManage && deal.status !== 'CLOSED' ? (
-          <DealPaymentForms
-            dealId={deal.id}
-            tokenAmount={deal.tokenAmount}
-            tokenDate={deal.tokenDate}
-            finalAmount={deal.finalAmount}
-            finalPaymentDate={deal.finalPaymentDate}
-            paymentMode={deal.paymentMode}
-            transactionRef={deal.transactionRef}
-            notes={deal.notes}
-            canClose={!!deal.finalPaymentDate}
-          />
+        {canManage && deal.status === 'IN_PROGRESS' ? (
+          <div className="flex flex-col gap-6">
+            <DealPaymentForms
+              dealId={deal.id}
+              tokenAmount={deal.tokenAmount}
+              tokenDate={deal.tokenDate}
+              finalAmount={deal.finalAmount}
+              finalPaymentDate={deal.finalPaymentDate}
+              paymentMode={deal.paymentMode}
+              transactionRef={deal.transactionRef}
+              notes={deal.notes}
+              canClose={!!deal.finalPaymentDate}
+            />
+            <DealFellThroughForm dealId={deal.id} alreadyFailed={false} />
+          </div>
         ) : (
-          <div className="card flex items-center justify-center p-6 text-sm" style={{ color: 'var(--text-3)' }} data-animate="fade-up">
-            {deal.status === 'CLOSED' ? 'This deal is closed.' : 'Read-only view — only the assigned agent or staff can update this deal.'}
+          <div className="card flex flex-col items-center justify-center gap-1 p-6 text-center text-sm" style={{ color: 'var(--text-3)' }} data-animate="fade-up">
+            {deal.status === 'CLOSED' ? (
+              'This deal is closed.'
+            ) : deal.status === 'FELL_THROUGH' ? (
+              <>
+                <span>This deal fell through{deal.failureCode ? `: ${DEAL_FAILURE_LABELS[deal.failureCode as DealFailureCode] ?? deal.failureCode}` : ''}.</span>
+                {deal.failureNote && <span className="text-xs">{deal.failureNote}</span>}
+                {deal.failedAt && <span className="text-xs">Recorded {formatDate(deal.failedAt)}</span>}
+              </>
+            ) : (
+              'Read-only view — only the assigned agent or staff can update this deal.'
+            )}
           </div>
         )}
       </div>

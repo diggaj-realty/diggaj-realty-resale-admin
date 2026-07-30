@@ -229,6 +229,19 @@ export function offlineNegotiationDTO(n: OfflineNegotiationWithRelations) {
     agreedAmount: n.agreedAmount,
     buyerConfirmed: n.buyerConfirmed,
     sellerConfirmed: n.sellerConfirmed,
+    buyerActedAt: n.buyerActedAt?.toISOString() ?? null,
+    sellerActedAt: n.sellerActedAt?.toISOString() ?? null,
+    // Exposed so the buyer's own screen can show the figure with its real
+    // standing — "awaiting your confirmation" vs "agreed by both sides" vs
+    // "you've queried this" — instead of a bare number.
+    bothConfirmed: n.buyerConfirmed && n.sellerConfirmed,
+    disputedBy: n.disputedBy,
+    disputedNote: n.disputedNote,
+    disputedAt: n.disputedAt?.toISOString() ?? null,
+    resolvedAt: n.resolvedAt?.toISOString() ?? null,
+    isDisputeOpen: n.disputedAt != null && n.resolvedAt == null,
+    /** False once a newer figure has been recorded — respond to the live one. */
+    isCurrent: n.supersededAt == null,
     notes: n.notes,
     recordedById: n.recordedById,
     recordedByName: n.recordedBy?.name,

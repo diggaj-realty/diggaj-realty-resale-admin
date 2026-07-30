@@ -1,7 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { authenticate, hasAnyRole } from '@/lib/api/auth'
 import { ok, withApi, readJson, ApiError, parsePagination, paginatedEnvelope } from '@/lib/api/http'
-import { createOrUpdateInterest } from '@/lib/data/interests'
+import { createOrUpdateInterest, interestErrorResponse } from '@/lib/data/interests'
 import { recordAudit } from '@/lib/audit'
 import { notifyUsers } from '@/lib/notify'
 import type { Prisma, SiteVisit } from '@prisma/client'
@@ -119,8 +119,8 @@ export const POST = withApi(async (req) => {
     buyerNote,
   })
   if ('error' in interestResult) {
-    if (interestResult.error === 'PROPERTY_NOT_FOUND') throw new ApiError('Property not found', 404)
-    throw new ApiError('This property is no longer available', 400)
+    const { message, status } = interestErrorResponse(interestResult.error)
+    throw new ApiError(message, status)
   }
   const { interest } = interestResult
 

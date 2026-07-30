@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs'
 import { prisma } from '@/lib/prisma'
 import { signApiToken } from '@/lib/api/jwt'
 import { ok, withApi, readJson, ApiError } from '@/lib/api/http'
+import { toStoredPhone, PHONE_ERROR } from '@/lib/phone'
 import { userDTO } from '@/lib/api/dto'
 import { hasAnyRole } from '@/lib/api/auth'
 import type { UserRole } from '@/types'
@@ -65,11 +66,17 @@ export const POST = withApi(async (req) => {
     }
   } else {
     isNewUser = true
+    // Google never returns a phone number, so unlike /auth/register this route
+    // cannot demand one up front without blocking Google signup entirely. It
+    // takes one if the frontend collected it, and otherwise reports needsPhone
+    // so the frontend can ask. The hard requirement lives further in, at the
+    // point a lead is created — see POST /interests.
+    if (body.phone && !toStoredPhone(String(body.phone))) throw new ApiError(PHONE_ERROR, 400)
     user = await prisma.user.create({
       data: {
         name: google.name || email.split('@')[0],
         email,
-        phone: body.phone ? String(body.phone).trim() : null,
+        phone: toStoredPhone(body.phone ? String(body.phone) : null),
         passwordHash: await bcrypt.hash(crypto.randomUUID(), 10), // Google-only account — no password login
         role: requestedRole,
         roles: [requestedRole],
@@ -79,5 +86,6 @@ export const POST = withApi(async (req) => {
   }
 
   const token = signApiToken({ id: user.id, role: user.role as UserRole })
-  return ok({ token, user: userDTO(user), isNewUser }, isNewUser ? 201 : 200)
+  // Signals the frontend to collect a number before this buyer can raise a lead.
+  return ok({ token, user: userDTO(user), isNewUser, needsPhone: !user.phone }, isNewUser ? 201 : 200)
 })

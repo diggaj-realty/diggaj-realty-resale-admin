@@ -6,6 +6,13 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { notifyUsers } from '@/lib/notify'
 import { recordAudit } from '@/lib/audit'
+import { formatINR } from '@/lib/format'
+import { WHATSAPP_TEMPLATES } from '@/lib/whatsapp'
+import {
+  recordOfflineNegotiation,
+  resolveNegotiationDispute,
+  offlineNegotiationErrorMessage,
+} from '@/lib/data/offlineNegotiation'
 
 /** Post-acceptance deal operations: recording negotiations that happened off
  *  the platform, and raising payment requests that surface on the buyer's or
@@ -53,41 +60,60 @@ function revalidateDeal(dealId: string) {
 
 /** Records what the buyer and seller agreed to face-to-face / by phone. Kept as
  *  its own row rather than overwriting the Offer — the platform negotiation
- *  history stays intact, and this sits alongside it as a separate record. */
-export async function recordOfflineNegotiation(formData: FormData) {
+ *  history stays intact, and this sits alongside it as a separate record.
+ *
+ *  Staff record the figure only. The confirmations that used to be checkboxes on
+ *  this form belong to the parties themselves; the amount stays a proposal until
+ *  both have said so on their own screen. */
+export async function recordOfflineNegotiationAction(formData: FormData) {
+  const session = await getServerSession(authOptions)
+  if (!session) throw new Error('Unauthorized')
+
   const dealId = String(formData.get('dealId'))
-  const agreedAmount = Number(formData.get('agreedAmount'))
-  const buyerConfirmed = formData.get('buyerConfirmed') === 'on' || formData.get('buyerConfirmed') === 'true'
-  const sellerConfirmed = formData.get('sellerConfirmed') === 'on' || formData.get('sellerConfirmed') === 'true'
   const notes = String(formData.get('notes') || '').trim()
 
-  if (!Number.isFinite(agreedAmount) || agreedAmount <= 0) throw new Error('Enter a valid agreed amount')
-
-  const { deal, userId } = await requireDealStaff(dealId)
-
-  await prisma.offlineNegotiation.create({
-    data: {
-      dealId,
-      agreedAmount,
-      buyerConfirmed,
-      sellerConfirmed,
-      notes: notes || null,
-      recordedById: userId,
-    },
+  const result = await recordOfflineNegotiation({
+    dealId,
+    agreedAmount: Number(formData.get('agreedAmount')),
+    notes,
+    actorId: session.user.id,
+    actorRole: session.user.role,
   })
+  if ('error' in result) throw new Error(offlineNegotiationErrorMessage(result.error).message)
 
-  await notifyUsers([
-    {
-      userId: deal.buyerId,
-      title: 'Negotiation recorded',
-      message: `An agreed amount of ${agreedAmount} was recorded for ${deal.property.title}.`,
-    },
-    {
-      userId: deal.sellerId,
-      title: 'Negotiation recorded',
-      message: `An agreed amount of ${agreedAmount} was recorded for ${deal.property.title}.`,
-    },
-  ])
+  const { record, deal } = result
+  await notifyUsers(
+    [deal.buyerId, deal.sellerId].map((userId) => ({
+      userId,
+      title: 'Agreed price recorded — please confirm',
+      message: `${formatINR(record.agreedAmount)} was recorded as the agreed price for ${deal.property.title}. Confirm it, or tell us if it isn't right.`,
+      // The deal does not move until both sides confirm, so waiting on someone to
+      // open the app is waiting on the transaction.
+      whatsapp: {
+        template: WHATSAPP_TEMPLATES.PRICE_RECORDED,
+        variables: [formatINR(record.agreedAmount), deal.property.title],
+      },
+    }))
+  )
+
+  revalidateDeal(dealId)
+}
+
+/** Staff closing out a dispute after speaking to the party, without changing the
+ *  figure. Unblocks the deal; the party still has to confirm. */
+export async function resolveNegotiationDisputeAction(formData: FormData) {
+  const session = await getServerSession(authOptions)
+  if (!session) throw new Error('Unauthorized')
+
+  const dealId = String(formData.get('dealId'))
+  const negotiationId = String(formData.get('negotiationId'))
+
+  const result = await resolveNegotiationDispute({
+    negotiationId,
+    actorId: session.user.id,
+    actorRole: session.user.role,
+  })
+  if ('error' in result) throw new Error(offlineNegotiationErrorMessage(result.error).message)
 
   revalidateDeal(dealId)
 }

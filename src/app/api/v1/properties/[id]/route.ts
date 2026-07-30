@@ -131,7 +131,7 @@ export const DELETE = withApi(async (req, ctx) => {
   const { id } = await ctx.params
   await requireOwnedProperty(user, id)
 
-  const deal = await prisma.deal.findUnique({ where: { propertyId: id } })
+  const deal = await prisma.deal.findUnique({ where: { activePropertyId: id } })
   if (deal) throw new ApiError('This listing has a deal in progress and cannot be deleted', 409)
 
   const photos = await prisma.propertyPhoto.findMany({ where: { propertyId: id } })

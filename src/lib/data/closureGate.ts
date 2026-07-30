@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma'
+import { gatesDocumentation } from '@/lib/data/dealProgress'
 
 /** Whether a deal is allowed to close.
  *
@@ -29,7 +30,7 @@ export async function evaluateClosureGate(dealId: string): Promise<ClosureCheck 
     prisma.deal.findUnique({
       where: { id: dealId },
       include: {
-        documents: { select: { status: true } },
+        documents: { select: { status: true, purpose: true } },
         identityVerifications: { select: { userId: true, status: true } },
         agreements: { select: { status: true, version: true }, orderBy: { version: 'desc' } },
         paymentRequests: { select: { status: true } },
@@ -50,8 +51,12 @@ export async function evaluateClosureGate(dealId: string): Promise<ClosureCheck 
   const finalPaymentMet = deal.finalPaymentDate != null
   if (!finalPaymentMet) blockers.push('Record the final payment before closing the deal')
 
-  const docsTotal = deal.documents.length
-  const docsApproved = deal.documents.filter((d) => d.status === 'APPROVED').length
+  // Documents the platform filed for the record — a signed cost sheet, a receipt —
+  // are not outstanding requirements, so they must not hold closure open. Same rule
+  // as the documentation stage, from the same helper, so the two cannot disagree.
+  const gatingDocs = deal.documents.filter(gatesDocumentation)
+  const docsTotal = gatingDocs.length
+  const docsApproved = gatingDocs.filter((d) => d.status === 'APPROVED').length
   const documentsMet = docsApproved === docsTotal
   if (requireDocuments && !documentsMet) {
     blockers.push(

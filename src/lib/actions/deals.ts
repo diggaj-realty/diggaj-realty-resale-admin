@@ -8,6 +8,9 @@ import { notifyUsers } from '@/lib/notify'
 import { getAppConfig } from '@/lib/actions/appConfig'
 import { recordAudit } from '@/lib/audit'
 import { evaluateClosureGate } from '@/lib/data/closureGate'
+import { collapseDeal } from '@/lib/data/dealCollapse'
+import { declareDealStage, dealStageErrorMessage } from '@/lib/data/dealStageControl'
+import { STAGE_LABELS } from '@/lib/data/dealProgress'
 
 /** Paperwork/closing work is done by the assigned agent OR backend ops —
  *  not agent-only. Backend previously had no way to touch a deal at all. */
@@ -296,6 +299,114 @@ export async function closeDeal(formData: FormData) {
   ])
 
   revalidatePath(`/dashboard/deals/${dealId}`)
+  revalidatePath('/dashboard/deals')
+  revalidatePath('/dashboard')
+}
+
+/** Records that a deal fell through, and puts the property back on the market.
+ *
+ *  Deliberately not gated the way closure is: closure means money has moved and
+ *  has a configurable checklist behind it, whereas a collapse is the opposite —
+ *  the point is to let staff record reality quickly, the moment they hear it. */
+export async function markDealFellThrough(formData: FormData) {
+  const session = await getServerSession(authOptions)
+  if (!session || !['AGENT', 'BACKEND', 'ADMIN'].includes(session.user.role)) throw new Error('Unauthorized')
+
+  const dealId = String(formData.get('dealId') ?? '')
+  if (!dealId) throw new Error('Missing deal')
+  const failureCode = String(formData.get('failureCode') ?? '')
+  const failureNote = String(formData.get('failureNote') ?? '')
+
+  const result = await collapseDeal({
+    dealId,
+    failureCode,
+    failureNote,
+    actorId: session.user.id,
+    actorRole: session.user.role,
+  })
+
+  if ('error' in result) {
+    throw new Error(
+      result.error === 'NOT_FOUND' ? 'Deal not found'
+      : result.error === 'FORBIDDEN' ? 'This deal is assigned to another agent'
+      : result.error === 'ALREADY_CLOSED' ? 'A closed deal cannot be marked as fallen through'
+      : result.error === 'ALREADY_FAILED' ? 'This deal is already recorded as fallen through'
+      : 'Select a valid reason'
+    )
+  }
+
+  const { deal } = result
+  const relistNote = deal.relisted ? ' The listing is live again.' : ''
+  await notifyUsers([
+    {
+      userId: deal.buyerId,
+      title: 'Deal did not go through',
+      message: `Your deal on ${deal.propertyTitle} has been closed out as unsuccessful.`,
+    },
+    {
+      userId: deal.sellerId,
+      title: 'Deal did not go through',
+      message: `The deal on ${deal.propertyTitle} did not complete.${relistNote}`,
+    },
+    ...(deal.agentId && deal.agentId !== session.user.id
+      ? [{
+          userId: deal.agentId,
+          title: 'Deal marked as fallen through',
+          message: `The deal you were handling on ${deal.propertyTitle} was recorded as unsuccessful.`,
+        }]
+      : []),
+  ])
+
+  revalidatePath(`/dashboard/deals/${dealId}`)
+  revalidatePath('/dashboard/deals')
+  revalidatePath('/dashboard/listings')
+  revalidatePath('/dashboard')
+}
+
+/** Moves a deal's displayed stage by hand (agent on their own deal, or backend/admin).
+ *
+ *  Both parties see this move, so the reason is stored and the change is logged
+ *  — see DealStageChange. What can and can't be declared is decided in
+ *  src/lib/data/dealProgress.ts, not here. */
+export async function declareDealStageAction(formData: FormData) {
+  const session = await getServerSession(authOptions)
+  if (!session || !['AGENT', 'BACKEND', 'ADMIN'].includes(session.user.role)) throw new Error('Unauthorized')
+
+  const dealId = String(formData.get('dealId') ?? '')
+  const target = String(formData.get('stage') ?? '')
+  if (!dealId || !target) throw new Error('Missing deal or stage')
+
+  const amountRaw = String(formData.get('agreedAmount') ?? '').trim()
+  const result = await declareDealStage({
+    dealId,
+    target,
+    reason: String(formData.get('reason') ?? ''),
+    agreedAmount: amountRaw ? Number(amountRaw) : null,
+    actorId: session.user.id,
+    actorRole: session.user.role,
+  })
+
+  if ('error' in result) throw new Error(dealStageErrorMessage(result.error).message)
+
+  // Only the parties who can see the bar move need telling, and only when it
+  // moves backwards — a forward step is expected progress, a backward one is the
+  // surprising event that erodes trust if it happens silently.
+  if (result.direction === 'BACKWARD') {
+    const deal = await prisma.deal.findUnique({
+      where: { id: dealId },
+      select: { buyerId: true, sellerId: true, property: { select: { title: true } } },
+    })
+    if (deal) {
+      const message = `The recorded stage for ${deal.property.title} was moved back to "${STAGE_LABELS[result.to]}".`
+      await notifyUsers([
+        { userId: deal.buyerId, title: 'Deal stage updated', message },
+        { userId: deal.sellerId, title: 'Deal stage updated', message },
+      ])
+    }
+  }
+
+  revalidatePath(`/dashboard/deals/${dealId}`)
+  revalidatePath(`/dashboard/accepted-offers/${dealId}`)
   revalidatePath('/dashboard/deals')
   revalidatePath('/dashboard')
 }

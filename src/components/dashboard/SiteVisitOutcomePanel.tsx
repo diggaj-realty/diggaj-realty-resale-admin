@@ -2,15 +2,26 @@
 
 import Link from 'next/link'
 import { useState, useTransition } from 'react'
-import { ThumbsUp, ThumbsDown, Handshake } from 'lucide-react'
+import { Handshake } from 'lucide-react'
 import { recordSiteVisitOutcome, createDealFromSiteVisit } from '@/lib/actions/siteVisits'
 import { formatINR } from '@/lib/format'
+import {
+  SELECTABLE_VISIT_OUTCOMES,
+  VISIT_OUTCOME_LABELS,
+  outcomeNeedsAmount,
+  type VisitOutcome,
+} from '@/lib/visitOutcomes'
 
 /** Post-visit outcome + in-person deal creation — negotiation happens face to
- *  face on the visit itself, never online, so this just records what was
- *  agreed and (once ready) creates the Deal directly, skipping the online
- *  offer/counter-offer flow entirely. Outcome/amount can be updated
- *  repeatedly (further in-person rounds) right up until the deal is created. */
+ *  face on the visit itself, never online, so this just records what was agreed
+ *  and (once ready) creates the Deal directly, skipping the online
+ *  offer/counter-offer flow entirely. Outcome/amount can be updated repeatedly
+ *  (further in-person rounds) right up until the deal is created.
+ *
+ *  One step, not two: recording the outcome also completes the visit, because an
+ *  agent walking out of a flat wants a single form — what happened, at what price,
+ *  what next — rather than marking it complete first and then being allowed to say
+ *  how it went. */
 export default function SiteVisitOutcomePanel({
   visitId,
   outcome,
@@ -31,13 +42,15 @@ export default function SiteVisitOutcomePanel({
   const [pending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
   const [amount, setAmount] = useState(String(interestedAmount ?? askingPrice))
+  const [feedback, setFeedback] = useState('')
 
-  function runOutcome(nextOutcome: 'INTERESTED' | 'NOT_INTERESTED') {
+  function runOutcome(nextOutcome: VisitOutcome) {
     setError(null)
     const fd = new FormData()
     fd.set('id', visitId)
     fd.set('outcome', nextOutcome)
-    if (nextOutcome === 'INTERESTED') fd.set('interestedAmount', amount)
+    if (feedback.trim()) fd.set('feedback', feedback)
+    if (outcomeNeedsAmount(nextOutcome)) fd.set('interestedAmount', amount)
     startTransition(async () => {
       try {
         await recordSiteVisitOutcome(fd)
@@ -73,35 +86,44 @@ export default function SiteVisitOutcomePanel({
   return (
     <div className="mt-3 flex flex-col gap-2.5 border-t pt-3" style={{ borderColor: 'var(--line)' }}>
       {canRecordOutcome && (
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            disabled={pending}
-            onClick={() => runOutcome('INTERESTED')}
-            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold disabled:opacity-60"
-            style={{
-              background: outcome === 'INTERESTED' ? 'var(--green-500)' : 'var(--green-50)',
-              color: outcome === 'INTERESTED' ? '#fff' : 'var(--green-700)',
-            }}
-          >
-            <ThumbsUp size={13} /> Interested
-          </button>
-          <button
-            type="button"
-            disabled={pending}
-            onClick={() => runOutcome('NOT_INTERESTED')}
-            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold disabled:opacity-60"
-            style={{
-              background: outcome === 'NOT_INTERESTED' ? 'var(--red-500)' : 'var(--red-50)',
-              color: outcome === 'NOT_INTERESTED' ? '#fff' : 'var(--red-700)',
-            }}
-          >
-            <ThumbsDown size={13} /> Not interested
-          </button>
+        <div className="flex flex-col gap-2">
+          <span className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--text-3)' }}>
+            What happened at the visit?
+          </span>
+          {/* The whole vocabulary, not just interested/not: a no-show, a failed
+              visit and a buyer still deciding are different things and used to
+              collapse into one vague "follow up" bucket. */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            {SELECTABLE_VISIT_OUTCOMES.map((o) => {
+              const active = outcome === o
+              const positive = o === 'INTERESTED' || o === 'NEGOTIATING'
+              const negative = o === 'NOT_INTERESTED'
+              const bg = positive ? 'var(--green-50)' : negative ? 'var(--red-50)' : 'var(--surface-2)'
+              const fg = positive ? 'var(--green-700)' : negative ? 'var(--red-700)' : 'var(--text-2)'
+              return (
+                <button
+                  key={o}
+                  type="button"
+                  disabled={pending}
+                  onClick={() => runOutcome(o)}
+                  className="rounded-lg px-2.5 py-1.5 text-xs font-semibold disabled:opacity-60"
+                  style={
+                    active
+                      ? { background: fg, color: '#fff' }
+                      : { background: bg, color: fg }
+                  }
+                >
+                  {VISIT_OUTCOME_LABELS[o]}
+                </button>
+              )
+            })}
+          </div>
 
-          {outcome === 'INTERESTED' && (
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs" style={{ color: 'var(--text-3)' }}>at</span>
+          {outcome && outcomeNeedsAmount(outcome) && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-xs" style={{ color: 'var(--text-3)' }}>
+                {outcome === 'INTERESTED' ? 'Agreed at' : 'Currently discussing'}
+              </span>
               <input
                 type="number"
                 value={amount}
@@ -112,7 +134,7 @@ export default function SiteVisitOutcomePanel({
               <button
                 type="button"
                 disabled={pending}
-                onClick={() => runOutcome('INTERESTED')}
+                onClick={() => runOutcome(outcome as VisitOutcome)}
                 className="rounded-lg border px-2.5 py-1.5 text-xs font-semibold disabled:opacity-60"
                 style={{ borderColor: 'var(--line)', color: 'var(--text-1)' }}
               >
@@ -120,6 +142,14 @@ export default function SiteVisitOutcomePanel({
               </button>
             </div>
           )}
+
+          <input
+            value={feedback}
+            onChange={(e) => setFeedback(e.target.value)}
+            placeholder="Notes from the visit (optional)"
+            className="w-full rounded-lg border px-2.5 py-1.5 text-xs outline-none"
+            style={{ borderColor: 'var(--line)', color: 'var(--text-1)' }}
+          />
         </div>
       )}
 

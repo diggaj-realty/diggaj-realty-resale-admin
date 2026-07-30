@@ -35,8 +35,13 @@ export const POST = withApi(async (req) => {
   const propertyId = String(body.propertyId ?? '')
   if (!propertyId) throw new ApiError('propertyId is required', 400)
 
-  const property = await prisma.property.findUnique({ where: { id: propertyId }, select: { id: true } })
+  const property = await prisma.property.findUnique({ where: { id: propertyId }, select: { id: true, status: true } })
   if (!property) throw new ApiError('Property not found', 404)
+  // Only something still on the market can be saved. A DRAFT, REJECTED or
+  // already-sold listing isn't browsable, so saving one is a stale-page action —
+  // the same guard createOrUpdateInterest has applied all along, which left
+  // shortlists as the one path that accepted anything with an id.
+  if (property.status !== 'LIVE') throw new ApiError('This property is no longer available', 400)
 
   const shortlist = await prisma.shortlist.upsert({
     where: { userId_propertyId: { userId: user.id, propertyId } },
