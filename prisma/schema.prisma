@@ -207,6 +207,10 @@ model Offer {
   buyer    User         @relation("BuyerOffers", fields: [buyerId], references: [id])
   events   OfferEvent[]
 
+  // Offer acceptance rejects every other live offer on the property, and the
+  // buyer's offer list is per-buyer.
+  @@index([propertyId, status])
+  @@index([buyerId])
   @@map("offers")
 }
 
@@ -226,8 +230,8 @@ model OfferEvent {
 }
 
 model Deal {
-  id         String @id @default(cuid())
-  propertyId String
+  id               String  @id @default(cuid())
+  propertyId       String
   /// Mirrors propertyId for as long as this deal holds the property, and is
   /// NULLed the moment it falls through. Postgres allows many NULLs in a unique
   /// index, so this enforces "one *active* deal per property" while still
@@ -263,10 +267,10 @@ model Deal {
   // ── Collapse (FELL_THROUGH) — loan rejected, buyer walked, seller backed out.
   // Kept as a record rather than deleted: it is the honest history of the
   // property and the source of why-we-lose reporting.
-  failedAt     DateTime?
-  failureCode  String? // BUYER_WITHDREW | SELLER_WITHDREW | FINANCING_DENIED | LEGAL_TITLE_ISSUE | PRICE_DISPUTE | UNRESPONSIVE | OTHER
-  failureNote  String?
-  failedBy     String? // user id of the staff member who recorded it
+  failedAt    DateTime?
+  failureCode String? // BUYER_WITHDREW | SELLER_WITHDREW | FINANCING_DENIED | LEGAL_TITLE_ISSUE | PRICE_DISPUTE | UNRESPONSIVE | OTHER
+  failureNote String?
+  failedBy    String? // user id of the staff member who recorded it
 
   property              Property                   @relation(fields: [propertyId], references: [id])
   buyer                 User                       @relation("BuyerDeals", fields: [buyerId], references: [id])
@@ -289,6 +293,12 @@ model Deal {
   // of its own — "every deal ever attempted on this property" is a common read.
   @@index([propertyId])
   @@index([status])
+  // Every deal list is scoped to one person: an agent's book, a buyer's or
+  // seller's own. Composite with status because all three are read as
+  // "this person's *in-progress* deals" far more often than as a whole history.
+  @@index([agentId, status])
+  @@index([buyerId, status])
+  @@index([sellerId, status])
   @@map("deals")
 }
 
@@ -433,6 +443,9 @@ model PropertyInterest {
   @@index([buyerId])
   @@index([agentId])
   @@index([status])
+  // The agent work queue and pickAgentForLead both count/scan one agent's live
+  // leads, ordered by how long they have sat.
+  @@index([agentId, status, updatedAt])
   @@map("property_interests")
 }
 
@@ -542,13 +555,13 @@ model OfflineNegotiation {
   /// Set when a party says the recorded figure is wrong. A disputed record
   /// blocks the deal's stage from advancing until it is resolved — paperwork
   /// must not roll on over an unresolved disagreement about the price.
-  disputedBy    String? // BUYER | SELLER
-  disputedNote  String?
-  disputedAt    DateTime?
+  disputedBy   String? // BUYER | SELLER
+  disputedNote String?
+  disputedAt   DateTime?
   /// Ends the dispute. The amount can also be corrected instead, which clears
   /// the dispute and resets both confirmations.
-  resolvedAt    DateTime?
-  supersededAt  DateTime?
+  resolvedAt   DateTime?
+  supersededAt DateTime?
 
   notes        String?
   recordedById String // the agent (or staff member) who recorded it
@@ -559,6 +572,8 @@ model OfflineNegotiation {
   recordedBy User @relation("OfflineNegotiationsRecorded", fields: [recordedById], references: [id])
 
   @@index([dealId])
+  // The live record is the only one ever asked for by itself.
+  @@index([dealId, supersededAt])
   @@map("offline_negotiations")
 }
 
@@ -603,19 +618,20 @@ model CostSheet {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  deal           Deal          @relation(fields: [dealId], references: [id], onDelete: Cascade)
-  signedDocument DealDocument? @relation("CostSheetSignedCopy", fields: [signedDocumentId], references: [id], onDelete: SetNull)
+  deal           Deal            @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  signedDocument DealDocument?   @relation("CostSheetSignedCopy", fields: [signedDocumentId], references: [id], onDelete: SetNull)
   lines          CostSheetLine[]
 
   @@index([dealId])
+  @@index([dealId, status])
   @@map("cost_sheets")
 }
 
 model CostSheetLine {
-  id          String @id @default(cuid())
-  costSheetId String
-  label       String
-  amount      Float
+  id              String  @id @default(cuid())
+  costSheetId     String
+  label           String
+  amount          Float
   /// PROPERTY_PRICE | CHARGE | TAX | STATUTORY | DEDUCTION
   ///
   /// Exactly one PROPERTY_PRICE line is expected, and it must match the
@@ -624,8 +640,8 @@ model CostSheetLine {
   /// sub-registrar office and move with circle rates, so presenting them as
   /// firm quotes would have buyers budgeting off a number the platform cannot
   /// stand behind.
-  category    String
-  note        String?
+  category        String
+  note            String?
   /// Off by default. Brokerage and internal margin live on the same sheet as
   /// the buyer's charges, and a default of "shared" would leak them the first
   /// time someone forgot to untick it.
@@ -851,6 +867,9 @@ model Notification {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  // Read on every page load of every signed-in user — the bell is the single
+  // most frequent query in the app and had no index at all.
+  @@index([userId, isRead, createdAt])
   @@map("notifications")
 }
 
@@ -995,6 +1014,10 @@ model SiteVisit {
   @@index([agentId])
   @@index([status])
   @@index([interestId])
+  // The agent work queue and the visits queue both ask for one agent's
+  // scheduled visits in a date window.
+  @@index([agentId, status, scheduledDate])
+  @@index([propertyId])
   @@map("site_visits")
 }
 

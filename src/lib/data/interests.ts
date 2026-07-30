@@ -205,8 +205,11 @@ export async function createOrUpdateInterest({
           source: source ?? existing.source,
           // Reopening a finished lead restarts it. An in-flight one only moves
           // on an explicit signal that genuinely advances it — see `advances`.
+          // Reviving clears the closure record too: a lead left holding closedAt
+          // is treated as closed by closeLead and by the lead page, so it could
+          // never be worked to an end a second time.
           ...(wasTerminal
-            ? { status: nextStatus }
+            ? { status: nextStatus, closedAt: null, closedById: null, lossReason: null, lossNote: null }
             : signalStatus && advances(existing.status, signalStatus)
               ? { status: signalStatus }
               : {}),

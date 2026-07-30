@@ -19,13 +19,19 @@ import { respondToCostSheet, costSheetErrorMessage } from '@/lib/data/costSheets
  */
 export const POST = withApi(async (req, ctx) => {
   const user = await authenticate(req, ['BUYER'])
-  const { sheetId } = await ctx.params
+  const { id: pathDealId, sheetId } = await ctx.params
 
   const body = await readJson<{ action?: string; lineId?: string; note?: string }>(req)
   const action = String(body.action ?? '')
   if (action !== 'acknowledge' && action !== 'query') {
     throw new ApiError("action must be 'acknowledge' or 'query'", 400)
   }
+
+  // The sheet is found by its own id, so a mismatched deal segment would act on a
+  // different deal than the URL claims. Nothing leaks — ownership is checked on
+  // the record — but the route should not accept a URL that lies.
+  const onDeal = await prisma.costSheet.findFirst({ where: { id: sheetId, dealId: pathDealId }, select: { id: true } })
+  if (!onDeal) throw new ApiError('Cost sheet not found on this deal', 404)
 
   const result = await respondToCostSheet({
     sheetId,

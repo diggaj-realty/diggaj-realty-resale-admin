@@ -7,6 +7,7 @@ import { prisma } from '@/lib/prisma'
 import { notifyUsers } from '@/lib/notify'
 import { recordAudit } from '@/lib/audit'
 import { isTerminalInterestStatus } from '@/lib/data/interests'
+import { markLeadConverted } from '@/lib/data/offerAcceptance'
 import { WHATSAPP_TEMPLATES } from '@/lib/whatsapp'
 import {
   isVisitOutcome,
@@ -742,10 +743,11 @@ export async function createDealFromSiteVisit(formData: FormData) {
     },
   })
 
-  await prisma.$transaction([
-    prisma.property.update({ where: { id: visit.property.id }, data: { status: 'UNDER_CONTRACT' } }),
-    prisma.siteVisit.update({ where: { id }, data: { dealId: deal.id } }),
-  ])
+  await prisma.$transaction(async (tx) => {
+    await tx.property.update({ where: { id: visit.property.id }, data: { status: 'UNDER_CONTRACT' } })
+    await tx.siteVisit.update({ where: { id }, data: { dealId: deal.id } })
+    await markLeadConverted(tx, { propertyId: visit.property.id, buyerId: visit.buyerId })
+  })
 
   await notifyUsers([
     { userId: visit.buyerId, title: 'Deal started', message: `Your deal on ${visit.property.title} has begun — paperwork is next.` },

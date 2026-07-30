@@ -23,13 +23,23 @@ import { prisma } from '@/lib/prisma'
  */
 export const POST = withApi(async (req, ctx) => {
   const user = await authenticate(req, ['BUYER', 'SELLER'])
-  const { negotiationId } = await ctx.params
+  const { id: pathDealId, negotiationId } = await ctx.params
 
   const body = await readJson<{ action?: string; note?: string }>(req)
   const action = String(body.action ?? '')
   if (action !== 'confirm' && action !== 'dispute') {
     throw new ApiError("action must be 'confirm' or 'dispute'", 400)
   }
+
+  // The record is found by its own id, so a mismatched deal segment would act on
+  // a different deal than the URL claims. Nothing leaks — the party check is on
+  // the record — but the route should not accept a URL that lies, and this has to
+  // run before the write rather than after it.
+  const onDeal = await prisma.offlineNegotiation.findFirst({
+    where: { id: negotiationId, dealId: pathDealId },
+    select: { id: true },
+  })
+  if (!onDeal) throw new ApiError('Record not found on this deal', 404)
 
   if (action === 'confirm') {
     const result = await confirmOfflineNegotiation({ negotiationId, actorId: user.id })

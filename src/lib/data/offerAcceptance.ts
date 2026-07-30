@@ -36,6 +36,22 @@ export async function resolveDealAgentId(
   return lead?.agentId ?? propertyAgentId ?? null
 }
 
+/** Retires the buyer's lead on this property once a deal exists for it.
+ *
+ *  Without this the lead stays live behind a running deal: it sits in the
+ *  pipeline's Negotiating column instead of Deal, trips the stalled-lead SLA,
+ *  counts against its agent's load in pickAgentForLead, and — worst — gets swept
+ *  shut by closeLead's "bought elsewhere" cascade on one of the buyer's *other*
+ *  leads. The negotiation-session paths always did this; the offer and
+ *  site-visit paths did not.
+ */
+export async function markLeadConverted(db: Db, { propertyId, buyerId }: { propertyId: string; buyerId: string }) {
+  await db.propertyInterest.updateMany({
+    where: { propertyId, buyerId, status: { notIn: ['CONVERTED_TO_DEAL', 'CLOSED', 'CANCELLED'] } },
+    data: { status: 'CONVERTED_TO_DEAL' },
+  })
+}
+
 export class OfferAcceptanceError extends Error {
   /** 409 for a genuine conflict (already sold / already has a deal), 404 for a
    *  missing offer, so HTTP callers can map without re-deriving intent. */
@@ -125,6 +141,8 @@ export async function acceptOfferAndOpenDeal({
         where: { id: offer.property.id },
         data: { status: 'UNDER_CONTRACT', ...(offer.property.agentId ? {} : { agentId }) },
       })
+
+      await markLeadConverted(tx, { propertyId: offer.property.id, buyerId: offer.buyerId })
 
       // Everything else still in flight on this property is now moot.
       await tx.offer.updateMany({

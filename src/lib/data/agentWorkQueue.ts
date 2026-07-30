@@ -1,7 +1,5 @@
 import { prisma } from '@/lib/prisma'
-import { leadBreach, type LeadBreach } from '@/lib/data/agentAssignment'
-import { hasPriceDispute } from '@/lib/data/offlineNegotiation'
-import { hasOpenCostSheetQuery } from '@/lib/data/costSheets'
+import { leadBreach, LEAD_SLA, type LeadBreach } from '@/lib/data/agentAssignment'
 
 /** What an agent should do today.
  *
@@ -66,7 +64,13 @@ export async function getAgentWorkQueue(agentId: string, now: Date = new Date())
   const soon = new Date(start)
   soon.setDate(soon.getDate() + 3)
 
-  const [visits, leads, deals, claimable] = await Promise.all([
+  // Which of this agent's deals are blocked, asked of the blocking records
+  // directly. Loading every in-progress deal and then asking "is this one
+  // disputed? is this one queried?" per row was 2N queries to find the handful
+  // that are usually zero.
+  const blockedDealWhere = { agentId, status: 'IN_PROGRESS' } as const
+
+  const [visits, leads, disputed, queried, claimable] = await Promise.all([
     // Today first, then the next three days — far enough to plan around, close
     // enough to still be today's problem.
     prisma.siteVisit.findMany({
@@ -78,16 +82,35 @@ export async function getAgentWorkQueue(agentId: string, now: Date = new Date())
       },
     }),
     prisma.propertyInterest.findMany({
-      where: { agentId, status: { in: LIVE_LEAD_STATUSES } },
+      // The breach clocks pushed into SQL rather than loading an agent's whole
+      // live book to throw most of it away. leadBreach still decides — this only
+      // narrows to rows that could possibly breach, so the two cannot disagree.
+      where: {
+        agentId,
+        status: { in: LIVE_LEAD_STATUSES },
+        OR: [
+          {
+            status: { in: ['NEW', 'AGENT_ASSIGNED', 'CONTACT_REQUESTED'] },
+            createdAt: { lt: new Date(now.getTime() - LEAD_SLA.uncontactedHours * 36e5) },
+          },
+          { updatedAt: { lt: new Date(now.getTime() - LEAD_SLA.stalledDays * 24 * 36e5) } },
+        ],
+      },
       orderBy: { updatedAt: 'asc' },
       include: {
         property: { select: { title: true } },
         buyer: { select: { name: true, phone: true } },
       },
     }),
-    prisma.deal.findMany({
-      where: { agentId, status: 'IN_PROGRESS' },
-      include: { property: { select: { title: true } }, buyer: { select: { name: true, phone: true } } },
+    prisma.offlineNegotiation.findMany({
+      where: { supersededAt: null, disputedAt: { not: null }, resolvedAt: null, deal: blockedDealWhere },
+      select: { dealId: true },
+      distinct: ['dealId'],
+    }),
+    prisma.costSheet.findMany({
+      where: { status: 'SENT', queriedAt: { not: null }, resolvedAt: null, deal: blockedDealWhere },
+      select: { dealId: true },
+      distinct: ['dealId'],
     }),
     // The unassigned pool an agent can take from — a count, not a list, so it
     // reads as an opportunity rather than another obligation.
@@ -125,26 +148,24 @@ export async function getAgentWorkQueue(agentId: string, now: Date = new Date())
   // A deal the buyer has objected to is stuck until somebody answers them, and
   // the platform will not let its stage advance meanwhile — so it belongs on a
   // to-do list rather than being discoverable only by opening each deal.
-  const blocked = await Promise.all(
-    deals.map(async (d) => {
-      const [priceDisputed, sheetQueried] = await Promise.all([
-        hasPriceDispute(d.id),
-        hasOpenCostSheetQuery(d.id),
-      ])
-      if (!priceDisputed && !sheetQueried) return null
-      const item: WorkItem = {
-        id: d.id,
-        href: `/dashboard/deals/${d.id}`,
-        who: d.buyer.name,
-        what: d.property.title,
-        reason: priceDisputed ? 'buyer disputes the agreed price' : 'buyer queried the cost breakdown',
-        urgency: 'NOW',
-        phone: d.buyer.phone,
-      }
-      return item
-    })
-  )
-  const blockedDeals = blocked.filter((x): x is WorkItem => x != null)
+  const disputedIds = new Set(disputed.map((d) => d.dealId))
+  const blockedIds = [...new Set([...disputedIds, ...queried.map((q) => q.dealId)])]
+  const blockedDealRows = blockedIds.length
+    ? await prisma.deal.findMany({
+        where: { id: { in: blockedIds } },
+        include: { property: { select: { title: true } }, buyer: { select: { name: true, phone: true } } },
+      })
+    : []
+
+  const blockedDeals: WorkItem[] = blockedDealRows.map((d) => ({
+    id: d.id,
+    href: `/dashboard/deals/${d.id}`,
+    who: d.buyer.name,
+    what: d.property.title,
+    reason: disputedIds.has(d.id) ? 'buyer disputes the agreed price' : 'buyer queried the cost breakdown',
+    urgency: 'NOW',
+    phone: d.buyer.phone,
+  }))
 
   return {
     visitsToday,

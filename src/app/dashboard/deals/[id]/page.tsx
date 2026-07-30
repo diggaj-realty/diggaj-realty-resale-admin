@@ -60,9 +60,15 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
   const isAssignedAgent = role === 'AGENT' && deal.agent?.id === userId
   const canManage = isAssignedAgent || isStaff
 
-  const stageView = await getDealStageView(dealId)
-  const liveNegotiation = await currentOfflineNegotiation(dealId)
-  const costSheet = await currentCostSheet(dealId)
+  // Independent reads — awaited together rather than in five round trips.
+  const [stageView, liveNegotiation, costSheet, stageChanges] = await Promise.all([
+    getDealStageView(dealId),
+    currentOfflineNegotiation(dealId),
+    currentCostSheet(dealId),
+    // Actor names resolved separately below: DealStageChange stores only the id,
+    // so the log survives a staff member being deactivated or removed.
+    prisma.dealStageChange.findMany({ where: { dealId }, orderBy: { createdAt: 'desc' }, take: 8 }),
+  ])
   // Reconcile against the *confirmed* figure, not Deal.agreedPrice — that may
   // still hold the original accepted offer.
   const confirmedAmount =
@@ -71,13 +77,6 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
       : liveNegotiation
         ? null
         : deal.agreedPrice
-  // Actor names resolved separately: DealStageChange stores only the id, so that
-  // the log survives a staff member being deactivated or removed.
-  const stageChanges = await prisma.dealStageChange.findMany({
-    where: { dealId },
-    orderBy: { createdAt: 'desc' },
-    take: 8,
-  })
   const stageActors = await prisma.user.findMany({
     where: { id: { in: [...new Set(stageChanges.map((c) => c.actorId))] } },
     select: { id: true, name: true },
@@ -88,7 +87,14 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
     <DashboardEntrance>
       <PageHeader
         title={deal.property.title}
-        subtitle={`${deal.property.location} · Agreed Price: ${formatINR(deal.agreedPrice)}`}
+        // Deal.agreedPrice keeps the last figure both sides signed off on, so
+        // while a newly recorded one is awaiting confirmation it is stale. Say so
+        // rather than presenting a superseded number as the agreed price.
+        subtitle={`${deal.property.location} · ${
+          confirmedAmount == null
+            ? `Agreed Price: ${formatINR(deal.agreedPrice)} — a new figure is awaiting confirmation`
+            : `Agreed Price: ${formatINR(confirmedAmount)}`
+        }`}
         action={<StatusPill status={deal.status} />}
       />
 
@@ -154,7 +160,7 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
             <div className="flex justify-between"><dt style={{ color: 'var(--text-3)' }}>Buyer</dt><dd style={{ color: 'var(--text-1)' }}>{deal.buyer.name}</dd></div>
             <div className="flex justify-between"><dt style={{ color: 'var(--text-3)' }}>Seller</dt><dd style={{ color: 'var(--text-1)' }}>{deal.seller.name}</dd></div>
             <div className="flex justify-between"><dt style={{ color: 'var(--text-3)' }}>Agent</dt><dd style={{ color: 'var(--text-1)' }}>{deal.agent?.name ?? 'Unassigned'}</dd></div>
-            <div className="flex justify-between"><dt style={{ color: 'var(--text-3)' }}>Agreed Price</dt><dd style={{ color: 'var(--text-1)' }}>{formatINR(deal.agreedPrice)}</dd></div>
+            <div className="flex justify-between"><dt style={{ color: 'var(--text-3)' }}>Agreed Price</dt><dd style={{ color: 'var(--text-1)' }}>{formatINR(deal.agreedPrice)}{confirmedAmount == null && <span style={{ color: 'var(--text-3)' }}> · unconfirmed revision pending</span>}</dd></div>
             <div className="flex justify-between"><dt style={{ color: 'var(--text-3)' }}>Token Amount</dt><dd style={{ color: 'var(--text-1)' }}>{deal.tokenAmount ? formatINR(deal.tokenAmount) : '—'}</dd></div>
             <div className="flex justify-between"><dt style={{ color: 'var(--text-3)' }}>Token Date</dt><dd style={{ color: 'var(--text-1)' }}>{formatDate(deal.tokenDate)}</dd></div>
             <div className="flex justify-between"><dt style={{ color: 'var(--text-3)' }}>Final Amount</dt><dd style={{ color: 'var(--text-1)' }}>{deal.finalAmount ? formatINR(deal.finalAmount) : '—'}</dd></div>
