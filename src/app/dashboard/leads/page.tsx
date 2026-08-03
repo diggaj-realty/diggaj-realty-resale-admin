@@ -9,8 +9,10 @@ import DashboardEntrance from '@/components/dashboard/DashboardEntrance'
 import StatusPill from '@/components/dashboard/StatusPill'
 import LeadBreachBadge from '@/components/dashboard/LeadBreachBadge'
 import ClaimLeadButton from '@/components/dashboard/ClaimLeadButton'
-import { UserRound, MapPin, UserCog, CalendarCheck, Scale } from 'lucide-react'
+import { UserRound, MapPin, UserCog, CalendarCheck, Scale, Mail, Phone } from 'lucide-react'
 import type { Prisma } from '@prisma/client'
+
+type ContactLeadMeta = { name: string; email: string; phone: string; message: string }
 
 /** Buyer leads — the operational queue for genuine interest, before any offer
  *  exists. This is the front of the funnel: someone asked to be contacted or to
@@ -36,7 +38,7 @@ export default async function LeadsPage({
   else if (owner === 'unassigned') where.agentId = null
   if (status) where.status = status
 
-  const [leads, unassignedCount, agents] = await Promise.all([
+  const [leads, unassignedCount, agents, generalLeads] = await Promise.all([
     prisma.propertyInterest.findMany({
       where,
       orderBy: { updatedAt: 'desc' },
@@ -57,6 +59,15 @@ export default async function LeadsPage({
     isStaff
       ? prisma.user.findMany({ where: { role: 'AGENT', isActive: true }, select: { id: true, name: true } })
       : Promise.resolve([]),
+    // Contact-form submissions — no buyer account, no property, so they never
+    // become a PropertyInterest. Staff triage these directly, not via claim/assign.
+    isStaff
+      ? prisma.auditLog.findMany({
+          where: { action: 'GENERAL_CONTACT_LEAD' },
+          orderBy: { createdAt: 'desc' },
+          take: 20,
+        })
+      : Promise.resolve([]),
   ])
 
   return (
@@ -67,6 +78,41 @@ export default async function LeadsPage({
           unassignedCount > 0 ? ` · ${unassignedCount} awaiting an agent` : ''
         }`}
       />
+
+      {isStaff && generalLeads.length > 0 && (
+        <div className="mb-6 space-y-2" data-animate="fade-up">
+          <h2 className="text-sm font-semibold text-neutral-500">
+            General inquiries ({generalLeads.length})
+          </h2>
+          <div className="space-y-2">
+            {generalLeads.map((entry) => {
+              const meta = entry.meta as unknown as ContactLeadMeta
+              return (
+                <div
+                  key={entry.id}
+                  className="rounded-lg border border-neutral-200 bg-white p-3 text-sm dark:border-neutral-800 dark:bg-neutral-900"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="font-medium">{meta.name}</span>
+                    <span className="text-xs text-neutral-500">
+                      {entry.createdAt.toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                  <div className="mt-1 flex flex-wrap gap-3 text-xs text-neutral-500">
+                    <span className="inline-flex items-center gap-1">
+                      <Phone className="size-3.5" /> {meta.phone}
+                    </span>
+                    <span className="inline-flex items-center gap-1">
+                      <Mail className="size-3.5" /> {meta.email}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-neutral-700 dark:text-neutral-300">{meta.message}</p>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="mb-4 flex flex-wrap items-center gap-2" data-animate="fade-up">
         <FilterChip href="/dashboard/leads" label="All" active={!status && !owner} />

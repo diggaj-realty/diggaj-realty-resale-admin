@@ -64,6 +64,8 @@ export type AuditAction =
   | 'PAYMENT_CONFIRMED'
   | 'PAYMENT_FAILED'
   | 'PAYMENT_CANCELLED'
+  // Public contact form
+  | 'GENERAL_CONTACT_LEAD'
 
 interface AuditInput {
   action: AuditAction

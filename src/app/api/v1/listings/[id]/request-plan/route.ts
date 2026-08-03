@@ -33,6 +33,7 @@ export const POST = withApi(async (req, ctx) => {
   const updated = await prisma.property.update({
     where: { id: propertyId },
     data: { requestedPlan: plan },
+    include: { photos: true },
   })
 
   const staff = await prisma.user.findMany({ where: { role: { in: ['ADMIN', 'BACKEND'] } }, select: { id: true } })

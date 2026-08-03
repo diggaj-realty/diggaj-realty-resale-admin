@@ -30,6 +30,9 @@ export function siteVisitDTO(v: SiteVisitWithRelations) {
     /** Whose response the visit is waiting on, so the client doesn't re-derive it. */
     awaitingResponseFrom:
       v.status === 'REQUESTED' && v.proposedBy ? (v.proposedBy === 'BUYER' ? 'AGENT' : 'BUYER') : null,
+    scheduledVia: v.scheduledVia,
+    disputedAt: v.disputedAt ? v.disputedAt.toISOString() : null,
+    disputedNote: v.disputedNote,
     buyerNote: v.buyerNote,
     feedback: v.feedback,
     outcome: v.outcome,

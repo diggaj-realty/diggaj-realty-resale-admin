@@ -27,7 +27,8 @@ async function syncInterestStatus(interestId: string | null, status: string) {
  *  AGENT (assigned): schedule (needs scheduledDate) | complete (optional feedback)
  *    | recordOutcome (INTERESTED | NOT_INTERESTED | FOLLOW_UP_REQUIRED, only once
  *    completed) | cancel.
- *  BUYER: cancel (own visits only). */
+ *  BUYER: cancel (own visits only) | dispute (only a SCHEDULED visit that
+ *    staff booked directly, scheduledVia: 'AGREED_OFFLINE'). */
 export const PATCH = withApi(async (req, { params }) => {
   const user = await authenticate(req, ['BUYER', 'AGENT'])
   const { id } = await params
@@ -176,6 +177,48 @@ export const PATCH = withApi(async (req, { params }) => {
     return ok(siteVisitDTO(updated))
   }
 
+  // Buyer disputes a visit staff booked directly from a phone call
+  // (scheduledVia: 'AGREED_OFFLINE') rather than proposing and waiting for
+  // in-app acceptance. Reverts the visit to a proposal, keeping the date, so
+  // neither side restarts from scratch.
+  if (action === 'dispute') {
+    if (!isBuyerOwner) throw new ApiError('Forbidden — buyers only', 403)
+    if (visit.status !== 'SCHEDULED') throw new ApiError('Only a scheduled visit can be disputed', 400)
+    if (visit.scheduledVia !== 'AGREED_OFFLINE') {
+      throw new ApiError('This visit was booked through the app — decline or propose a new time instead', 400)
+    }
+    const reason = typeof body.reason === 'string' && body.reason.trim() ? body.reason.trim() : null
+    const updated = await prisma.siteVisit.update({
+      where: { id },
+      data: {
+        status: 'REQUESTED',
+        proposedDate: visit.scheduledDate,
+        proposedBy: 'BUYER',
+        scheduledDate: null,
+        disputedAt: new Date(),
+        disputedNote: reason,
+      },
+    })
+    await syncInterestStatus(visit.interestId, 'SITE_VISIT_REQUESTED')
+    await recordAudit({
+      action: 'SITE_VISIT_DISPUTED',
+      actorId: user.id,
+      entity: 'SiteVisit',
+      entityId: id,
+      meta: { reason },
+    })
+    if (visit.agentId) {
+      await notifyUsers([
+        {
+          userId: visit.agentId,
+          title: 'Site visit disputed',
+          message: `The buyer says the booked time for ${visit.property.title} doesn't work.${reason ? ` Reason: ${reason}` : ''}`,
+        },
+      ])
+    }
+    return ok(siteVisitDTO(updated))
+  }
+
   // Remaining actions are agent-only.
   if (!isAgentOwner) throw new ApiError('Forbidden — agents only', 403)
 
@@ -246,5 +289,5 @@ export const PATCH = withApi(async (req, { params }) => {
     return ok(siteVisitDTO(updated))
   }
 
-  throw new ApiError('Unknown action — expected schedule, complete, cancel, or recordOutcome', 400)
+  throw new ApiError('Unknown action — expected schedule, complete, cancel, dispute, or recordOutcome', 400)
 })

@@ -187,7 +187,7 @@ Invalid/unrecognized values for enum-like params (`type`, `furnishing`, `facing`
 |---|---|---|---|---|
 | GET | `/site-visits` | BUYER/AGENT | — paginated, `?status=` filter | BUYER sees own requests, AGENT sees visits assigned to them |
 | POST | `/site-visits` | BUYER | `{ propertyId, requestedDate, buyerNote? }` | auto-assigns the property's existing agent if one is set; `403` if site visits are platform-disabled |
-| PATCH | `/site-visits/:id` | BUYER/AGENT | `{ action: "schedule" \| "complete" \| "cancel", scheduledDate?, feedback? }` | `schedule`/`complete` are agent-only (and claim the visit as theirs); `cancel` works for either owning party; each transition notifies the counterparty |
+| PATCH | `/site-visits/:id` | BUYER/AGENT | `{ action: "propose" \| "accept" \| "decline" \| "schedule" \| "complete" \| "cancel" \| "dispute" \| "recordOutcome", ... }` | `schedule`/`complete`/`recordOutcome` are agent-only; `cancel` works for either owning party; `propose`/`accept`/`decline` work for either party on an in-app-proposed visit; `dispute` is buyer-only and only valid on a `SCHEDULED` visit with `scheduledVia: "AGREED_OFFLINE"` (staff booked it directly by phone) — reverts it to a proposal, keeping the date, with `disputedAt`/`disputedNote` set; each transition notifies the counterparty |
 
 ### Offers & negotiations
 | Method | Path | Role | Body | Notes |
@@ -220,6 +220,8 @@ Invalid/unrecognized values for enum-like params (`type`, `furnishing`, `facing`
 | GET | `/deals/:id/documents` | participant (buyer/seller/assigned agent) or ADMIN/BACKEND | — | the deal's closure document checklist, oldest first |
 | POST | `/deals/:id/documents` | AGENT (assigned)/ADMIN/BACKEND | `{ docType, requiredFrom: "BUYER"\|"SELLER"\|"EITHER" }` | adds a checklist item (e.g. "Sale Deed", requiredFrom `SELLER`); notifies whoever it's required from |
 | PATCH | `/deals/:id/documents/:docId` | see below | `{ fileUrl }` **or** `{ status, remarks? }` — not both | two distinct actions gated by caller: |
+| GET | `/deals/:id/cost-sheet` | participant or ADMIN/BACKEND | — | **returns an array, not a single object.** A buyer gets at most one entry (the sheet currently sent to them, `[]` if none yet); staff get every version, newest last — pick `.at(-1)` for "current". |
+| POST | `/deals/:id/cost-sheet` | AGENT (assigned)/ADMIN/BACKEND | `{ lines: [{ label, amount, category, note?, sharedWithBuyer? }], send? }` | saves a draft; `send: true` sends it, which fails unless it reconciles with the agreed price |
 
 #### Deal closure document checklist
 
