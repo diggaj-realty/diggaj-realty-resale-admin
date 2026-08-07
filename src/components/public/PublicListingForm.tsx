@@ -28,6 +28,7 @@ const PROPERTY_TYPES = [
 
 const OTHER_CITY = 'Other'
 const OTHER_BUILDER = 'Other / not listed'
+const OTHER_PROJECT = 'Other / not listed'
 const MAX_PHOTO_SIZE_BYTES = 15 * 1024 * 1024
 const MAX_VIDEO_SIZE_BYTES = 45 * 1024 * 1024
 
@@ -169,6 +170,7 @@ export default function PublicListingForm({ amenityOptions }: { amenityOptions: 
   const [builder, setBuilder] = useState('')
   const [builderOther, setBuilderOther] = useState('')
   const [projectName, setProjectName] = useState('')
+  const [projectOther, setProjectOther] = useState('')
   const projectOptions = projectsForBuilder(builder === OTHER_BUILDER ? undefined : builder)
   const [priceNegotiable, setPriceNegotiable] = useState(false)
   const [photoFiles, setPhotoFiles] = useState<File[]>([])
@@ -280,7 +282,7 @@ export default function PublicListingForm({ amenityOptions }: { amenityOptions: 
         priceNegotiable,
         maintenanceMonthly: num('maintenanceMonthly'),
         builderName: resolvedBuilder || undefined,
-        projectName: projectName || undefined,
+        projectName: (projectName === OTHER_PROJECT ? projectOther : projectName) || undefined,
         amenities: Array.from(selectedAmenities),
         photoUrls,
         videoUrls,
@@ -562,10 +564,22 @@ export default function PublicListingForm({ amenityOptions }: { amenityOptions: 
           <div>
             <label className={labelClass}>Project name</label>
             {projectOptions.length > 0 ? (
-              <select value={projectName} onChange={(e) => setProjectName(e.target.value)} className={field}>
-                <option value="">—</option>
-                {projectOptions.map((p) => <option key={p} value={p}>{p}</option>)}
-              </select>
+              <>
+                <select value={projectName} onChange={(e) => setProjectName(e.target.value)} className={field}>
+                  <option value="">—</option>
+                  {projectOptions.map((p) => <option key={p} value={p}>{p}</option>)}
+                  <option value={OTHER_PROJECT}>{OTHER_PROJECT}</option>
+                </select>
+                {projectName === OTHER_PROJECT && (
+                  <input
+                    type="text"
+                    placeholder="Project name"
+                    value={projectOther}
+                    onChange={(e) => setProjectOther(e.target.value)}
+                    className={`mt-2 ${field}`}
+                  />
+                )}
+              </>
             ) : (
               <input
                 type="text"
